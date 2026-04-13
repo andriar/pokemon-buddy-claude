@@ -5,6 +5,19 @@ Format: [version] — date — description
 
 ---
 
+## [1.2.1] — 2026-04-14
+
+### Changed
+- **Statusline redesign** — four clearly separated sections with `│` dividers:
+  `🔥 Charmander Lv.7  │  [colored bar] 630/700  │  🔥 ×1  ·  🏅 1  ·  👥 1  │  💭 chatter`
+- **Colored XP bar** — green < 70%, yellow 70–90%, red ≥ 90% (ANSI codes)
+- **Buddy chatter** (right side) — shows context-specific message after XP/badge awards for 5 min, then switches to XP-aware or time-of-day idle messages
+- **Stats spacing** — streak, badge count, party count now separated by `  ·  ` for readability
+- Party members removed from statusline (show in `/buddy` only); compact `👥 N` count shown instead
+- New `buddy-state.txt` — written after each XP/badge award, read by statusline, auto-expires
+
+---
+
 ## [1.2.0] — 2026-04-14
 
 ### Added

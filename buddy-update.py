@@ -19,6 +19,7 @@ from pathlib import Path
 BUDDY_FILE      = Path.home() / '.claude' / 'buddy-pokemon.md'
 COLLECTION_FILE = Path.home() / '.claude' / 'pokemon-collection.md'
 STATS_FILE      = Path.home() / '.claude' / 'buddy-stats.md'
+STATE_FILE      = Path.home() / '.claude' / 'buddy-state.txt'
 TODAY           = date.today().strftime('%Y-%m-%d')
 LOG_CAP         = 15
 ARCHIVE_FILE    = Path.home() / '.claude' / 'buddy-log-archive.md'
@@ -390,6 +391,37 @@ def bar(cur, max_val, width):
 
 def stat_bar(val, width=10):
     return bar(val, 100, width)
+
+def colored_bar(cur, max_val, width=10):
+    """XP bar with ANSI color: green < 70%, yellow 70–90%, red >= 90%."""
+    filled = min(width, int(cur * width / max_val)) if max_val > 0 else 0
+    pct    = int(cur * 100 / max_val) if max_val > 0 else 0
+    if pct >= 90:   color = '\033[31m'   # red   — almost level up!
+    elif pct >= 70: color = '\033[33m'   # yellow — getting close
+    else:           color = '\033[32m'   # green  — steady grind
+    reset = '\033[0m'
+    blocks = color + '█' * filled + reset + '░' * (width - filled)
+    return f'[{blocks}]'
+
+def get_chatter(xp_pct=0):
+    """Return buddy chatter for statusline. Reads STATE_FILE if fresh (< 5 min)."""
+    now = datetime.now().timestamp()
+    if STATE_FILE.exists():
+        age = now - STATE_FILE.stat().st_mtime
+        if age < 300:
+            msg = STATE_FILE.read_text().strip()
+            if msg:
+                return msg
+    # XP-percentage-aware idle messages
+    if xp_pct >= 90: return 'Almost there! 😤'
+    if xp_pct >= 70: return 'Getting close! ⚡'
+    # Time-of-day fallback
+    hour = datetime.now().hour
+    if hour < 9:   return 'Early bird! 🌅'
+    if hour < 12:  return 'Morning grind! ☕'
+    if hour < 17:  return 'What are we building? 🎯'
+    if hour < 21:  return 'Evening session! 🌙'
+    return 'Late night coding! 🦉'
 
 # ── Stats I/O ─────────────────────────────────────────────────────────────────
 
@@ -778,32 +810,35 @@ def render_statusline():
     if not col['pokemon']:
         return '🎮 No buddy yet'
 
-    party = '  '.join(
-        f"{'✨' if p.get('shiny') else ''}{p['emoji']}{'*' if p['name'] == col['active'] else ''}"
-        f"Lv{p['level']} {p['name']}"
-        for p in col['pokemon']
-    )
+    # ── Section 1: Active buddy ──────────────────────────────────────────────
+    active     = next((p for p in col['pokemon'] if p['name'] == col['active']), col['pokemon'][0])
+    shiny_mark = '✨' if active.get('shiny') else ''
+    buddy_str  = f"{shiny_mark}{active['emoji']} {active['name']} Lv.{active['level']}"
 
-    lines = BUDDY_FILE.read_text().splitlines()
-    xp_cur = parse_int(next((l for l in lines if l.startswith('**XP**:')), '0'))
-    xp_max_m = re.search(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)',
-                          next((l for l in lines if l.startswith('**XP**:')), ''))
-    xp_max = int(xp_max_m.group(1)) if xp_max_m else 100
+    # ── Section 2: Colored XP bar ────────────────────────────────────────────
+    lines    = BUDDY_FILE.read_text().splitlines()
+    xp_line  = next((l for l in lines if l.startswith('**XP**:')), '')
+    xp_cur   = parse_int(xp_line)
+    xp_max_m = re.search(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)', xp_line)
+    xp_max   = int(xp_max_m.group(1)) if xp_max_m else 100
+    pct      = int(xp_cur * 100 / xp_max) if xp_max else 0
+    xp_str   = f'{colored_bar(xp_cur, xp_max, 10)} {xp_cur}/{xp_max}'
 
-    xp_b = bar(xp_cur, xp_max, 10)
-    pct  = xp_cur * 100 // xp_max if xp_max else 0
-    mood = '😴' if pct < 30 else '🔥' if pct < 60 else '⚡' if pct < 90 else '💥'
-
-    badges_section = re.search(r'## Badges Earned\n(.*?)(?=\n##|\Z)',
-                                BUDDY_FILE.read_text(), re.DOTALL)
-    badges_raw = re.findall(r'^- (.+)$', badges_section.group(1), re.MULTILINE) if badges_section else []
+    # ── Section 3: Stats (streak · badges · party) ───────────────────────────
+    buddy_text  = BUDDY_FILE.read_text()
+    badges_sec  = re.search(r'## Badges Earned\n(.*?)(?=\n##|\Z)', buddy_text, re.DOTALL)
+    badges_raw  = re.findall(r'^- (.+)$', badges_sec.group(1), re.MULTILINE) if badges_sec else []
     badge_count = sum(1 for b in badges_raw if 'No badges yet' not in b)
+    tr_stats    = read_stats()
+    streak      = tr_stats.get('streak', 0)
+    party_count = len(col['pokemon'])
+    stats_str   = f'🔥 ×{streak}  ·  🏅 {badge_count}  ·  👥 {party_count}'
 
-    trainer_stats = read_stats()
-    streak = trainer_stats.get('streak', 0)
-    streak_str = f' 🔥{streak}' if streak >= 2 else ''
+    # ── Section 4: Buddy chatter (right side) ────────────────────────────────
+    chatter_str = f'💭 {get_chatter(pct)}'
 
-    return f'{party} {mood} [{xp_b}] {xp_cur}/{xp_max} 🏅{badge_count}{streak_str}'
+    sep = '  │  '
+    return f'{buddy_str}{sep}{xp_str}{sep}{stats_str}{sep}{chatter_str}'
 
 def render_card():
     """Render a shareable ASCII trainer card."""
@@ -1232,6 +1267,22 @@ def main():
 
     # Persist updated stats
     write_stats(tr_stats)
+
+    # Write chatter message for statusline (expires after 5 min)
+    if mode == 'xp':
+        if evolved:
+            chatter_msg = f'Evolved to {new_stage}! 🎉'
+        elif new_level > old_level:
+            chatter_msg = f'Level {new_level}! Growing strong 💪'
+        elif catch_result and catch_result[4]:
+            chatter_msg = f'✨ Shiny {catch_result[1]}! 1 in 200!'
+        elif catch_result and catch_result[0] in ('mythical', 'legendary'):
+            chatter_msg = f'Caught {catch_result[1]}! 🧬'
+        else:
+            chatter_msg = f'+{add_xp} XP! Back to work ⚡'
+        STATE_FILE.write_text(chatter_msg + '\n')
+    elif mode == 'badge':
+        STATE_FILE.write_text(f'Badge earned! {b_emoji} {b_name} 🏅\n')
 
     print(render_announcement(
         mode, add_xp, old_level, new_level, new_xp, new_max,
