@@ -66,6 +66,9 @@ Triggered automatically on XP awards. Higher XP = better rarity:
 | Uncommon ⚡ | Hard problem | 10% |
 | Rare 🐲 | Feature complete | 4% |
 | Legendary 🧬 | Ship to production | 4% |
+| Mythical ✨ | Ship to production | 1% |
+
+Full catalogue of all 46 legendaries + 22 mythicals with their dev meanings: **[LEGENDARIES.md](LEGENDARIES.md)**
 
 ## Evolution path
 
@@ -156,6 +159,27 @@ At typical Claude API pricing (~$3 per 1M input tokens), that's roughly **$0.005
 ### Status bar cost
 
 The status bar (`statusline-buddy.sh`) calls Python directly via the shell — it runs **outside** the Claude context entirely. It costs **0 Claude tokens**.
+
+## Updating
+
+If you already have the system installed, run the updater to get the latest version **without losing your buddy data**:
+
+```bash
+# From cloned repo:
+bash update.sh
+
+# Or remotely:
+curl -sSL https://raw.githubusercontent.com/andriar/pokemon-buddy-claude/main/update.sh | bash
+```
+
+The updater **never touches**:
+- `~/.claude/buddy-pokemon.md` — your active buddy
+- `~/.claude/pokemon-collection.md` — your party roster
+- `~/.claude/buddy-log-archive.md` — your history
+
+It **only updates**: `buddy-update.py`, `statusline-buddy.sh`, `pokemon-persona.md`, and all `commands/`.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 
 ## Requirements
 

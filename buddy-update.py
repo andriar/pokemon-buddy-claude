@@ -90,44 +90,219 @@ CATCH_RATES = {
     10:  [('common',    0.08)],
     20:  [('common',    0.10)],
     25:  [('common',    0.10)],
-    30:  [('common',    0.15), ('uncommon', 0.03)],
-    40:  [('common',    0.25), ('uncommon', 0.10), ('rare',      0.02)],
+    30:  [('common',    0.15), ('uncommon',  0.03)],
+    40:  [('common',    0.25), ('uncommon',  0.10), ('rare',      0.02)],
     50:  [('uncommon',  0.15), ('rare',      0.04)],
     75:  [('uncommon',  0.25), ('rare',      0.08)],
-    100: [('uncommon',  0.20), ('rare',      0.15), ('legendary', 0.04)],
+    100: [('uncommon',  0.20), ('rare',      0.15), ('legendary', 0.04), ('mythical', 0.01)],
 }
 
 POKEMON_POOL = {
     'common': [
-        ('Pidgey',   'Normal',   '🐦'),
-        ('Geodude',  'Rock',     '🪨'),
-        ('Magikarp', 'Water',    '🐟'),
-        ('Weedle',   'Bug',      '🐛'),
-        ('Zubat',    'Poison',   '🦇'),
-        ('Rattata',  'Normal',   '🐭'),
+        # Gen 1
+        ('Pidgey',    'Normal',   '🐦'),
+        ('Geodude',   'Rock',     '🪨'),
+        ('Magikarp',  'Water',    '🐟'),
+        ('Weedle',    'Bug',      '🐛'),
+        ('Zubat',     'Poison',   '🦇'),
+        ('Rattata',   'Normal',   '🐭'),
+        # Gen 2
+        ('Sentret',   'Normal',   '🦔'),
+        ('Hoothoot',  'Normal',   '🦉'),
+        ('Spinarak',  'Bug',      '🕷️'),
+        # Gen 3
+        ('Wurmple',   'Bug',      '🐛'),
+        ('Zigzagoon', 'Normal',   '🦡'),
+        # Gen 4
+        ('Bidoof',    'Normal',   '🦫'),
+        ('Starly',    'Normal',   '🐦'),
+        # Gen 5
+        ('Patrat',    'Normal',   '🐭'),
+        ('Pidove',    'Normal',   '🕊️'),
+        # Gen 6
+        ('Fletchling','Normal',   '🐦'),
+        ('Scatterbug','Bug',      '🐛'),
+        # Gen 7
+        ('Pikipek',   'Normal',   '🦜'),
+        ('Yungoos',   'Normal',   '🐾'),
+        # Gen 8
+        ('Wooloo',    'Normal',   '🐑'),
+        ('Skwovet',   'Normal',   '🐿️'),
+        # Gen 9
+        ('Lechonk',   'Normal',   '🐷'),
+        ('Tarountula','Bug',      '🕷️'),
     ],
     'uncommon': [
-        ('Pikachu',  'Electric', '⚡'),
-        ('Eevee',    'Normal',   '🦊'),
-        ('Vulpix',   'Fire',     '🦊'),
-        ('Psyduck',  'Water',    '🦆'),
-        ('Gastly',   'Ghost',    '👻'),
-        ('Machop',   'Fighting', '💪'),
-        ('Abra',     'Psychic',  '🔮'),
+        # Gen 1
+        ('Pikachu',   'Electric', '⚡'),
+        ('Eevee',     'Normal',   '🦊'),
+        ('Vulpix',    'Fire',     '🦊'),
+        ('Psyduck',   'Water',    '🦆'),
+        ('Gastly',    'Ghost',    '👻'),
+        ('Machop',    'Fighting', '💪'),
+        ('Abra',      'Psychic',  '🔮'),
+        # Gen 2
+        ('Togepi',    'Fairy',    '🥚'),
+        ('Espeon',    'Psychic',  '🔮'),
+        ('Umbreon',   'Dark',     '🌑'),
+        ('Heracross',  'Bug',     '🦴'),
+        # Gen 3
+        ('Ralts',     'Psychic',  '🔮'),
+        ('Bagon',     'Dragon',   '🐲'),
+        ('Beldum',    'Steel',    '⚙️'),
+        # Gen 4
+        ('Riolu',     'Fighting', '💪'),
+        ('Rotom',     'Electric', '⚡'),
+        ('Gible',     'Dragon',   '🐲'),
+        # Gen 5
+        ('Zorua',     'Dark',     '🦊'),
+        ('Deino',     'Dragon',   '🐲'),
+        ('Larvesta',  'Fire',     '🦋'),
+        # Gen 6
+        ('Noibat',    'Dragon',   '🦇'),
+        ('Espurr',    'Psychic',  '🔮'),
+        # Gen 7
+        ('Jangmo-o',  'Dragon',   '🐲'),
+        ('Mimikyu',   'Ghost',    '👻'),
+        ('Comfey',    'Fairy',    '🌺'),
+        # Gen 8
+        ('Dreepy',    'Dragon',   '👻'),
+        ('Falinks',   'Fighting', '💪'),
+        # Gen 9
+        ('Frigibax',  'Dragon',   '🐲'),
+        ('Pawmi',     'Electric', '⚡'),
     ],
     'rare': [
-        ('Snorlax',  'Normal',   '😴'),
-        ('Lapras',   'Water',    '🧊'),
-        ('Dratini',  'Dragon',   '🐲'),
-        ('Porygon',  'Normal',   '💻'),
-        ('Scyther',  'Bug',      '⚔️'),
-        ('Jolteon',  'Electric', '⚡'),
+        # Gen 1
+        ('Snorlax',   'Normal',   '😴'),
+        ('Lapras',    'Water',    '🧊'),
+        ('Dratini',   'Dragon',   '🐲'),
+        ('Porygon',   'Normal',   '💻'),
+        ('Scyther',   'Bug',      '⚔️'),
+        ('Jolteon',   'Electric', '⚡'),
+        # Gen 2
+        ('Tyranitar', 'Rock',     '🦖'),
+        ('Dragonite', 'Dragon',   '🐉'),
+        ('Blissey',   'Normal',   '💗'),
+        # Gen 3
+        ('Flygon',    'Dragon',   '🐲'),
+        ('Metagross',  'Steel',   '⚙️'),
+        ('Salamence', 'Dragon',   '🐉'),
+        # Gen 4
+        ('Garchomp',  'Dragon',   '🐉'),
+        ('Lucario',   'Fighting', '💪'),
+        ('Togekiss',  'Fairy',    '🕊️'),
+        # Gen 5
+        ('Hydreigon', 'Dragon',   '🐲'),
+        ('Volcarona', 'Fire',     '🦋'),
+        ('Haxorus',   'Dragon',   '⚔️'),
+        # Gen 6
+        ('Goodra',    'Dragon',   '🐲'),
+        ('Aegislash', 'Steel',    '⚔️'),
+        ('Sylveon',   'Fairy',    '🎀'),
+        # Gen 7
+        ('Kommo-o',   'Dragon',   '🐲'),
+        ('Toxapex',   'Poison',   '🌊'),
+        ('Golisopod', 'Bug',      '🦀'),
+        # Gen 8
+        ('Dragapult', 'Dragon',   '👻'),
+        ('Grimmsnarl','Dark',     '👺'),
+        ('Corviknight','Steel',   '🦅'),
+        # Gen 9
+        ('Baxcalibur','Dragon',   '🐉'),
+        ('Gholdengo', 'Steel',    '💰'),
+        ('Kingambit', 'Dark',     '♟️'),
     ],
     'legendary': [
-        ('Mewtwo',   'Psychic',  '🧬'),
-        ('Articuno', 'Ice',      '❄️'),
-        ('Zapdos',   'Electric', '⚡'),
-        ('Moltres',  'Fire',     '🔥'),
+        # Gen 1 — Birds & Psychic
+        ('Articuno',  'Ice',          '❄️'),
+        ('Zapdos',    'Electric',     '⚡'),
+        ('Moltres',   'Fire',         '🔥'),
+        ('Mewtwo',    'Psychic',      '🧬'),
+        # Gen 2 — Beasts & Tower
+        ('Raikou',    'Electric',     '⚡'),
+        ('Entei',     'Fire',         '🔥'),
+        ('Suicune',   'Water',        '💧'),
+        ('Lugia',     'Psychic',      '🌊'),
+        ('Ho-Oh',     'Fire',         '🌈'),
+        # Gen 3 — Weather & Eon
+        ('Kyogre',    'Water',        '🌊'),
+        ('Groudon',   'Ground',       '🌋'),
+        ('Rayquaza',  'Dragon',       '🐉'),
+        ('Latios',    'Dragon',       '🔵'),
+        ('Latias',    'Dragon',       '🔴'),
+        # Gen 4 — Dialga, Palkia, Giratina
+        ('Dialga',    'Steel',        '⏱️'),
+        ('Palkia',    'Water',        '🌀'),
+        ('Giratina',  'Ghost',        '👁️'),
+        ('Heatran',   'Fire',         '🌋'),
+        ('Cresselia',  'Psychic',     '🌙'),
+        # Gen 5 — Tao Trio
+        ('Reshiram',  'Dragon',       '☀️'),
+        ('Zekrom',    'Dragon',       '⚡'),
+        ('Kyurem',    'Dragon',       '❄️'),
+        ('Cobalion',  'Steel',        '⚔️'),
+        ('Terrakion', 'Rock',         '🪨'),
+        ('Virizion',  'Grass',        '🌿'),
+        # Gen 6 — Life & Death
+        ('Xerneas',   'Fairy',        '🦌'),
+        ('Yveltal',   'Dark',         '🦅'),
+        ('Zygarde',   'Dragon',       '🐍'),
+        # Gen 7 — Sun, Moon, UBs
+        ('Solgaleo',  'Psychic',      '☀️'),
+        ('Lunala',    'Psychic',      '🌙'),
+        ('Necrozma',  'Psychic',      '💎'),
+        ('Tapu Koko', 'Electric',     '⚡'),
+        ('Tapu Lele', 'Psychic',      '🔮'),
+        ('Tapu Bulu', 'Grass',        '🌿'),
+        ('Tapu Fini', 'Water',        '💧'),
+        # Gen 8 — Galar
+        ('Zacian',    'Fairy',        '⚔️'),
+        ('Zamazenta', 'Fighting',     '🛡️'),
+        ('Eternatus', 'Poison',       '☠️'),
+        ('Calyrex',   'Psychic',      '👑'),
+        ('Glastrier', 'Ice',          '🐎'),
+        ('Spectrier', 'Ghost',        '🐎'),
+        # Gen 9 — Paldea
+        ('Koraidon',  'Dragon',       '🦖'),
+        ('Miraidon',  'Dragon',       '🤖'),
+        ('Ting-Lu',   'Dark',         '🏺'),
+        ('Chien-Pao', 'Dark',         '🗡️'),
+        ('Wo-Chien',  'Dark',         '📜'),
+        ('Chi-Yu',    'Dark',         '🐟'),
+    ],
+    'mythical': [
+        # Gen 1
+        ('Mew',       'Psychic',      '✨'),
+        # Gen 2
+        ('Celebi',    'Psychic',      '🍃'),
+        # Gen 3
+        ('Jirachi',   'Steel',        '⭐'),
+        ('Deoxys',    'Psychic',      '🛸'),
+        # Gen 4
+        ('Darkrai',   'Dark',         '🌑'),
+        ('Shaymin',   'Grass',        '🌸'),
+        ('Arceus',    'Normal',       '👑'),
+        # Gen 5
+        ('Victini',   'Psychic',      '🏆'),
+        ('Keldeo',    'Water',        '⚔️'),
+        ('Meloetta',  'Normal',       '🎵'),
+        ('Genesect',  'Bug',          '🤖'),
+        # Gen 6
+        ('Diancie',   'Rock',         '💎'),
+        ('Hoopa',     'Psychic',      '🪄'),
+        ('Volcanion', 'Fire',         '♨️'),
+        # Gen 7
+        ('Magearna',  'Steel',        '🤖'),
+        ('Marshadow', 'Fighting',     '👤'),
+        ('Zeraora',   'Electric',     '⚡'),
+        ('Meltan',    'Steel',        '🔩'),
+        ('Melmetal',  'Steel',        '⚙️'),
+        # Gen 8
+        ('Zarude',    'Dark',         '🌿'),
+        # Gen 9
+        ('Pecharunt', 'Poison',       '🍑'),
+        ('Terapagos', 'Normal',       '💎'),
     ],
 }
 
