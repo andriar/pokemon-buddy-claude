@@ -91,6 +91,72 @@ Squirtle   Lv.1  ──>  Wartortle  Lv.16  ──>  Blastoise Lv.36
     └── pokemon-switch.md
 ```
 
+## Token cost
+
+Every token spent on the buddy system is a token taken from your actual coding work. This system was designed to be as cheap as possible. Here's exactly what it costs.
+
+### Per-session overhead (loaded on every Claude Code start)
+
+These files are always loaded into context via `CLAUDE.md`:
+
+| File | Size | Tokens |
+|---|---|---|
+| `buddy-pokemon.md` (active buddy data) | ~1 KB | ~250 |
+| `pokemon-persona.md` (coach persona) | ~350 B | ~90 |
+| `CLAUDE.md` buddy section (auto-award rules) | ~150 B | ~40 |
+| **Total per session** | | **~380 tokens** |
+
+This is a fixed cost you pay once per conversation, regardless of how many commands you run.
+
+### Per-command cost
+
+Each command runs a single Python script via one `Bash` tool call. No file reads, no multiple edits.
+
+| Command | Tool calls | Tokens | What happens |
+|---|---|---|---|
+| `/buddy` | 1 Bash | ~200 | Script reads files, renders full status card |
+| `/buddy-xp` | 1 Bash | ~200 | Script detects XP, patches file, prints announcement |
+| `/buddy-badge` | 1 Bash | ~250 | Script patches file, prints badge box + announcement |
+| `/pokemon-switch` | 1 Bash | ~150 | Script swaps active buddy, regenerates buddy file |
+| Auto XP award | 1 Bash | ~200 | Same as `/buddy-xp`, triggered after task completion |
+
+### Why it's cheap: the design decisions
+
+Most Claude Code customizations are expensive because they make Claude do the work in-context. This system offloads everything to a Python script:
+
+| Approach | Tool calls | Tokens per XP award |
+|---|---|---|
+| ❌ Naive (Claude reads + edits file) | Read + 3× Edit | ~1,200 |
+| ✅ This system (script does everything) | 1× Bash | ~200 |
+
+**6× cheaper** than the naive approach.
+
+The key decisions that keep it cheap:
+
+1. **Script renders output** — Claude never formats the status card or announcement. The Python script outputs the final text verbatim.
+2. **Script detects XP** — keyword matching in Python means Claude doesn't need to reason about which XP tier applies.
+3. **Single Bash call** — one tool call covers read + calculate + patch + output. No round-trips.
+4. **Lazy persona loading** — `pokemon-persona.md` is referenced in `CLAUDE.md` but kept at 350 bytes (stripped from 4.7 KB original).
+5. **No runtime API calls** — PokeAPI (or any external data) is never fetched during commands.
+
+### Real-world cost estimate
+
+A typical coding session with 5 auto XP awards and 1 `/buddy` check:
+
+```
+Session load:       380 tokens  (one-time)
+5× auto XP award:  1,000 tokens (5 × 200)
+1× /buddy status:   200 tokens
+
+Total:            ~1,580 tokens per session
+```
+
+At typical Claude API pricing (~$3 per 1M input tokens), that's roughly **$0.005 per session** — less than half a cent.
+
+### Status bar cost
+
+The status bar (`statusline-buddy.sh`) calls Python directly via the shell — it runs **outside** the Claude context entirely. It costs **0 Claude tokens**.
+
 ## Requirements
 
 - [Claude Code](https://claude.ai/code) CLI
