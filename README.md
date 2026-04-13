@@ -17,16 +17,24 @@ A Pokemon companion system for [Claude Code](https://claude.ai/code) — your AI
 
 ## Install
 
+**macOS / Linux**
+
 ```bash
+# One-liner:
 curl -sSL https://raw.githubusercontent.com/andriar/pokemon-buddy-claude/main/install.sh | bash
-```
 
-Or clone and run:
-
-```bash
+# Or clone and run:
 git clone https://github.com/andriar/pokemon-buddy-claude
 cd pokemon-buddy-claude
 bash install.sh
+```
+
+**Windows** (PowerShell or cmd — no bash required)
+
+```powershell
+git clone https://github.com/andriar/pokemon-buddy-claude
+cd pokemon-buddy-claude
+python install.py
 ```
 
 Then restart Claude Code.
@@ -162,14 +170,26 @@ The status bar (`statusline-buddy.sh`) calls Python directly via the shell — i
 
 ## Updating
 
-If you already have the system installed, run the updater to get the latest version **without losing your buddy data**:
+Run the updater to get the latest version **without losing your buddy data**:
+
+**macOS / Linux**
 
 ```bash
 # From cloned repo:
 bash update.sh
 
-# Or remotely:
+# Or remotely (no clone needed):
 curl -sSL https://raw.githubusercontent.com/andriar/pokemon-buddy-claude/main/update.sh | bash
+```
+
+**Windows**
+
+```powershell
+# From cloned repo:
+python update.py
+
+# Or remotely (no clone needed):
+python update.py --remote
 ```
 
 The updater **never touches**:
@@ -184,8 +204,8 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 ## Requirements
 
 - [Claude Code](https://claude.ai/code) CLI
-- Python 3.8+
-- Bash
+- Python 3.6+
+- Bash (macOS / Linux only — Windows uses `install.py` / `update.py`)
 
 ## License
 
