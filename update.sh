@@ -1,11 +1,33 @@
 #!/usr/bin/env bash
-# Pokemon Buddy for Claude — Updater
+# Pokemon Buddy for Claude — Updater (macOS / Linux)
 # Updates installed files to latest version WITHOUT touching your buddy/party data.
 #
 # Usage (from cloned repo):   bash update.sh
 # Usage (remote, one-liner):  curl -sSL https://raw.githubusercontent.com/andriar/pokemon-buddy-claude/main/update.sh | bash
+#
+# Windows users: use  python update.py  instead.
 
 set -euo pipefail
+
+# ── Platform check ────────────────────────────────────────────────────────────
+
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+  echo ""
+  echo "  Windows detected. Please use the Python updater instead:"
+  echo "    python update.py"
+  echo ""
+  exit 1
+fi
+
+# ── Dependency check: curl ────────────────────────────────────────────────────
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo ""
+  echo "  Error: curl is required for remote updates but was not found."
+  echo "  Clone the repo locally and run:  bash update.sh"
+  echo ""
+  exit 1
+fi
 
 CLAUDE_DIR="$HOME/.claude"
 REPO_URL="https://raw.githubusercontent.com/andriar/pokemon-buddy-claude/main"

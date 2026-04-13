@@ -1,10 +1,45 @@
 #!/usr/bin/env bash
-# Pokemon Buddy for Claude — Installer
+# Pokemon Buddy for Claude — Installer (macOS / Linux)
 # Usage: bash install.sh
+#
+# Windows users: use  python install.py  instead.
 
 set -euo pipefail
 CLAUDE_DIR="$HOME/.claude"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Platform check ────────────────────────────────────────────────────────────
+
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+  echo ""
+  echo "  Windows detected. Please use the Python installer instead:"
+  echo "    python install.py"
+  echo ""
+  exit 1
+fi
+
+# ── Dependency check: python3 ─────────────────────────────────────────────────
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo ""
+  echo "  Error: python3 is required but not found."
+  echo ""
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "  Install it on macOS with one of:"
+    echo "    xcode-select --install          (Xcode Command Line Tools)"
+    echo "    brew install python             (Homebrew)"
+    echo "    https://www.python.org/downloads/"
+  else
+    echo "  Install it with:"
+    echo "    sudo apt install python3        (Debian/Ubuntu)"
+    echo "    sudo dnf install python3        (Fedora/RHEL)"
+  fi
+  echo ""
+  echo "  Or use the cross-platform Python installer directly:"
+  echo "    python3 install.py"
+  echo ""
+  exit 1
+fi
 
 # ── UI helpers ────────────────────────────────────────────────────────────────
 
@@ -84,9 +119,26 @@ esac
 
 TODAY=$(date +%Y-%m-%d)
 
-# ── Write buddy-pokemon.md ────────────────────────────────────────────────────
+# ── Overwrite guard ───────────────────────────────────────────────────────────
 
 mkdir -p "$CLAUDE_DIR"
+
+if [ -f "$CLAUDE_DIR/buddy-pokemon.md" ]; then
+  echo ""
+  echo "  $(yellow 'Warning:') An existing buddy was found at ~/.claude/buddy-pokemon.md"
+  echo "  Re-installing will $(bold 'reset your buddy') (level, XP, badges, journey log)."
+  echo ""
+  printf "  Overwrite and start fresh? [y/N]: "
+  read -r CONFIRM
+  if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "  Aborted. Your buddy is safe."
+    echo ""
+    exit 0
+  fi
+fi
+
+# ── Write buddy-pokemon.md ────────────────────────────────────────────────────
 
 cat > "$CLAUDE_DIR/buddy-pokemon.md" << BUDDY
 # Buddy Pokemon: $STARTER $SEMOJI
@@ -211,6 +263,10 @@ with open(path, 'w') as f:
     json.dump(data, f, indent=2)
 PYSCRIPT
 fi
+
+# ── Stamp installed version ──────────────────────────────────────────────────
+
+[ -f "$SCRIPT_DIR/VERSION" ] && cp "$SCRIPT_DIR/VERSION" "$CLAUDE_DIR/buddy-version"
 
 # ── Done ─────────────────────────────────────────────────────────────────────
 
