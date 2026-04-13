@@ -214,7 +214,7 @@ chmod +x "$CLAUDE_DIR/buddy-update.py" "$CLAUDE_DIR/statusline-buddy.sh"
 # ── Copy commands ─────────────────────────────────────────────────────────────
 
 mkdir -p "$CLAUDE_DIR/commands"
-for cmd in buddy.md buddy-xp.md buddy-badge.md pokemon-switch.md; do
+for cmd in buddy.md buddy-xp.md buddy-badge.md buddy-card.md pokemon-switch.md; do
   [ -f "$SCRIPT_DIR/commands/$cmd" ] && cp "$SCRIPT_DIR/commands/$cmd" "$CLAUDE_DIR/commands/$cmd"
 done
 
@@ -279,6 +279,7 @@ echo "  Role    : $(bold "$ROLE")  ($ROLE_TYPE)"
 echo ""
 echo "  Commands available:"
 echo "    $(cyan '/buddy')            — Show full status"
+echo "    $(cyan '/buddy-card')       — Shareable trainer card"
 echo "    $(cyan '/buddy-xp')         — Award XP"
 echo "    $(cyan '/buddy-badge')      — Award a badge"
 echo "    $(cyan '/pokemon-switch')   — Switch active buddy"

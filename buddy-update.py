@@ -3,23 +3,28 @@
 buddy-update.py — Pokemon Buddy engine for Claude Code.
 
 Commands:
-  status                     Full status card (read-only)
-  statusline                 Compact one-liner for status bar
-  xp "<description>"         Award XP (auto-detects amount), may trigger catch
+  status                       Full status card (read-only)
+  statusline                   Compact one-liner for status bar
+  card                         Shareable ASCII trainer card
+  xp "<description>"           Award XP (auto-detects amount), may trigger catch
   badge "<emoji>" "<n>" "<d>"  Award badge + 50 XP
-  switch "<name>"            Switch active buddy
-  catch "<name>"             Manually add a Pokemon to collection
+  switch "<name>"              Switch active buddy
+  catch "<name>"               Manually add a Pokemon to collection
 """
 
 import sys, re, random
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 BUDDY_FILE      = Path.home() / '.claude' / 'buddy-pokemon.md'
 COLLECTION_FILE = Path.home() / '.claude' / 'pokemon-collection.md'
+STATS_FILE      = Path.home() / '.claude' / 'buddy-stats.md'
 TODAY           = date.today().strftime('%Y-%m-%d')
 LOG_CAP         = 15
 ARCHIVE_FILE    = Path.home() / '.claude' / 'buddy-log-archive.md'
+
+SHINY_RATE      = 1 / 200   # 0.5% — rarer than legendary
+STREAK_BONUS_XP = 20        # bonus XP for first award of the day
 
 # ── Pokemon data ──────────────────────────────────────────────────────────────
 
@@ -328,6 +333,41 @@ def detect_xp(description):
             return xp
     return 10
 
+# ── Milestone & title data ────────────────────────────────────────────────────
+
+MILESTONES = {
+    'first_catch':     ('🎣', 'First Catch',       'Caught your very first wild Pokemon!'),
+    'legendary_catch': ('🧬', 'Legend Seeker',     'Caught a legendary Pokemon!'),
+    'mythical_catch':  ('✨', 'Myth Maker',         'Caught a mythical Pokemon — incredibly rare!'),
+    'shiny_catch':     ('💫', 'Shiny Hunter',       'Caught a shiny Pokemon — 1 in 200 odds!'),
+    'first_evolution': ('⬆️',  'First Evolution',   'Your buddy evolved for the first time!'),
+    'final_evolution': ('🐉', 'Final Form',         'Reached the final evolution stage!'),
+    'level_10':        ('🔟', 'Lv.10 Reached',     'Reached Level 10 — the journey is real!'),
+    'level_20':        ('💪', 'Lv.20 Reached',     'Reached Level 20 — seasoned developer!'),
+    'level_30':        ('🏆', 'Lv.30 Reached',     'Reached Level 30 — elite coder!'),
+    'level_50':        ('👑', 'Lv.50 Reached',     'Reached Level 50 — legendary developer!'),
+    'dex_10':          ('📖', 'Budding Collector',  'Caught 10 unique Pokemon!'),
+    'dex_20':          ('📚', 'Avid Collector',     'Caught 20 unique Pokemon!'),
+    'dex_30':          ('🗂️', 'Pokedex Scholar',   'Caught 30 unique Pokemon!'),
+    'streak_7':        ('🔥', '7-Day Streak',       'Coded 7 days in a row!'),
+    'streak_30':       ('⚡', '30-Day Streak',      'Coded 30 days in a row — unstoppable!'),
+}
+
+# First matching rule wins (highest prestige first)
+TITLE_RULES = [
+    ('caught_mythical',  'Mythical Master'),
+    ('caught_legendary', 'Legend Hunter'),
+    ('caught_shiny',     'Shiny Chaser'),
+    ('dex_30',           'Pokedex Scholar'),
+    ('ships_3',          'Elite Deployer'),
+    ('ships_1',          'Shipmaster'),
+    ('streak_30',        'Relentless'),
+    ('streak_7',         'Dedicated'),
+    ('bug_20',           'Bug Slayer'),
+    ('features_10',      'Feature Forge'),
+    ('dex_10',           'Collector'),
+]
+
 # ── Level / XP math ───────────────────────────────────────────────────────────
 
 def xp_for_level(n):
@@ -351,6 +391,158 @@ def bar(cur, max_val, width):
 def stat_bar(val, width=10):
     return bar(val, 100, width)
 
+# ── Stats I/O ─────────────────────────────────────────────────────────────────
+
+def read_stats():
+    defaults = {
+        'streak': 0, 'last_xp_date': '', 'longest_streak': 0,
+        'total_xp_ever': 0, 'bug_fixes': 0, 'features': 0, 'ships': 0,
+        'caught_legendary': False, 'caught_mythical': False, 'caught_shiny': False,
+        'milestones': set(),
+    }
+    if not STATS_FILE.exists():
+        return defaults
+    text = STATS_FILE.read_text()
+    def gi(key):
+        m = re.search(rf'\*\*{key}\*\*:\s*(\d+)', text)
+        return int(m.group(1)) if m else defaults.get(key, 0)
+    def gb(key):
+        m = re.search(rf'\*\*{key}\*\*:\s*(true|false)', text)
+        return (m.group(1) == 'true') if m else defaults.get(key, False)
+    def gs(key):
+        m = re.search(rf'\*\*{key}\*\*:\s*(\S+)', text)
+        return m.group(1) if m else defaults.get(key, '')
+    ms_section = re.search(r'## Milestones Awarded\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
+    milestones = set(re.findall(r'^- (\S+)', ms_section.group(1), re.MULTILINE)) if ms_section else set()
+    return {
+        'streak':          gi('streak'),
+        'last_xp_date':    gs('last_xp_date'),
+        'longest_streak':  gi('longest_streak'),
+        'total_xp_ever':   gi('total_xp_ever'),
+        'bug_fixes':       gi('bug_fixes'),
+        'features':        gi('features'),
+        'ships':           gi('ships'),
+        'caught_legendary': gb('caught_legendary'),
+        'caught_mythical':  gb('caught_mythical'),
+        'caught_shiny':     gb('caught_shiny'),
+        'milestones':       milestones,
+    }
+
+def write_stats(s):
+    b = lambda v: 'true' if v else 'false'
+    ms_lines = '\n'.join(f'- {m}' for m in sorted(s['milestones'])) or '*(none yet)*'
+    STATS_FILE.write_text(
+        f'# Trainer Stats\n\n'
+        f'**streak**: {s["streak"]}\n'
+        f'**last_xp_date**: {s["last_xp_date"]}\n'
+        f'**longest_streak**: {s["longest_streak"]}\n'
+        f'**total_xp_ever**: {s["total_xp_ever"]}\n'
+        f'**bug_fixes**: {s["bug_fixes"]}\n'
+        f'**features**: {s["features"]}\n'
+        f'**ships**: {s["ships"]}\n'
+        f'**caught_legendary**: {b(s["caught_legendary"])}\n'
+        f'**caught_mythical**: {b(s["caught_mythical"])}\n'
+        f'**caught_shiny**: {b(s["caught_shiny"])}\n\n'
+        f'## Milestones Awarded\n\n'
+        f'{ms_lines}\n'
+    )
+
+# ── Streak logic ──────────────────────────────────────────────────────────────
+
+def update_streak(stats):
+    """Returns (bonus_xp, new_streak, is_new_day)."""
+    last = stats.get('last_xp_date', '')
+    if last == TODAY:
+        return 0, stats['streak'], False
+    yesterday = (datetime.strptime(TODAY, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+    new_streak = (stats['streak'] + 1) if last == yesterday else 1
+    stats['streak'] = new_streak
+    stats['last_xp_date'] = TODAY
+    if new_streak > stats.get('longest_streak', 0):
+        stats['longest_streak'] = new_streak
+    return STREAK_BONUS_XP, new_streak, True
+
+# ── Milestone & title logic ───────────────────────────────────────────────────
+
+def get_trainer_title(stats, col):
+    n = len(col['pokemon'])
+    checks = {
+        'caught_mythical':  stats.get('caught_mythical'),
+        'caught_legendary': stats.get('caught_legendary'),
+        'caught_shiny':     stats.get('caught_shiny'),
+        'dex_30':           n >= 30,
+        'ships_3':          stats.get('ships', 0) >= 3,
+        'ships_1':          stats.get('ships', 0) >= 1,
+        'streak_30':        stats.get('streak', 0) >= 30,
+        'streak_7':         stats.get('streak', 0) >= 7,
+        'bug_20':           stats.get('bug_fixes', 0) >= 20,
+        'features_10':      stats.get('features', 0) >= 10,
+        'dex_10':           n >= 10,
+    }
+    for key, title in TITLE_RULES:
+        if checks.get(key):
+            return title
+    return 'Rookie Trainer'
+
+def check_milestones(stats, col, old_level, new_level, catch_result, evolved):
+    """Returns list of (emoji, name, desc) for newly triggered milestones."""
+    new_ms = []
+    awarded = stats['milestones']
+
+    def maybe(key):
+        if key not in awarded and key in MILESTONES:
+            awarded.add(key)
+            return [MILESTONES[key]]
+        return []
+
+    n_caught = len(col['pokemon'])
+
+    # Dex milestones
+    if n_caught >= 1:  new_ms += maybe('first_catch')
+    if n_caught >= 10: new_ms += maybe('dex_10')
+    if n_caught >= 20: new_ms += maybe('dex_20')
+    if n_caught >= 30: new_ms += maybe('dex_30')
+
+    # Catch tier milestones
+    if catch_result:
+        base_tier = catch_result[0].replace('-shiny', '')
+        if base_tier == 'legendary': new_ms += maybe('legendary_catch')
+        if base_tier == 'mythical':  new_ms += maybe('mythical_catch')
+        if catch_result[4]:          new_ms += maybe('shiny_catch')  # is_shiny flag
+
+    # Evolution milestones
+    if evolved:
+        new_ms += maybe('first_evolution')
+        if new_level >= 36: new_ms += maybe('final_evolution')
+
+    # Level milestones
+    for lv, key in [(10,'level_10'),(20,'level_20'),(30,'level_30'),(50,'level_50')]:
+        if old_level < lv <= new_level: new_ms += maybe(key)
+
+    # Streak milestones
+    streak = stats.get('streak', 0)
+    if streak >= 7:  new_ms += maybe('streak_7')
+    if streak >= 30: new_ms += maybe('streak_30')
+
+    stats['milestones'] = awarded
+    return new_ms
+
+def append_badge(badge_line):
+    """Append a badge line to buddy file."""
+    text = BUDDY_FILE.read_text()
+    if '*No badges yet' in text:
+        text = text.replace('*No badges yet — the journey begins now!*', badge_line)
+    else:
+        lines = text.splitlines(keepends=True)
+        for i in range(len(lines) - 1, -1, -1):
+            if re.match(r'- .* \*\*.*\*\*', lines[i]):
+                lines.insert(i + 1, badge_line + '\n')
+                text = ''.join(lines)
+                break
+        else:
+            text = text  # no-op if pattern not found
+    BUDDY_FILE.write_text(text)
+
 # ── Collection I/O ────────────────────────────────────────────────────────────
 
 def parse_int(text):
@@ -370,6 +562,7 @@ def read_collection():
         cols = [c for c in cols if c]
         if len(cols) < 6 or cols[0] == 'Name': continue
         try:
+            rarity = cols[6] if len(cols) > 6 else 'caught'
             pokemon.append({
                 'name':    cols[0],
                 'type':    cols[1],
@@ -377,7 +570,8 @@ def read_collection():
                 'level':   int(cols[3]),
                 'xp':      int(cols[4]),
                 'caught':  cols[5],
-                'rarity':  cols[6] if len(cols) > 6 else 'caught',
+                'rarity':  rarity,
+                'shiny':   rarity.endswith('-shiny'),
             })
         except (ValueError, IndexError):
             continue
@@ -398,7 +592,6 @@ def write_collection(active, pokemon_list):
     COLLECTION_FILE.write_text(''.join(lines))
 
 def sync_active_to_collection(name, level, xp):
-    """Update the active buddy's level/xp in the collection file."""
     col = read_collection()
     for p in col['pokemon']:
         if p['name'] == name:
@@ -407,12 +600,13 @@ def sync_active_to_collection(name, level, xp):
             break
     write_collection(col['active'], col['pokemon'])
 
-# ── Catch system ─────────────────────────────────────────────────────────────
+# ── Catch system ──────────────────────────────────────────────────────────────
 
 def roll_catch(add_xp, owned_names):
+    """Returns (tier, name, type, emoji, is_shiny) or None."""
     rates = CATCH_RATES.get(add_xp, [('common', 0.05)])
     caught_tier = None
-    for tier, prob in sorted(rates, key=lambda x: POKEMON_POOL.keys().__contains__(x[0])):
+    for tier, prob in sorted(rates, key=lambda x: list(POKEMON_POOL.keys()).index(x[0])):
         if random.random() < prob:
             caught_tier = tier
     if not caught_tier:
@@ -422,13 +616,16 @@ def roll_catch(add_xp, owned_names):
     if not available:
         available = pool
     chosen = random.choice(available)
-    return (caught_tier, *chosen)   # (tier, name, type, emoji)
+    is_shiny = random.random() < SHINY_RATE
+    return (caught_tier, chosen[0], chosen[1], chosen[2], is_shiny)
 
-def add_to_collection(name, ptype, emoji, rarity):
+def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
     col = read_collection()
+    stored_rarity = (rarity + '-shiny') if is_shiny else rarity
     col['pokemon'].append({
         'name': name, 'type': ptype, 'emoji': emoji,
-        'level': 1, 'xp': 0, 'caught': TODAY, 'rarity': rarity,
+        'level': 1, 'xp': 0, 'caught': TODAY,
+        'rarity': stored_rarity, 'shiny': is_shiny,
     })
     write_collection(col['active'], col['pokemon'])
 
@@ -512,24 +709,35 @@ def render_status(text):
         m = re.search(rf'\| {re.escape(stat)} \| (\d+) \|', text)
         stats[stat] = int(m.group(1)) if m else 0
 
-    moves = re.findall(r'\| ([^|?]+) \| ([^|?]+) \| Lv\.(\d+) \| ([^|]+) \|', text)
+    moves  = re.findall(r'\| ([^|?]+) \| ([^|?]+) \| Lv\.(\d+) \| ([^|]+) \|', text)
     locked = re.findall(r'\| \?\?\? \| \?\?\? \| Lv\.(\d+) \|', text)
 
     badges_section = re.search(r'## Badges Earned\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
     badges_raw = re.findall(r'^- (.+)$', badges_section.group(1), re.MULTILINE) if badges_section else []
     badges = [b for b in badges_raw if 'No badges yet' not in b]
 
+    # Trainer stats for title & dex
+    trainer_stats = read_stats()
+    col   = read_collection()
+    title = get_trainer_title(trainer_stats, col)
+    n_dex = len(col['pokemon'])
+    n_total = sum(len(v) for v in POKEMON_POOL.values())
+    streak  = trainer_stats.get('streak', 0)
+    longest = trainer_stats.get('longest_streak', 0)
+
     xp_b = bar(xp_cur, xp_max, 24)
     sep  = '─' * 52
 
+    streak_icon = '🔥' if streak >= 7 else '📅'
     out = [
         f' 🔥 {stage.upper():<12} Lv.{level:<4}      Trainer: {trainer}',
+        f'    · {title} ·',
         f' {sep}',
         f' XP  [{xp_b}]  {xp_cur} / {xp_max}',
         '',
     ]
 
-    move_list = [(m[0].strip(), m[1].strip(), m[3].strip()) for m in moves]
+    move_list  = [(m[0].strip(), m[1].strip(), m[3].strip()) for m in moves]
     right_items = []
     for nm, mt, desc in move_list:
         right_items.append(f'  {nm:<10} [{mt[0].upper()}]  {desc}')
@@ -540,7 +748,7 @@ def render_status(text):
     stat_labels = ['HP ', 'ATK', 'DEF', 'SPA', 'SPD', 'SPE']
     for i, (key, label) in enumerate(zip(stat_keys, stat_labels)):
         val   = stats.get(key, 0)
-        b     = stat_bar(val)
+        b_bar = stat_bar(val)
         right = right_items[i] if i < len(right_items) else ''
         if i == 5 and badges:
             badge_names = ', '.join(
@@ -548,15 +756,17 @@ def render_status(text):
                 for b2 in badges if re.search(r'\*\*(.+?)\*\*', b2)
             )
             right = f'  BADGES: {len(badges)}  ({badge_names})'
-        out.append(f' {label}  {b}  {val:<3}    {right}')
+        out.append(f' {label}  {b_bar}  {val:<3}    {right}')
 
-    out += [f' {sep}', f' PATH: {stage} ──> (Lv.16) ──> (Lv.36)']
+    out += [
+        f' {sep}',
+        f' PATH: {stage} ──> (Lv.16) ──> (Lv.36)',
+        f' DEX: {n_dex}/{n_total} caught   {streak_icon} Streak: {streak} days (best: {longest})',
+    ]
 
-    # Party summary from collection
-    col = read_collection()
     if col['pokemon']:
         party_str = '  '.join(
-            f"{p['emoji']}{p['name']}{'*' if p['name'] == col['active'] else ''} Lv.{p['level']}"
+            f"{'✨' if p.get('shiny') else ''}{p['emoji']}{p['name']}{'*' if p['name'] == col['active'] else ''} Lv.{p['level']}"
             for p in col['pokemon']
         )
         out += ['', f' PARTY: {party_str}']
@@ -569,12 +779,11 @@ def render_statusline():
         return '🎮 No buddy yet'
 
     party = '  '.join(
-        f"{p['emoji']}{'*' if p['name'] == col['active'] else ''}"
+        f"{'✨' if p.get('shiny') else ''}{p['emoji']}{'*' if p['name'] == col['active'] else ''}"
         f"Lv{p['level']} {p['name']}"
         for p in col['pokemon']
     )
 
-    # Active buddy XP bar
     lines = BUDDY_FILE.read_text().splitlines()
     xp_cur = parse_int(next((l for l in lines if l.startswith('**XP**:')), '0'))
     xp_max_m = re.search(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)',
@@ -590,11 +799,137 @@ def render_statusline():
     badges_raw = re.findall(r'^- (.+)$', badges_section.group(1), re.MULTILINE) if badges_section else []
     badge_count = sum(1 for b in badges_raw if 'No badges yet' not in b)
 
-    return f'{party} {mood} [{xp_b}] {xp_cur}/{xp_max} 🏅{badge_count}'
+    trainer_stats = read_stats()
+    streak = trainer_stats.get('streak', 0)
+    streak_str = f' 🔥{streak}' if streak >= 2 else ''
+
+    return f'{party} {mood} [{xp_b}] {xp_cur}/{xp_max} 🏅{badge_count}{streak_str}'
+
+def render_card():
+    """Render a shareable ASCII trainer card."""
+    text     = BUDDY_FILE.read_text()
+    col      = read_collection()
+    tr_stats = read_stats()
+
+    def g(pat, default='?'):
+        m = re.search(pat, text)
+        return m.group(1).strip() if m else default
+
+    stage    = g(r'\*\*Stage\*\*:\s*(\w+)')
+    level    = g(r'\*\*Level\*\*:\s*(\d+)')
+    trainer  = g(r'\*\*Trainer\*\*:\s*(.+)')
+    xp_cur   = int(g(r'\*\*XP\*\*:\s*(\d+)', '0'))
+    xp_max   = int(g(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)', '100'))
+    specialty = g(r'\*\*Specialty\*\*:\s*(.+)')
+
+    title = get_trainer_title(tr_stats, col)
+
+    # Rarest catch (highest tier first)
+    rarity_order = ['mythical', 'legendary', 'rare', 'uncommon', 'common']
+    rarest = None
+    for tier in rarity_order:
+        for p in col['pokemon']:
+            if tier in p.get('rarity', ''):
+                rarest = p
+                break
+        if rarest: break
+
+    badges_section = re.search(r'## Badges Earned\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
+    badges_raw = re.findall(r'^- (.+)$', badges_section.group(1), re.MULTILINE) if badges_section else []
+    badges = [b for b in badges_raw if 'No badges yet' not in b]
+    badge_names = [re.search(r'\*\*(.+?)\*\*', b).group(1) for b in badges if re.search(r'\*\*(.+?)\*\*', b)]
+
+    n_caught = len(col['pokemon'])
+    n_total  = sum(len(v) for v in POKEMON_POOL.values())
+    streak   = tr_stats.get('streak', 0)
+    longest  = tr_stats.get('longest_streak', 0)
+
+    emoji_map = {
+        'Charmander':'🔥','Charmeleon':'🔥','Charizard':'🐉',
+        'Bulbasaur':'🌿','Ivysaur':'🌿','Venusaur':'🌺',
+        'Squirtle':'💧','Wartortle':'💧','Blastoise':'💦',
+    }
+    buddy_emoji = emoji_map.get(stage, '🎮')
+    xp_b = bar(xp_cur, xp_max, 20)
+
+    W   = 54
+    SEP = f' ╠{"═" * (W + 3)}╣'
+
+    def row(content=''):
+        pad = W - len(content)
+        return f' ║  {content}{" " * max(0, pad)}  ║'
+
+    rarest_str = (
+        f'{"✨" if rarest.get("shiny") else ""}{rarest["emoji"]} {rarest["name"]}'
+        f' ({rarest["rarity"].upper().replace("-SHINY", " ✨")})'
+        if rarest else 'None yet'
+    )
+    shiny_str = '  ✨ Shiny Caught' if tr_stats.get('caught_shiny') else ''
+
+    # Build party rows (2 per line)
+    party_rows = []
+    row_buf = []
+    for p in col['pokemon']:
+        mark = '✨' if p.get('shiny') else ''
+        entry = f'{mark}{p["emoji"]}{p["name"]}{"*" if p["name"] == col["active"] else ""} Lv.{p["level"]}'
+        row_buf.append(entry)
+        if len(row_buf) == 2:
+            party_rows.append(f'{row_buf[0]:<28}{row_buf[1]}')
+            row_buf = []
+    if row_buf:
+        party_rows.append(row_buf[0])
+
+    out = [
+        f' ╔{"═" * (W + 3)}╗',
+        row(f'🏆  TRAINER CARD  ·  {trainer}'),
+        row(f'     · {title} ·'),
+        SEP,
+        row('ACTIVE BUDDY'),
+        row(f'{buddy_emoji} {stage.upper():<14} Lv.{level}'),
+        row(f'[{xp_b}]  {xp_cur}/{xp_max} XP'),
+        row(f'Specialty: {specialty}'),
+        SEP,
+        row('ACHIEVEMENTS'),
+        row(f'Badges: {len(badges)}   Dex: {n_caught}/{n_total} caught'),
+        row(f'Streak: 🔥{streak} days  (best: {longest}){shiny_str}'),
+        row(f'Rarest: {rarest_str}'),
+        SEP,
+    ]
+
+    if badge_names:
+        out.append(row('BADGES'))
+        line = ''
+        for bn in badge_names:
+            candidate = (line + '  ·  ' + bn).lstrip(' ·  ')
+            if len(candidate) > W - 2:
+                out.append(row(line))
+                line = bn
+            else:
+                line = candidate
+        if line:
+            out.append(row(line))
+        out.append(SEP)
+
+    if col['pokemon']:
+        out.append(row(f'PARTY  ({n_caught} Pokemon)'))
+        for pr in party_rows:
+            out.append(row(pr))
+        out.append(SEP)
+
+    out += [
+        row(f'Total XP earned: {tr_stats.get("total_xp_ever", 0)}'),
+        row(f'Bugs fixed: {tr_stats.get("bug_fixes",0)}   '
+            f'Features: {tr_stats.get("features",0)}   '
+            f'Ships: {tr_stats.get("ships",0)}'),
+        f' ╚{"═" * (W + 3)}╝',
+    ]
+
+    return '\n'.join(out)
 
 def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         new_stage, stat_boost, new_moves_data, evolved,
-                        catch_result=None, b_emoji='', b_name='', b_desc=''):
+                        catch_result=None, b_emoji='', b_name='', b_desc='',
+                        streak_bonus=0, streak_count=0, new_badges=None):
     xp_b  = bar(new_xp, new_max, 24)
     lines = []
 
@@ -608,11 +943,13 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
         ]
 
     parts = [f'+{add_xp} XP!']
+    if streak_bonus and streak_count:
+        parts.append(f'🔥 Day {streak_count} streak (+{streak_bonus} bonus)!')
     if new_level > old_level: parts.append(f'★ LEVEL UP! Lv.{old_level} → Lv.{new_level}')
     if evolved:               parts.append(f'✨ EVOLVED into {evolved}!')
     lines.append(' ' + '   '.join(parts))
     lines += [
-        f' 🔥 {new_stage.upper():<12} Lv.{new_level:<4}      Trainer: Andriar',
+        f' 🔥 {new_stage.upper():<12} Lv.{new_level:<4}',
         ' ' + '─' * 52,
         f' XP  [{xp_b}]  {new_xp} / {new_max}',
     ]
@@ -621,16 +958,40 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
     for _, name, mtype, desc in new_moves_data:
         lines.append(f' New move: {name} [{mtype}] — {desc}')
 
+    # Auto-milestone badges announcement
+    if new_badges:
+        for ms_emoji, ms_name, ms_desc in new_badges:
+            inner = max(len(ms_name) + 13, 44)
+            lines += [
+                '',
+                f' ┌{"─" * inner}┐',
+                f' │  {ms_emoji}  {ms_name} UNLOCKED!{" " * (inner - len(ms_name) - 12)}│',
+                f' │  "{ms_desc}"{" " * (inner - len(ms_desc) - 3)}│',
+                f' └{"─" * inner}┘',
+            ]
+
     if catch_result:
-        tier, cname, ctype, cemoji = catch_result
-        lines += [
-            '',
-            f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-            f' 🎉 Wild {cemoji} {cname} appeared!  ({tier.upper()})',
-            f'    You threw a Pokéball...  ★ Gotcha!  {cname} was caught!',
-            f'    [{cname} added to your party — use /pokemon-switch to set as buddy]',
-            f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-        ]
+        tier, cname, ctype, cemoji, is_shiny = catch_result
+        display_tier = tier.upper()
+        if is_shiny:
+            lines += [
+                '',
+                f' ╔{"═"*54}╗',
+                f' ║  ✨✨✨  SHINY {cemoji} {cname} appeared!  ✨✨✨{" " * max(0, 20 - len(cname))}║',
+                f' ║  AN INCREDIBLY RARE SHINY POKEMON!  1 in 200!{" " * 7}║',
+                f' ║  You threw a Pokéball...  ★ GOTCHA!  {cname} caught!{" " * max(0, 14 - len(cname))}║',
+                f' ║  [Added to party — use /pokemon-switch to buddy up]{" " * 4}║',
+                f' ╚{"═"*54}╝',
+            ]
+        else:
+            lines += [
+                '',
+                f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                f' 🎉 Wild {cemoji} {cname} appeared!  ({display_tier})',
+                f'    You threw a Pokéball...  ★ Gotcha!  {cname} was caught!',
+                f'    [{cname} added to your party — use /pokemon-switch to buddy up]',
+                f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            ]
 
     return '\n'.join(lines)
 
@@ -696,11 +1057,9 @@ def do_switch(target_name):
         print(f"   Party: {', '.join(p['name'] for p in col['pokemon'])}")
         sys.exit(1)
 
-    # Save current buddy XP back to collection
     lines, _, cur_level, cur_xp, _, cur_name = read_buddy()
     sync_active_to_collection(cur_name, cur_level, cur_xp)
 
-    # Build new buddy file
     name    = match['name']
     ptype   = match['type']
     emoji   = match['emoji']
@@ -753,7 +1112,7 @@ def do_switch(target_name):
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: buddy-update.py status|statusline|xp|badge|switch|catch")
+        print("Usage: buddy-update.py status|statusline|card|xp|badge|switch|catch")
         sys.exit(1)
 
     mode = args[0]
@@ -764,6 +1123,10 @@ def main():
 
     if mode == 'statusline':
         print(render_statusline())
+        sys.exit(0)
+
+    if mode == 'card':
+        print(render_card())
         sys.exit(0)
 
     if mode == 'switch':
@@ -784,11 +1147,33 @@ def main():
 
     add_xp = 0; log_desc = ''; badge_line = ''
     b_emoji = b_name = b_desc = ''
+    streak_bonus = 0; streak_count = 0
+
+    # Load stats early — needed for streak and milestone tracking
+    tr_stats = read_stats()
 
     if mode == 'xp':
         desc     = args[1] if len(args) > 1 else ''
-        add_xp   = detect_xp(desc)
+        base_xp  = detect_xp(desc)
         log_desc = desc or 'XP awarded'
+
+        # Streak: bonus XP for first award of the day
+        bonus, streak_count, is_new_day = update_streak(tr_stats)
+        if is_new_day:
+            streak_bonus = bonus
+        add_xp = base_xp + streak_bonus
+
+        # Track achievement counters
+        dl = desc.lower()
+        if any(k in dl for k in ['ship','deploy','production','prod','release']):
+            tr_stats['ships'] = tr_stats.get('ships', 0) + 1
+        if any(k in dl for k in ['feature','complete','implement','finish']):
+            tr_stats['features'] = tr_stats.get('features', 0) + 1
+        if any(k in dl for k in ['bug','fix','error','issue','patch']):
+            tr_stats['bug_fixes'] = tr_stats.get('bug_fixes', 0) + 1
+
+        tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + add_xp
+
     elif mode == 'badge':
         add_xp  = 50
         b_emoji = args[1] if len(args) > 1 else '🏅'
@@ -796,6 +1181,7 @@ def main():
         b_desc  = args[3] if len(args) > 3 else 'Achievement unlocked'
         log_desc  = f'Earned {b_emoji} {b_name}'
         badge_line = f'- {b_emoji} **{b_name}** — *{b_desc}* `{TODAY}`'
+        tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + add_xp
 
     new_xp    = old_xp + add_xp
     new_level = level_from_xp(new_xp)
@@ -807,7 +1193,7 @@ def main():
     elif old_level < 36 <= new_level: evolved = 'Charizard'
     new_stage = evolved or old_stage
 
-    move_defs     = MOVE_UNLOCKS.get(buddy_name, MOVE_UNLOCKS.get('Charmander', {}))
+    move_defs      = MOVE_UNLOCKS.get(buddy_name, MOVE_UNLOCKS.get('Charmander', {}))
     new_moves_data = [(lv, *move_defs[lv]) for lv in sorted(move_defs) if old_level < lv <= new_level]
 
     out, last_log_idx = patch_buddy(lines, new_level, new_xp, new_max, new_stage,
@@ -822,17 +1208,37 @@ def main():
     # Sync collection
     sync_active_to_collection(buddy_name, new_level, new_xp)
 
-    # Roll for wild encounter
+    # Roll for wild encounter (use base XP for catch rates, not streak-boosted)
+    base_xp_for_catch = detect_xp(args[1] if len(args) > 1 and mode == 'xp' else '') if mode == 'xp' else add_xp
     col = read_collection()
     owned = {p['name'] for p in col['pokemon']}
-    catch_result = roll_catch(add_xp, owned)
+    catch_result = roll_catch(base_xp_for_catch, owned)
     if catch_result:
-        tier, cname, ctype, cemoji = catch_result
-        add_to_collection(cname, ctype, cemoji, tier)
+        tier, cname, ctype, cemoji, is_shiny = catch_result
+        add_to_collection(cname, ctype, cemoji, tier, is_shiny)
+        # Update stats flags
+        base_tier = tier.replace('-shiny', '')
+        if base_tier == 'legendary': tr_stats['caught_legendary'] = True
+        if base_tier == 'mythical':  tr_stats['caught_mythical']  = True
+        if is_shiny:                 tr_stats['caught_shiny']      = True
+        # Re-read collection after adding new catch for milestone checks
+        col = read_collection()
 
-    print(render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
-                              new_stage, stat_boost, new_moves_data, evolved,
-                              catch_result, b_emoji, b_name, b_desc))
+    # Check and award auto milestone badges
+    new_badges = check_milestones(tr_stats, col, old_level, new_level, catch_result, evolved)
+    for ms_emoji, ms_name, ms_desc in new_badges:
+        ms_badge_line = f'- {ms_emoji} **{ms_name}** — *{ms_desc}* `{TODAY}`'
+        append_badge(ms_badge_line)
+
+    # Persist updated stats
+    write_stats(tr_stats)
+
+    print(render_announcement(
+        mode, add_xp, old_level, new_level, new_xp, new_max,
+        new_stage, stat_boost, new_moves_data, evolved,
+        catch_result, b_emoji, b_name, b_desc,
+        streak_bonus, streak_count, new_badges,
+    ))
 
 if __name__ == '__main__':
     main()

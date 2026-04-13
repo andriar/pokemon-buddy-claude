@@ -5,6 +5,27 @@ Format: [version] — date — description
 
 ---
 
+## [1.2.0] — 2026-04-14
+
+### Added
+- **Shiny Pokemon** — 0.5% (1 in 200) chance on any catch; shiny celebration block with `✨` markers; shinies flagged in party/card
+- **Daily coding streak** — First XP award of the day earns +20 bonus XP; streak counter shown in status bar and status card; longest streak tracked
+- **Auto milestone badges** — 15 milestones auto-awarded on achievement: First Catch, Legend Seeker, Myth Maker, Shiny Hunter, First/Final Evolution, Lv.10/20/30/50, Dex 10/20/30, 7-Day/30-Day Streak
+- **Trainer titles** — Dynamic title computed from achievements (Mythical Master, Legend Hunter, Shiny Chaser, Pokedex Scholar, Elite Deployer, Bug Slayer, etc.); shown under trainer name in `/buddy`
+- **`/buddy-card` command** — Shareable ASCII trainer card showing buddy, title, achievements, Dex count, streak, rarest catch, party, lifetime stats
+- **Pokedex tracker** — `DEX: N/68 caught` shown in `/buddy` status and streak info
+- **`buddy-stats.md`** — New persistent stats file tracking streak, counters (bugs/features/ships), catch flags, and milestone award history
+- `commands/buddy-card.md` — new slash command file
+
+### Changed
+- `render_status()` — now shows trainer title, Dex count, and streak
+- `render_statusline()` — shows streak count when ≥ 2 days (`🔥N` suffix)
+- `render_announcement()` — shows streak bonus in XP line; shiny catch gets full-width celebration box; auto milestone badges get inline announcement
+- Party display marks shiny Pokemon with `✨` prefix
+- `roll_catch()` now returns 5-tuple `(tier, name, type, emoji, is_shiny)`
+
+---
+
 ## [1.1.1] — 2026-04-14
 
 ### Added

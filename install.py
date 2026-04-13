@@ -263,7 +263,7 @@ copy_exec("statusline-buddy.sh")
 # ── Copy commands ─────────────────────────────────────────────────────────────
 
 (CLAUDE_DIR / "commands").mkdir(exist_ok=True)
-for cmd in ("buddy.md", "buddy-xp.md", "buddy-badge.md", "pokemon-switch.md"):
+for cmd in ("buddy.md", "buddy-xp.md", "buddy-badge.md", "buddy-card.md", "pokemon-switch.md"):
     src = SCRIPT_DIR / "commands" / cmd
     if src.exists():
         shutil.copy2(src, CLAUDE_DIR / "commands" / cmd)
@@ -330,6 +330,7 @@ print(f"  Role    : {bold(ROLE)}  ({ROLE_TYPE})")
 print()
 print("  Commands available:")
 print(f"    {cyan('/buddy')}            — Show full status")
+print(f"    {cyan('/buddy-card')}       — Shareable trainer card")
 print(f"    {cyan('/buddy-xp')}         — Award XP")
 print(f"    {cyan('/buddy-badge')}      — Award a badge")
 print(f"    {cyan('/pokemon-switch')}   — Switch active buddy")

@@ -87,6 +87,7 @@ UPDATABLE_COMMANDS=(
   "commands/buddy.md"
   "commands/buddy-xp.md"
   "commands/buddy-badge.md"
+  "commands/buddy-card.md"
   "commands/pokemon-switch.md"
 )
 

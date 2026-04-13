@@ -6,10 +6,15 @@ A Pokemon companion system for [Claude Code](https://claude.ai/code) — your AI
 
 - **Choose your starter** — Charmander 🔥, Bulbasaur 🌿, or Squirtle 💧, each with unique stats and move unlocks
 - **Earn XP automatically** — Claude awards XP after bug fixes, features, deployments, and more
+- **Daily streak bonus** — first XP award of the day gives +20 bonus XP; streak shown in status bar
 - **Level up & evolve** — Lv.16 → Charmeleon/Ivysaur/Wartortle · Lv.36 → Charizard/Venusaur/Blastoise
 - **Catch wild Pokemon** — rare encounters triggered by hard achievements (production ship = 4% legendary chance)
+- **Shiny Pokemon** — 0.5% (1 in 200) chance on any catch — full celebration box + `✨` in party
+- **Auto milestone badges** — 15 milestones awarded automatically (First Catch, Legend Seeker, Lv.10, 7-Day Streak, and more)
+- **Trainer titles** — earn titles like *Legend Hunter*, *Shiny Chaser*, *Elite Deployer* based on your achievements
+- **Pokedex tracker** — see how many unique Pokemon you've caught out of 68 total
 - **Switch active buddy** — build a party, choose who to train
-- **Live status bar** — party + XP bar + mood shown at the bottom of Claude Code
+- **Live status bar** — party + XP bar + mood + streak shown at the bottom of Claude Code
 
 ```
 🔥*Lv4 Charmander  ⚡Lv1 Pikachu 💥 [█████████░] 360/400 🏅1
@@ -43,7 +48,8 @@ Then restart Claude Code.
 
 | Command | Description |
 |---|---|
-| `/buddy` | Full status card — stats, moves, badges, party |
+| `/buddy` | Full status card — stats, moves, badges, party, Dex, streak |
+| `/buddy-card` | Shareable ASCII trainer card — title, rarest catch, lifetime stats |
 | `/buddy-xp <what you did>` | Award XP manually |
 | `/buddy-badge <description>` | Award a badge + 50 XP |
 | `/pokemon-switch <name>` | Switch active buddy |
@@ -63,6 +69,7 @@ Claude detects completed tasks and auto-runs `/buddy-xp` without being asked:
 | Solve a hard problem | +40 |
 | Write tests | +30 |
 | Refactor / code review | +20 |
+| **Daily streak bonus** (first award of the day) | **+20** |
 
 ## Wild Pokemon encounters
 
@@ -75,6 +82,9 @@ Triggered automatically on XP awards. Higher XP = better rarity:
 | Rare 🐲 | Feature complete | 4% |
 | Legendary 🧬 | Ship to production | 4% |
 | Mythical ✨ | Ship to production | 1% |
+| **Shiny** ✨ | Any catch | **0.5%** |
+
+Any caught Pokemon has a 0.5% (1 in 200) chance of being shiny — a special sparkling variant with a full celebration announcement.
 
 Full catalogue of all 46 legendaries + 22 mythicals with their dev meanings: **[LEGENDARIES.md](LEGENDARIES.md)**
 
@@ -92,11 +102,13 @@ Squirtle   Lv.1  ──>  Wartortle  Lv.16  ──>  Blastoise Lv.36
 ~/.claude/
 ├── buddy-pokemon.md        ← Active buddy data
 ├── pokemon-collection.md   ← Full party roster
+├── buddy-stats.md          ← Streak, counters, milestones
 ├── buddy-update.py         ← Core engine
 ├── statusline-buddy.sh     ← Status bar script
 ├── pokemon-persona.md      ← Coach persona
 └── commands/
     ├── buddy.md
+    ├── buddy-card.md
     ├── buddy-xp.md
     ├── buddy-badge.md
     └── pokemon-switch.md
@@ -195,6 +207,7 @@ python update.py --remote
 The updater **never touches**:
 - `~/.claude/buddy-pokemon.md` — your active buddy
 - `~/.claude/pokemon-collection.md` — your party roster
+- `~/.claude/buddy-stats.md` — your streak, counters, milestones
 - `~/.claude/buddy-log-archive.md` — your history
 
 It **only updates**: `buddy-update.py`, `statusline-buddy.sh`, `pokemon-persona.md`, and all `commands/`.
