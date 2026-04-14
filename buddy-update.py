@@ -659,7 +659,19 @@ def sync_active_to_collection(name, level, xp):
         if p['name'] == name:
             p['level'] = level
             p['xp']    = xp
-            break
+            write_collection(col['active'], col['pokemon'])
+            return
+    # Missing from collection — append rather than silently dropping the update.
+    starter = STARTER_DATA.get(name, {})
+    col['pokemon'].append({
+        'name':   name,
+        'type':   starter.get('type', '?'),
+        'emoji':  starter.get('emoji', '?'),
+        'level':  level,
+        'xp':     xp,
+        'caught': TODAY,
+        'rarity': 'starter',
+    })
     write_collection(col['active'], col['pokemon'])
 
 # ── Catch system ──────────────────────────────────────────────────────────────
@@ -710,6 +722,10 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
 # ── Buddy file I/O ────────────────────────────────────────────────────────────
 
 def read_buddy():
+    if not BUDDY_FILE.exists():
+        print(f' ❌ No buddy found at {BUDDY_FILE}')
+        print(f'    Run /poke:choose to pick a starter first.')
+        sys.exit(1)
     lines = BUDDY_FILE.read_text(encoding='utf-8').splitlines(keepends=True)
     text  = ''.join(lines)
     level = parse_int(next((l for l in lines if l.startswith('**Level**:')), '1'))
@@ -863,6 +879,8 @@ def render_statusline(plugin_mode=False):
     buddy_str  = f"{shiny_mark}{active['emoji']} {active['name']} Lv.{active['level']}"
 
     # ── Section 2: Colored XP bar ────────────────────────────────────────────
+    if not BUDDY_FILE.exists():
+        return f'{prefix}{buddy_str}'
     lines    = BUDDY_FILE.read_text(encoding='utf-8').splitlines()
     xp_line  = next((l for l in lines if l.startswith('**XP**:')), '')
     xp_cur   = parse_int(xp_line)
@@ -1384,6 +1402,13 @@ def main():
 
     mode = args[0]
 
+    # Modes that read/render the buddy file need it to exist. statusline has
+    # its own empty-state fallback; import/backup/catch handle absence themselves.
+    if mode in ('status', 'card', 'svg', 'readme', 'switch', 'xp', 'badge') and not BUDDY_FILE.exists():
+        print(f' ❌ No buddy found at {BUDDY_FILE}')
+        print(f'    Run /poke:choose to pick a starter first.')
+        sys.exit(1)
+
     if mode == 'status':
         print(render_status(BUDDY_FILE.read_text(encoding='utf-8')))
         sys.exit(0)
@@ -1507,12 +1532,22 @@ def main():
 
     new_xp    = old_xp + add_xp
     new_level = level_from_xp(new_xp)
+    # At level cap, hold XP just shy of the next-level threshold so the bar
+    # displays near-full instead of runaway numbers past the bar max.
+    if new_level >= 100:
+        new_level = 100
+        new_xp = min(new_xp, xp_for_level(101) - 1)
     new_max   = xp_for_level(new_level + 1)
     stat_boost = sum(5 for lv in range(old_level + 1, new_level + 1) if lv % 5 == 0)
 
-    evolved = ''
-    if   old_level < 16 <= new_level: evolved = 'Charmeleon'
-    elif old_level < 36 <= new_level: evolved = 'Charizard'
+    # Evolution: pick the highest-threshold form the new level qualifies for,
+    # across whatever evolution chain the buddy's starter defines.
+    evolutions = STARTER_DATA.get(buddy_name, {}).get('evolutions', [])
+    target_stage = buddy_name
+    for evo_name, threshold, _ in evolutions:
+        if new_level >= threshold:
+            target_stage = evo_name
+    evolved = target_stage if target_stage != old_stage else ''
     new_stage = evolved or old_stage
 
     move_defs      = MOVE_UNLOCKS.get(buddy_name, MOVE_UNLOCKS.get('Charmander', {}))
