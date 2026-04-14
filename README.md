@@ -244,6 +244,28 @@ It **only updates**: `buddy-update.py`, `statusline-buddy.sh`, `pokemon-persona.
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 
+## Uninstalling
+
+Remove the engine + slash commands + status bar patch. By default, your buddy data (party, stats, journey log) is **kept** in `~/.claude/`.
+
+**macOS / Linux**
+
+```bash
+bash uninstall.sh              # keep buddy data
+bash uninstall.sh --purge      # also delete buddy/collection/stats
+```
+
+**Windows**
+
+```powershell
+python uninstall.py            # keep buddy data
+python uninstall.py --purge    # also delete buddy/collection/stats
+```
+
+Or double-click `uninstall.bat` from Explorer.
+
+The uninstaller also un-patches `CLAUDE.md` (backup saved as `CLAUDE.md.bak.<timestamp>`) and removes the `statusLine` entry from `settings.json` if it points to the buddy status script.
+
 ## Requirements
 
 - [Claude Code](https://claude.ai/code) CLI
