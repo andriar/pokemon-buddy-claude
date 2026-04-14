@@ -851,10 +851,11 @@ def render_status(text):
 
     return '\n'.join(out)
 
-def render_statusline():
+def render_statusline(plugin_mode=False):
     col = read_collection()
+    prefix = '⚡v2  ' if plugin_mode else ''
     if not col['pokemon']:
-        return '🎮 No buddy yet'
+        return f'{prefix}🎮 No buddy yet'
 
     # ── Section 1: Active buddy ──────────────────────────────────────────────
     active     = next((p for p in col['pokemon'] if p['name'] == col['active']), col['pokemon'][0])
@@ -883,8 +884,8 @@ def render_statusline():
     # ── Section 4: Buddy chatter (right side) ────────────────────────────────
     chatter_str = f'💭 {get_chatter(pct)}'
 
-    sep = '  │  '
-    return f'{buddy_str}{sep}{xp_str}{sep}{stats_str}{sep}{chatter_str}'
+    sep = '  ┃  ' if plugin_mode else '  │  '
+    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{stats_str}{sep}{chatter_str}'
 
 def render_card():
     """Render a shareable ASCII trainer card."""
@@ -1203,7 +1204,8 @@ def main():
         sys.exit(0)
 
     if mode == 'statusline':
-        print(render_statusline())
+        plugin_mode = '--plugin' in args
+        print(render_statusline(plugin_mode=plugin_mode))
         sys.exit(0)
 
     if mode == 'card':

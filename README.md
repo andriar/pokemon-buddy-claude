@@ -41,52 +41,64 @@ During install, choose your role — each maps to a Pokemon type that flavors yo
 
 > Your role type influences wild encounters — Pokemon of the same type appear **3× more often** in your catches.
 
-## Install
+## Install (v2.x — Claude Code plugin, works on any OS)
 
-**macOS / Linux**
+Inside Claude Code:
 
-```bash
-# One-liner:
-curl -sSL https://raw.githubusercontent.com/andriar/pokemon-buddy-claude/main/install.sh | bash
-
-# Or clone and run:
-git clone https://github.com/andriar/pokemon-buddy-claude
-cd pokemon-buddy-claude
-bash install.sh
+```
+/plugin marketplace add andriar/pokemon-buddy-claude
+/plugin install poke
 ```
 
-**Windows** (PowerShell, cmd, or double-click — no bash required)
+That's the whole install. No shell scripts, no admin prompts, no emoji encoding bugs. Works identically on Windows, macOS, and Linux.
 
-```powershell
-git clone https://github.com/andriar/pokemon-buddy-claude
-cd pokemon-buddy-claude
-python install.py
+After install, restart your session, then pick a starter:
+
+```
+/poke:choose
 ```
 
-Or double-click `install.bat` from Explorer after cloning.
+The status bar animates immediately once you pick.
 
-Then restart Claude Code.
+### Upgrading from v1.x (shell install)?
 
-> **Windows display notes** — for emoji to render correctly:
-> - Use **Windows Terminal** (not legacy `cmd.exe` / `conhost`). Git Bash's mintty also works.
-> - Keep Windows 10/11 updated — the Segoe UI Emoji font ships with OS updates.
-> - A Nerd Font like `Cascadia Code NF` or `JetBrains Mono NF` gives the widest coverage.
->
-> If you see `▯` or `??` instead of emoji, it's a terminal/font issue — not the script.
+Your Pokémon, XP, level, streak, and collection are preserved. After installing the plugin:
 
-## Commands
+```
+/poke:migrate
+```
+
+Follow the prompts — it cleans up legacy install files and CLAUDE.md imports. State files stay put.
+
+See [docs/MIGRATION.md](docs/MIGRATION.md) for details.
+
+### Legacy shell install (v1.x)
+
+Still available, but no longer recommended. See [releases/tag/v1.3.2](https://github.com/andriar/pokemon-buddy-claude/releases/tag/v1.3.2) for the last shell-installer release.
+
+## Commands (v2.x)
+
+All slash commands are namespaced under `/poke:*` in the plugin version.
 
 | Command | Description |
 |---|---|
-| `/buddy` | Full status card — stats, moves, badges, party, Dex, streak |
-| `/buddy-card` | Shareable ASCII trainer card — title, rarest catch, lifetime stats |
-| `/buddy-xp <what you did>` | Award XP manually |
-| `/buddy-badge <description>` | Award a badge + 50 XP |
-| `/pokemon-switch <name>` | Switch active buddy |
+| `/poke:status` | Full status card — stats, moves, badges, party, Dex, streak |
+| `/poke:card` | Shareable ASCII trainer card |
+| `/poke:xp <what you did>` | Award XP manually |
+| `/poke:badge <description>` | Award a badge + 50 XP |
+| `/poke:switch <name>` | Switch active buddy |
+| `/poke:choose` | Pick your starter (first-time setup) |
+| `/poke:persona on` | Turn on Pokémon Master Coach voice + auto-XP (opt-in, costs tokens) |
+| `/poke:persona off` | Turn it off again — keep your buddy silent |
+| `/poke:migrate` | One-shot migration from v1.x shell install |
 
-## XP is awarded automatically
+### Cost note
 
-Claude detects completed tasks and auto-runs `/buddy-xp` without being asked:
+**The default plugin install is free** — status bar runs locally, slash commands only cost tokens when you invoke them. The Pokémon Master Coach persona is **opt-in** because it adds ~150–250 tokens per conversation turn (always-on). Enable it if you love the flavor and can afford it; skip it for a silent buddy that still animates the status bar.
+
+## XP auto-award (only active if persona is enabled)
+
+When the Coach persona is enabled, Claude detects completed tasks and auto-runs `/poke:xp`:
 
 | Achievement | XP |
 |---|---|

@@ -5,6 +5,36 @@ Format: [version] — date — description
 
 ---
 
+## [2.0.0] — 2026-04-14
+
+### Breaking — architectural rewrite
+
+Pokemon Buddy is now distributed as a native **Claude Code plugin** (`.claude-plugin/` manifest) instead of a shell-installed script. One-command install on any OS, one-command uninstall, zero CLAUDE.md mutation by default.
+
+### Added
+- **Plugin manifest** — `.claude-plugin/plugin.json` + `marketplace.json`. Installable via `/plugin marketplace add` / `/plugin install`
+- **SessionStart hook** — registers the statusline on first run, shows a welcome message if no buddy exists yet, nudges migration if a v1.x install is detected
+- **Namespaced slash commands** — `/poke:status`, `:card`, `:xp`, `:badge`, `:switch`, `:choose`, `:migrate`, `:enable-persona`, `:disable-persona`
+- **`/poke:choose`** — interactive in-chat starter picker (replaces the old shell-install Q&A)
+- **`/poke:migrate`** — one-shot migration from v1.x shell install; preserves all state (buddy, XP, level, streak, collection, badges), removes only install artifacts, backs everything up to `~/.claude/buddy-v1-backup/`
+- **Opt-in Pokémon Coach persona** — moved from CLAUDE.md import to `skills/pokemon-coach/SKILL.md`; users explicitly enable via `/poke:persona on` with clear token-cost disclosure
+- **`docs/MIGRATION.md`** — full upgrade guide for v1.x users
+
+### Changed
+- **Default token cost is now zero** — status bar renders locally (free), slash commands only cost tokens when invoked, persona is opt-in. Pre-v2, the persona was loaded into every Claude conversation across every project (~150–250 tokens/turn, always-on).
+- **Install works identically on Windows, macOS, and Linux** — no more bash/bat/emoji-encoding bug farm
+- **README** — install section now leads with plugin install, shell installer marked as legacy
+
+### Preserved
+- **All state files** (`buddy-pokemon.md`, `pokemon-collection.md`, `buddy-stats.md`) keep their existing location and format. The plugin reads the same paths as v1.x.
+- **buddy-update.py** engine — identical CLI surface (`status | statusline | card | xp | badge | switch | catch`), same XP math, same evolution, same catch mechanics, same shiny rates
+- **Legacy shell installer files** (`install.sh`, `install.py`, `install.bat`, `uninstall.*`, `update.*`) — still in-tree for users pinned to v1.x tags, but no longer the recommended path
+
+### Migration
+Run `/poke:migrate` after installing the plugin. See `docs/MIGRATION.md`.
+
+---
+
 ## [1.3.2] — 2026-04-14
 
 ### Fixed

@@ -50,6 +50,16 @@ if [ "$_preflight_ok" -eq 0 ]; then
   exit 1
 fi
 
+# ── Platform check ────────────────────────────────────────────────────────────
+
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+  echo ""
+  echo "  Windows detected. Please use the Python installer instead:"
+  echo "    python install.py"
+  echo ""
+  exit 1
+fi
+
 # ── Ensure interactive stdin (safe for curl | bash) ──────────────────────────
 
 if [ ! -t 0 ]; then
@@ -61,16 +71,6 @@ if [ ! -t 0 ]; then
     echo ""
     exit 1
   fi
-fi
-
-# ── Platform check ────────────────────────────────────────────────────────────
-
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
-  echo ""
-  echo "  Windows detected. Please use the Python installer instead:"
-  echo "    python install.py"
-  echo ""
-  exit 1
 fi
 
 # ── Dependency check: python3 ─────────────────────────────────────────────────
