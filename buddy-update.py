@@ -1379,7 +1379,7 @@ def do_switch(target_name):
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: buddy-update.py status|statusline|card|svg|readme|xp|badge|switch|catch")
+        print("Usage: buddy-update.py status|statusline|card|svg|readme|backup|import|xp|badge|switch|catch")
         sys.exit(1)
 
     mode = args[0]
@@ -1407,6 +1407,48 @@ def main():
     if mode == 'readme':
         svg_rel = args[1] if len(args) > 1 else 'trainer-card.svg'
         print(render_readme_snippet(svg_rel))
+        sys.exit(0)
+
+    if mode == 'backup':
+        import json
+        out_path = Path(args[1]) if len(args) > 1 else Path.cwd() / 'buddy-export.json'
+        payload = {'schema': 'pokemon-buddy-export/1', 'exported_at': TODAY}
+        for key, p in [('buddy', BUDDY_FILE), ('stats', STATS_FILE), ('collection', COLLECTION_FILE)]:
+            payload[key] = p.read_text(encoding='utf-8') if p.exists() else None
+        try:
+            _, _, lvl, xp, stage, name = read_buddy()
+            payload['summary'] = {'name': name, 'level': lvl, 'xp': xp, 'stage': stage}
+        except Exception:
+            pass
+        out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding='utf-8')
+        print(f' ✅ Buddy backed up: {out_path}')
+        print(f'    Share this file to transfer your party — restore with /poke:import.')
+        sys.exit(0)
+
+    if mode == 'import':
+        import json, shutil
+        src = Path(args[1]) if len(args) > 1 else Path.cwd() / 'buddy-export.json'
+        if not src.exists():
+            print(f' ❌ File not found: {src}')
+            sys.exit(1)
+        try:
+            payload = json.loads(src.read_text(encoding='utf-8'))
+        except json.JSONDecodeError as e:
+            print(f' ❌ Invalid JSON: {e}')
+            sys.exit(1)
+        if payload.get('schema') != 'pokemon-buddy-export/1':
+            print(f' ❌ Unknown schema: {payload.get("schema")!r} (expected pokemon-buddy-export/1)')
+            sys.exit(1)
+        for key, p in [('buddy', BUDDY_FILE), ('stats', STATS_FILE), ('collection', COLLECTION_FILE)]:
+            if p.exists():
+                shutil.copy(p, p.with_suffix(p.suffix + '.bak'))
+            if payload.get(key) is not None:
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(payload[key], encoding='utf-8')
+        s = payload.get('summary') or {}
+        when = payload.get('exported_at', '?')
+        print(f' ✅ Imported {s.get("name","buddy")} (Lv {s.get("level","?")}, {s.get("xp","?")} XP, stage {s.get("stage","?")})')
+        print(f'    Exported {when}. Previous party saved as *.bak — run /poke:status to verify.')
         sys.exit(0)
 
     if mode == 'switch':
