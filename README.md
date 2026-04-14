@@ -55,7 +55,7 @@ cd pokemon-buddy-claude
 bash install.sh
 ```
 
-**Windows** (PowerShell or cmd — no bash required)
+**Windows** (PowerShell, cmd, or double-click — no bash required)
 
 ```powershell
 git clone https://github.com/andriar/pokemon-buddy-claude
@@ -63,7 +63,16 @@ cd pokemon-buddy-claude
 python install.py
 ```
 
+Or double-click `install.bat` from Explorer after cloning.
+
 Then restart Claude Code.
+
+> **Windows display notes** — for emoji to render correctly:
+> - Use **Windows Terminal** (not legacy `cmd.exe` / `conhost`). Git Bash's mintty also works.
+> - Keep Windows 10/11 updated — the Segoe UI Emoji font ships with OS updates.
+> - A Nerd Font like `Cascadia Code NF` or `JetBrains Mono NF` gives the widest coverage.
+>
+> If you see `▯` or `??` instead of emoji, it's a terminal/font issue — not the script.
 
 ## Commands
 
@@ -239,7 +248,8 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 
 - [Claude Code](https://claude.ai/code) CLI
 - Python 3.6+
-- Bash (macOS / Linux only — Windows uses `install.py` / `update.py`)
+- **macOS / Linux**: Bash
+- **Windows**: Windows Terminal (recommended) on Windows 10 20H1 or later — for full emoji + UTF-8 support
 
 ## License
 
