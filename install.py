@@ -42,6 +42,12 @@ def _enable_win_ansi():
             pass
 
 _enable_win_ansi()
+
+# ── Windows UTF-8 stdout (emoji safe) ────────────────────────────────────────
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 _use_color = sys.stdout.isatty() if hasattr(sys.stdout, "isatty") else False
 
 def bold(s):   return f"\033[1m{s}\033[0m"  if _use_color else s
@@ -140,18 +146,19 @@ print(bold("Choose your trainer role:"))
 print()
 print(f"  {yellow('[1]')} ⚡ Frontend      {yellow('[2]')} 🪨 Backend       {yellow('[3]')} 💧 Database")
 print(f"  {yellow('[4]')} ⚙️  DevOps        {yellow('[5]')} 🌑 Security      {yellow('[6]')} 🥊 Testing")
-print(f"  {yellow('[7]')} 🧠 AI / ML       {yellow('[8]')} ⭐ Full-stack")
+print(f"  {yellow('[7]')} 🧠 AI / ML       {yellow('[8]')} ⭐ Full-stack     {yellow('[9]')} 🐛 QA Engineer")
 print()
-role_choice = input(f"{bold('Pick role')} [1-8]: ").strip()
+role_choice = input(f"{bold('Pick role')} [1-9]: ").strip()
 
 ROLES = {
-    "2": ("Backend",    "Rock 🪨"),
-    "3": ("Database",   "Water 💧"),
-    "4": ("DevOps",     "Steel ⚙️"),
-    "5": ("Security",   "Dark 🌑"),
-    "6": ("Testing",    "Fighting 🥊"),
-    "7": ("AI / ML",    "Psychic 🧠"),
-    "8": ("Full-stack", "Normal ⭐"),
+    "2": ("Backend",     "Rock 🪨"),
+    "3": ("Database",    "Water 💧"),
+    "4": ("DevOps",      "Steel ⚙️"),
+    "5": ("Security",    "Dark 🌑"),
+    "6": ("Testing",     "Fighting 🥊"),
+    "7": ("AI / ML",     "Psychic 🧠"),
+    "8": ("Full-stack",  "Normal ⭐"),
+    "9": ("QA Engineer", "Bug 🐛"),
 }
 ROLE, ROLE_TYPE = ROLES.get(role_choice, ("Frontend", "Electric ⚡"))
 if role_choice not in ROLES:
@@ -304,14 +311,13 @@ try:
 except json.JSONDecodeError:
     data = {}
 
-if "statusLine" not in data:
-    # On Windows, use the Python script directly (no bash)
-    if sys.platform == "win32":
-        cmd = f'python "{CLAUDE_DIR / "buddy-update.py"}" statusline'
-    else:
-        cmd = str(CLAUDE_DIR / "statusline-buddy.sh")
-    data.setdefault("statusLine", {})["command"] = cmd
-    settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+# Always write correct statusLine format (type + command)
+if sys.platform == "win32":
+    cmd = f'python "{CLAUDE_DIR / "buddy-update.py"}" statusline'
+else:
+    cmd = str(CLAUDE_DIR / "statusline-buddy.sh")
+data["statusLine"] = {"type": "command", "command": cmd}
+settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 # ── Stamp installed version ──────────────────────────────────────────────────
 

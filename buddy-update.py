@@ -16,6 +16,11 @@ import sys, re, random
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+# ── Windows UTF-8 stdout (emoji safe) ────────────────────────────────────────
+if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 BUDDY_FILE      = Path.home() / '.claude' / 'buddy-pokemon.md'
 COLLECTION_FILE = Path.home() / '.claude' / 'pokemon-collection.md'
 STATS_FILE      = Path.home() / '.claude' / 'buddy-stats.md'
