@@ -16,6 +16,17 @@ for arg in "$@"; do
   esac
 done
 
+# ── Platform check ────────────────────────────────────────────────────────────
+
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+  echo ""
+  echo "  Windows detected. Please use the Python uninstaller instead:"
+  echo "    python uninstall.py            (keep buddy data)"
+  echo "    python uninstall.py --purge    (remove everything)"
+  echo ""
+  exit 1
+fi
+
 # ── UI helpers ────────────────────────────────────────────────────────────────
 
 bold()  { printf '\033[1m%s\033[0m' "$*"; }

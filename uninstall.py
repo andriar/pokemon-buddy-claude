@@ -20,6 +20,11 @@ if sys.version_info < (3, 6):
     print("Error: Python 3.6 or newer is required.")
     sys.exit(1)
 
+# Windows UTF-8 stdout (emoji / box-drawing safe)
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 CLAUDE_DIR = Path.home() / ".claude"
 
 ENGINE_FILES = [
