@@ -1008,6 +1008,191 @@ def render_card():
 
     return '\n'.join(out)
 
+# ── SVG trainer card (shareable — GitHub README, Discord, Twitter) ────────────
+
+def _svg_escape(s):
+    return (str(s).replace('&', '&amp;').replace('<', '&lt;')
+                  .replace('>', '&gt;').replace('"', '&quot;'))
+
+def render_svg_card():
+    """Render a shareable SVG trainer card — pure Python, no deps.
+    Width fixed at 620; height grows with content."""
+    text     = BUDDY_FILE.read_text(encoding='utf-8')
+    col      = read_collection()
+    tr_stats = read_stats()
+
+    def g(pat, default='?'):
+        m = re.search(pat, text)
+        return m.group(1).strip() if m else default
+
+    stage    = g(r'\*\*Stage\*\*:\s*(\w+)')
+    level    = g(r'\*\*Level\*\*:\s*(\d+)')
+    trainer  = g(r'\*\*Trainer\*\*:\s*(.+)')
+    xp_cur   = int(g(r'\*\*XP\*\*:\s*(\d+)', '0'))
+    xp_max   = int(g(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)', '100'))
+    specialty = g(r'\*\*Specialty\*\*:\s*(.+)')
+    title = get_trainer_title(tr_stats, col)
+
+    badges_section = re.search(r'## Badges Earned\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
+    badges_raw = re.findall(r'^- (.+)$', badges_section.group(1), re.MULTILINE) if badges_section else []
+    badge_entries = []
+    for b in badges_raw:
+        if 'No badges yet' in b: continue
+        em = re.match(r'^\s*([^\s\w])', b)
+        nm = re.search(r'\*\*(.+?)\*\*', b)
+        if nm:
+            badge_entries.append((em.group(1) if em else '🏅', nm.group(1)))
+
+    rarity_order = ['mythical', 'legendary', 'rare', 'uncommon', 'common']
+    rarest = None
+    for tier in rarity_order:
+        for p in col['pokemon']:
+            if tier in p.get('rarity', ''):
+                rarest = p; break
+        if rarest: break
+
+    n_caught = len(col['pokemon'])
+    n_total  = sum(len(v) for v in POKEMON_POOL.values())
+    streak   = tr_stats.get('streak', 0)
+    longest  = tr_stats.get('longest_streak', 0)
+    total_xp = tr_stats.get('total_xp_ever', 0)
+
+    # Layout constants
+    W = 620
+    PAD = 24
+    # Dark theme colors
+    BG1, BG2 = '#1a1b26', '#24283b'
+    FG, MUTED = '#c0caf5', '#7982a9'
+    ACCENT, GOLD = '#7aa2f7', '#e0af68'
+    RED, GREEN = '#f7768e', '#9ece6a'
+
+    pct = xp_cur / xp_max if xp_max else 0
+    bar_w = W - PAD * 2
+    fill_w = int(bar_w * max(0, min(1, pct)))
+
+    # Build sections into list, track current y
+    parts = []
+    y = 0
+
+    # ---- Header ----
+    header_h = 96
+    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{header_h}" fill="url(#hdr)"/>')
+    parts.append(f'<text x="{PAD}" y="{y+38}" font-size="22" font-weight="700" fill="{FG}">🏆 TRAINER CARD</text>')
+    parts.append(f'<text x="{PAD}" y="{y+66}" font-size="18" fill="{GOLD}">{_svg_escape(trainer)}</text>')
+    parts.append(f'<text x="{PAD}" y="{y+86}" font-size="13" fill="{MUTED}">· {_svg_escape(title)} ·</text>')
+    y += header_h
+
+    # ---- Active buddy ----
+    buddy_h = 118
+    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{buddy_h}" fill="{BG2}"/>')
+    parts.append(f'<text x="{PAD}" y="{y+24}" font-size="11" letter-spacing="2" fill="{MUTED}">ACTIVE BUDDY</text>')
+    parts.append(f'<text x="{PAD}" y="{y+58}" font-size="26" font-weight="700" fill="{FG}">'
+                 f'{_svg_escape(stage)} <tspan fill="{ACCENT}">Lv.{_svg_escape(level)}</tspan></text>')
+    parts.append(f'<text x="{PAD}" y="{y+78}" font-size="12" fill="{MUTED}">{_svg_escape(specialty)}</text>')
+    # XP bar
+    by = y + 92
+    parts.append(f'<rect x="{PAD}" y="{by}" width="{bar_w}" height="10" rx="5" fill="#2f3350"/>')
+    parts.append(f'<rect x="{PAD}" y="{by}" width="{fill_w}" height="10" rx="5" fill="{GREEN}"/>')
+    parts.append(f'<text x="{W-PAD}" y="{by-4}" text-anchor="end" font-size="11" fill="{MUTED}">'
+                 f'{xp_cur}/{xp_max} XP</text>')
+    y += buddy_h
+
+    # ---- Achievements row ----
+    ach_h = 72
+    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{ach_h}" fill="{BG1}"/>')
+    cells = [
+        ('🏅', str(len(badge_entries)), 'Badges'),
+        ('📖', f'{n_caught}/{n_total}', 'Dex'),
+        ('🔥', f'{streak}d', f'Best {longest}d'),
+        ('⚡', str(total_xp), 'Total XP'),
+    ]
+    cw = W / len(cells)
+    for i, (em, val, lbl) in enumerate(cells):
+        cx = int(i * cw + cw / 2)
+        parts.append(f'<text x="{cx}" y="{y+26}" text-anchor="middle" font-size="16">{em}</text>')
+        parts.append(f'<text x="{cx}" y="{y+48}" text-anchor="middle" font-size="16" font-weight="700" fill="{FG}">{_svg_escape(val)}</text>')
+        parts.append(f'<text x="{cx}" y="{y+63}" text-anchor="middle" font-size="10" fill="{MUTED}">{_svg_escape(lbl)}</text>')
+    y += ach_h
+
+    # ---- Badges ----
+    if badge_entries:
+        row_h = 28
+        per_row = 3
+        rows = (len(badge_entries) + per_row - 1) // per_row
+        sec_h = 36 + rows * row_h + 10
+        parts.append(f'<rect x="0" y="{y}" width="{W}" height="{sec_h}" fill="{BG2}"/>')
+        parts.append(f'<text x="{PAD}" y="{y+24}" font-size="11" letter-spacing="2" fill="{MUTED}">BADGES</text>')
+        bw = (W - PAD * 2) / per_row
+        for i, (em, nm) in enumerate(badge_entries):
+            r, c = divmod(i, per_row)
+            bx = PAD + int(c * bw)
+            byy = y + 36 + r * row_h
+            parts.append(f'<text x="{bx}" y="{byy+14}" font-size="13" fill="{FG}">{em} {_svg_escape(nm)}</text>')
+        y += sec_h
+
+    # ---- Party ----
+    if col['pokemon']:
+        per_row = 3
+        row_h = 26
+        rows = (len(col['pokemon']) + per_row - 1) // per_row
+        sec_h = 36 + rows * row_h + 10
+        parts.append(f'<rect x="0" y="{y}" width="{W}" height="{sec_h}" fill="{BG1}"/>')
+        parts.append(f'<text x="{PAD}" y="{y+24}" font-size="11" letter-spacing="2" fill="{MUTED}">PARTY  ({n_caught})</text>')
+        pw = (W - PAD * 2) / per_row
+        for i, p in enumerate(col['pokemon']):
+            r, c = divmod(i, per_row)
+            bx = PAD + int(c * pw)
+            byy = y + 36 + r * row_h
+            shiny = '✨' if p.get('shiny') else ''
+            active = '★' if p['name'] == col['active'] else ' '
+            entry = f"{active}{shiny}{p['emoji']} {p['name']} Lv.{p['level']}"
+            color = GOLD if p['name'] == col['active'] else FG
+            parts.append(f'<text x="{bx}" y="{byy+14}" font-size="12" fill="{color}">{_svg_escape(entry)}</text>')
+        y += sec_h
+
+    # ---- Footer ----
+    ft_h = 52
+    rarest_str = (f"{p.get('emoji','')} {p['name']} ({p['rarity']})"
+                  if (p := rarest) else 'None yet')
+    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{ft_h}" fill="{BG2}"/>')
+    parts.append(f'<text x="{PAD}" y="{y+22}" font-size="11" fill="{MUTED}">Rarest catch</text>')
+    parts.append(f'<text x="{PAD}" y="{y+42}" font-size="13" fill="{ACCENT}">{_svg_escape(rarest_str)}</text>')
+    parts.append(f'<text x="{W-PAD}" y="{y+42}" text-anchor="end" font-size="10" fill="{MUTED}">pokemon-buddy-claude</text>')
+    y += ft_h
+
+    total_h = y
+    header = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{total_h}" '
+        f'viewBox="0 0 {W} {total_h}" font-family="\'Segoe UI Emoji\',\'Apple Color Emoji\','
+        f'\'Noto Color Emoji\',system-ui,sans-serif">'
+        f'<defs><linearGradient id="hdr" x1="0" y1="0" x2="1" y2="0">'
+        f'<stop offset="0" stop-color="#1f2335"/><stop offset="1" stop-color="#2d3250"/>'
+        f'</linearGradient></defs>'
+    )
+    return header + ''.join(parts) + '</svg>'
+
+def render_readme_snippet(svg_path='trainer-card.svg'):
+    """Markdown snippet for pasting into a GitHub profile README."""
+    col = read_collection()
+    text = BUDDY_FILE.read_text(encoding='utf-8')
+    trainer = re.search(r'\*\*Trainer\*\*:\s*(.+)', text)
+    trainer = trainer.group(1).strip() if trainer else 'Trainer'
+    stage = re.search(r'\*\*Stage\*\*:\s*(\w+)', text)
+    stage = stage.group(1) if stage else '?'
+    level = re.search(r'\*\*Level\*\*:\s*(\d+)', text)
+    level = level.group(1) if level else '?'
+    return (
+        f'<!-- Pokemon Buddy for Claude — trainer card -->\n'
+        f'<p align="center">\n'
+        f'  <img src="./{svg_path}" alt="{trainer} — {stage} Lv.{level}" width="620"/>\n'
+        f'</p>\n'
+        f'<p align="center">\n'
+        f'  <sub>Powered by '
+        f'<a href="https://github.com/anthropics/claude-code">Claude Code</a> · '
+        f'<a href="https://github.com/andriar/pokemon-buddy-claude">pokemon-buddy-claude</a></sub>\n'
+        f'</p>\n'
+    )
+
 def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         new_stage, stat_boost, new_moves_data, evolved,
                         catch_result=None, b_emoji='', b_name='', b_desc='',
@@ -1147,7 +1332,7 @@ def do_switch(target_name):
     emoji   = match['emoji']
     level   = match['level']
     xp      = match['xp']
-    xp_max  = xp_for_level(level_from_xp(xp) + 1)
+    xp_max  = xp_for_level(level + 1) - xp_for_level(level)
 
     starter = STARTER_DATA.get(name)
     trainer = re.search(r'\*\*Trainer\*\*:\s*(.+)', BUDDY_FILE.read_text(encoding='utf-8'))
@@ -1194,7 +1379,7 @@ def do_switch(target_name):
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: buddy-update.py status|statusline|card|xp|badge|switch|catch")
+        print("Usage: buddy-update.py status|statusline|card|svg|readme|xp|badge|switch|catch")
         sys.exit(1)
 
     mode = args[0]
@@ -1210,6 +1395,18 @@ def main():
 
     if mode == 'card':
         print(render_card())
+        sys.exit(0)
+
+    if mode == 'svg':
+        out_path = Path(args[1]) if len(args) > 1 else Path.cwd() / 'trainer-card.svg'
+        out_path.write_text(render_svg_card(), encoding='utf-8')
+        print(f' ✅ Trainer card saved: {out_path}')
+        print(f'    Share it on GitHub, Discord, Twitter — or paste into your README.')
+        sys.exit(0)
+
+    if mode == 'readme':
+        svg_rel = args[1] if len(args) > 1 else 'trainer-card.svg'
+        print(render_readme_snippet(svg_rel))
         sys.exit(0)
 
     if mode == 'switch':
