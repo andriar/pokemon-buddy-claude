@@ -12,7 +12,7 @@ Commands:
   catch "<name>"               Manually add a Pokemon to collection
 """
 
-import sys, re, random
+import sys, re, random, unicodedata
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -20,6 +20,22 @@ from pathlib import Path
 if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
+# ── Terminal width helper ─────────────────────────────────────────────────────
+
+def visual_len(s):
+    """Return the visible terminal width of a string.
+    Emoji and East-Asian wide chars occupy 2 columns; everything else 1.
+    """
+    width = 0
+    for ch in s:
+        cp  = ord(ch)
+        eaw = unicodedata.east_asian_width(ch)
+        if eaw in ('W', 'F') or 0x2600 <= cp <= 0x27BF or 0x2B00 <= cp <= 0x2BFF or cp >= 0x1F000:
+            width += 2
+        else:
+            width += 1
+    return width
 
 BUDDY_FILE      = Path.home() / '.claude' / 'buddy-pokemon.md'
 COLLECTION_FILE = Path.home() / '.claude' / 'pokemon-collection.md'
@@ -921,7 +937,7 @@ def render_card():
     SEP = f' ╠{"═" * (W + 3)}╣'
 
     def row(content=''):
-        pad = W - len(content)
+        pad = W - visual_len(content)
         return f' ║  {content}{" " * max(0, pad)}  ║'
 
     rarest_str = (
@@ -966,7 +982,7 @@ def render_card():
         line = ''
         for bn in badge_names:
             candidate = (line + '  ·  ' + bn).lstrip(' ·  ')
-            if len(candidate) > W - 2:
+            if visual_len(candidate) > W - 2:
                 out.append(row(line))
                 line = bn
             else:

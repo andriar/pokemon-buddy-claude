@@ -5,6 +5,13 @@ Format: [version] — date — description
 
 ---
 
+## [1.3.1] — 2026-04-14
+
+### Fixed
+- `/buddy-card`: box borders now align correctly when content contains emoji — `visual_len()` counts wide chars (emoji) as 2 columns instead of 1, fixing the ragged right `║` border
+
+---
+
 ## [1.3.0] — 2026-04-14
 
 ### Added
