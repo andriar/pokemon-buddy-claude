@@ -937,7 +937,7 @@ def render_card():
     SEP = f' ╠{"═" * (W + 3)}╣'
 
     def row(content=''):
-        pad = W - visual_len(content)
+        pad = W - 1 - visual_len(content)
         return f' ║  {content}{" " * max(0, pad)}  ║'
 
     rarest_str = (

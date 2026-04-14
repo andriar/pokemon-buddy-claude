@@ -5,6 +5,13 @@ Format: [version] — date — description
 
 ---
 
+## [1.3.2] — 2026-04-14
+
+### Fixed
+- `/buddy-card`: off-by-one in row padding — box border is W+6 wide but row formula produced W+7 visual columns, shifting the right `║` 1 column right on every non-emoji line. Fixed: `pad = W - 1 - visual_len(content)` so all rows are exactly 60 visual columns regardless of emoji content.
+
+---
+
 ## [1.3.1] — 2026-04-14
 
 ### Fixed
