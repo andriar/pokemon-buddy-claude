@@ -6,7 +6,7 @@
 
 set -euo pipefail
 CLAUDE_DIR="$HOME/.claude"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
 # ── Ensure interactive stdin (safe for curl | bash) ──────────────────────────
 
