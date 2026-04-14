@@ -8,6 +8,19 @@ set -euo pipefail
 CLAUDE_DIR="$HOME/.claude"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ── Ensure interactive stdin (safe for curl | bash) ──────────────────────────
+
+if [ ! -t 0 ]; then
+  if ! exec 0</dev/tty 2>/dev/null; then
+    echo ""
+    echo "  Error: No interactive terminal detected."
+    echo "  Please run this script directly in Terminal.app or iTerm2:"
+    echo "    bash install.sh"
+    echo ""
+    exit 1
+  fi
+fi
+
 # ── Platform check ────────────────────────────────────────────────────────────
 
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
@@ -101,20 +114,21 @@ echo "$(bold 'Choose your trainer role:')"
 echo ""
 echo "  $(yellow '[1]') ⚡ Frontend      $(yellow '[2]') 🪨 Backend       $(yellow '[3]') 💧 Database"
 echo "  $(yellow '[4]') ⚙️  DevOps        $(yellow '[5]') 🌑 Security      $(yellow '[6]') 🥊 Testing"
-echo "  $(yellow '[7]') 🧠 AI / ML       $(yellow '[8]') ⭐ Full-stack"
+echo "  $(yellow '[7]') 🧠 AI / ML       $(yellow '[8]') ⭐ Full-stack     $(yellow '[9]') 🐛 QA Engineer"
 echo ""
-printf "$(bold 'Pick role') [1-8]: "
+printf "$(bold 'Pick role') [1-9]: "
 read -r ROLE_CHOICE
 
 case "$ROLE_CHOICE" in
-  2) ROLE="Backend";     ROLE_TYPE="Rock 🪨"    ;;
-  3) ROLE="Database";    ROLE_TYPE="Water 💧"   ;;
-  4) ROLE="DevOps";      ROLE_TYPE="Steel ⚙️"   ;;
-  5) ROLE="Security";    ROLE_TYPE="Dark 🌑"    ;;
-  6) ROLE="Testing";     ROLE_TYPE="Fighting 🥊" ;;
-  7) ROLE="AI / ML";     ROLE_TYPE="Psychic 🧠" ;;
-  8) ROLE="Full-stack";  ROLE_TYPE="Normal ⭐"  ;;
-  *) ROLE="Frontend";    ROLE_TYPE="Electric ⚡" ;;
+  2) ROLE="Backend";      ROLE_TYPE="Rock 🪨"    ;;
+  3) ROLE="Database";     ROLE_TYPE="Water 💧"   ;;
+  4) ROLE="DevOps";       ROLE_TYPE="Steel ⚙️"   ;;
+  5) ROLE="Security";     ROLE_TYPE="Dark 🌑"    ;;
+  6) ROLE="Testing";      ROLE_TYPE="Fighting 🥊" ;;
+  7) ROLE="AI / ML";      ROLE_TYPE="Psychic 🧠" ;;
+  8) ROLE="Full-stack";   ROLE_TYPE="Normal ⭐"  ;;
+  9) ROLE="QA Engineer";  ROLE_TYPE="Bug 🐛"     ;;
+  *) ROLE="Frontend";     ROLE_TYPE="Electric ⚡" ;;
 esac
 
 TODAY=$(date +%Y-%m-%d)

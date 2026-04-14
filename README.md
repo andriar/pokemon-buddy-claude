@@ -20,6 +20,22 @@ A Pokemon companion system for [Claude Code](https://claude.ai/code) — your AI
 🔥*Lv4 Charmander  ⚡Lv1 Pikachu 💥 [█████████░] 360/400 🏅1
 ```
 
+## Trainer Roles
+
+During install, choose your role — each maps to a Pokemon type that flavors your trainer profile:
+
+| # | Role | Type |
+|---|---|---|
+| 1 | Frontend | Electric ⚡ |
+| 2 | Backend | Rock 🪨 |
+| 3 | Database | Water 💧 |
+| 4 | DevOps | Steel ⚙️ |
+| 5 | Security | Dark 🌑 |
+| 6 | Testing | Fighting 🥊 |
+| 7 | AI / ML | Psychic 🧠 |
+| 8 | Full-stack | Normal ⭐ |
+| 9 | QA Engineer | Bug 🐛 |
+
 ## Install
 
 **macOS / Linux**
