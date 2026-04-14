@@ -9,5 +9,10 @@
   "homepage": "https://github.com/andriar/pokemon-buddy-claude",
   "repository": "https://github.com/andriar/pokemon-buddy-claude",
   "license": "MIT",
-  "keywords": ["claude-code", "plugin", "pokemon", "gamification", "companion", "statusline"]
+  "keywords": ["claude-code", "plugin", "pokemon", "gamification", "companion", "statusline"],
+  "hooks": "./hooks.json",
+  "statusLine": {
+    "type": "command",
+    "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/buddy-update.py\" statusline"
+  }
 }
