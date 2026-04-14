@@ -8,6 +8,48 @@ set -euo pipefail
 CLAUDE_DIR="$HOME/.claude"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
+# ── Fix 5: Guard against curl | bash (SCRIPT_DIR = /dev/fd/N, not a real dir) ─
+
+if [ ! -d "$SCRIPT_DIR" ] || [ ! -f "$SCRIPT_DIR/buddy-update.py" ]; then
+  echo ""
+  echo "  Error: Installer source files not found at: $SCRIPT_DIR"
+  echo "  The curl | bash method cannot copy local files."
+  echo "  Please clone the repo and run directly:"
+  echo ""
+  echo "    git clone https://github.com/andriar/pokemon-buddy-claude"
+  echo "    cd pokemon-buddy-claude"
+  echo "    bash install.sh"
+  echo ""
+  exit 1
+fi
+
+# ── Fix 2: Preflight — verify all required files exist before touching anything ─
+
+REQUIRED_FILES=(
+  "buddy-update.py"
+  "statusline-buddy.sh"
+  "pokemon-persona.md"
+  "commands/buddy.md"
+  "commands/buddy-xp.md"
+  "commands/buddy-badge.md"
+  "commands/buddy-card.md"
+  "commands/pokemon-switch.md"
+)
+
+_preflight_ok=1
+for _f in "${REQUIRED_FILES[@]}"; do
+  if [ ! -f "$SCRIPT_DIR/$_f" ]; then
+    echo "  Missing: $_f"
+    _preflight_ok=0
+  fi
+done
+if [ "$_preflight_ok" -eq 0 ]; then
+  echo ""
+  echo "  Error: Installer files are incomplete. Re-clone the repo and try again."
+  echo ""
+  exit 1
+fi
+
 # ── Ensure interactive stdin (safe for curl | bash) ──────────────────────────
 
 if [ ! -t 0 ]; then
@@ -133,9 +175,19 @@ esac
 
 TODAY=$(date +%Y-%m-%d)
 
-# ── Overwrite guard ───────────────────────────────────────────────────────────
+# ── Fix 3: Write permission check ────────────────────────────────────────────
 
 mkdir -p "$CLAUDE_DIR"
+
+if [ ! -w "$CLAUDE_DIR" ]; then
+  echo ""
+  echo "  Error: No write permission to $CLAUDE_DIR"
+  echo "  Fix with: chmod u+w $CLAUDE_DIR"
+  echo ""
+  exit 1
+fi
+
+# ── Overwrite guard ───────────────────────────────────────────────────────────
 
 if [ -f "$CLAUDE_DIR/buddy-pokemon.md" ]; then
   echo ""
@@ -229,7 +281,11 @@ chmod +x "$CLAUDE_DIR/buddy-update.py" "$CLAUDE_DIR/statusline-buddy.sh"
 
 mkdir -p "$CLAUDE_DIR/commands"
 for cmd in buddy.md buddy-xp.md buddy-badge.md buddy-card.md pokemon-switch.md; do
-  [ -f "$SCRIPT_DIR/commands/$cmd" ] && cp "$SCRIPT_DIR/commands/$cmd" "$CLAUDE_DIR/commands/$cmd"
+  if [ -f "$SCRIPT_DIR/commands/$cmd" ]; then
+    cp "$SCRIPT_DIR/commands/$cmd" "$CLAUDE_DIR/commands/$cmd"
+  else
+    echo "  $(yellow 'Warning:') Command file missing, skipped: commands/$cmd"
+  fi
 done
 
 # ── Copy persona ──────────────────────────────────────────────────────────────
@@ -265,13 +321,20 @@ if [ ! -f "$SETTINGS" ]; then
   echo '{}' > "$SETTINGS"
 fi
 
-# Check if statusLine already configured
+# Fix 1: Patch statusLine — handles empty or malformed settings.json
 if ! grep -q 'statusLine' "$SETTINGS" 2>/dev/null; then
   python3 - "$SETTINGS" "$CLAUDE_DIR/statusline-buddy.sh" << 'PYSCRIPT'
-import json, sys
+import json, sys, shutil
 path, cmd = sys.argv[1], sys.argv[2]
-with open(path) as f:
-    data = json.load(f)
+try:
+    with open(path) as f:
+        content = f.read().strip()
+    data = json.loads(content) if content else {}
+except (json.JSONDecodeError, ValueError):
+    backup = path + '.bak'
+    shutil.copy2(path, backup)
+    print(f"  Warning: settings.json was malformed — backed up to {backup!r}, starting fresh.")
+    data = {}
 data.setdefault('statusLine', {})['command'] = cmd
 with open(path, 'w') as f:
     json.dump(data, f, indent=2)
