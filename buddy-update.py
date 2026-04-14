@@ -97,6 +97,15 @@ MOVE_UNLOCKS = {
     },
 }
 
+# Starting level for newly caught Pokemon — higher rarity = joins at higher level
+RARITY_START_LEVEL = {
+    'common':    1,
+    'uncommon':  5,
+    'rare':      15,
+    'legendary': 25,
+    'mythical':  30,
+}
+
 CATCH_RATES = {
     10:  [('common',    0.08)],
     20:  [('common',    0.10)],
@@ -639,8 +648,19 @@ def sync_active_to_collection(name, level, xp):
 
 # ── Catch system ──────────────────────────────────────────────────────────────
 
-def roll_catch(add_xp, owned_names):
-    """Returns (tier, name, type, emoji, is_shiny) or None."""
+def get_role_type():
+    """Parse trainer's Pokemon type from buddy-pokemon.md role line.
+    e.g. '- **Role**: Frontend (Electric ⚡ domain)' → 'Electric'
+    """
+    if not BUDDY_FILE.exists():
+        return None
+    m = re.search(r'\*\*Role\*\*:.*?\(([A-Za-z]+)', BUDDY_FILE.read_text())
+    return m.group(1) if m else None
+
+def roll_catch(add_xp, owned_names, role_type=None):
+    """Returns (tier, name, type, emoji, is_shiny) or None.
+    role_type: if set, matching-type Pokemon are 3× more likely to be chosen.
+    """
     rates = CATCH_RATES.get(add_xp, [('common', 0.05)])
     caught_tier = None
     for tier, prob in sorted(rates, key=lambda x: list(POKEMON_POOL.keys()).index(x[0])):
@@ -652,16 +672,21 @@ def roll_catch(add_xp, owned_names):
     available = [p for p in pool if p[0] not in owned_names]
     if not available:
         available = pool
-    chosen = random.choice(available)
+    if role_type:
+        weights = [3 if p[1] == role_type else 1 for p in available]
+        chosen = random.choices(available, weights=weights, k=1)[0]
+    else:
+        chosen = random.choice(available)
     is_shiny = random.random() < SHINY_RATE
     return (caught_tier, chosen[0], chosen[1], chosen[2], is_shiny)
 
 def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
     col = read_collection()
     stored_rarity = (rarity + '-shiny') if is_shiny else rarity
+    start_level = RARITY_START_LEVEL.get(rarity, 1)
     col['pokemon'].append({
         'name': name, 'type': ptype, 'emoji': emoji,
-        'level': 1, 'xp': 0, 'caught': TODAY,
+        'level': start_level, 'xp': 0, 'caught': TODAY,
         'rarity': stored_rarity, 'shiny': is_shiny,
     })
     write_collection(col['active'], col['pokemon'])
@@ -1252,7 +1277,7 @@ def main():
     base_xp_for_catch = detect_xp(args[1] if len(args) > 1 and mode == 'xp' else '') if mode == 'xp' else add_xp
     col = read_collection()
     owned = {p['name'] for p in col['pokemon']}
-    catch_result = roll_catch(base_xp_for_catch, owned)
+    catch_result = roll_catch(base_xp_for_catch, owned, get_role_type())
     if catch_result:
         tier, cname, ctype, cemoji, is_shiny = catch_result
         add_to_collection(cname, ctype, cemoji, tier, is_shiny)
