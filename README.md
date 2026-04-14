@@ -35,6 +35,7 @@ During install, choose your role — each maps to a Pokemon type that flavors yo
 | 7 | AI / ML | Psychic 🧠 |
 | 8 | Full-stack | Normal ⭐ |
 | 9 | QA Engineer | Bug 🐛 |
+| 10 | Mobile / Android | Dragon 🐉 |
 
 ## Install
 

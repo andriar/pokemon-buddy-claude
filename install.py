@@ -147,18 +147,20 @@ print()
 print(f"  {yellow('[1]')} ⚡ Frontend      {yellow('[2]')} 🪨 Backend       {yellow('[3]')} 💧 Database")
 print(f"  {yellow('[4]')} ⚙️  DevOps        {yellow('[5]')} 🌑 Security      {yellow('[6]')} 🥊 Testing")
 print(f"  {yellow('[7]')} 🧠 AI / ML       {yellow('[8]')} ⭐ Full-stack     {yellow('[9]')} 🐛 QA Engineer")
+print(f"  {yellow('[10]')} 🐉 Mobile / Android")
 print()
-role_choice = input(f"{bold('Pick role')} [1-9]: ").strip()
+role_choice = input(f"{bold('Pick role')} [1-10]: ").strip()
 
 ROLES = {
-    "2": ("Backend",     "Rock 🪨"),
-    "3": ("Database",    "Water 💧"),
-    "4": ("DevOps",      "Steel ⚙️"),
-    "5": ("Security",    "Dark 🌑"),
-    "6": ("Testing",     "Fighting 🥊"),
-    "7": ("AI / ML",     "Psychic 🧠"),
-    "8": ("Full-stack",  "Normal ⭐"),
-    "9": ("QA Engineer", "Bug 🐛"),
+    "2":  ("Backend",          "Rock 🪨"),
+    "3":  ("Database",         "Water 💧"),
+    "4":  ("DevOps",           "Steel ⚙️"),
+    "5":  ("Security",         "Dark 🌑"),
+    "6":  ("Testing",          "Fighting 🥊"),
+    "7":  ("AI / ML",          "Psychic 🧠"),
+    "8":  ("Full-stack",       "Normal ⭐"),
+    "9":  ("QA Engineer",      "Bug 🐛"),
+    "10": ("Mobile / Android", "Dragon 🐉"),
 }
 ROLE, ROLE_TYPE = ROLES.get(role_choice, ("Frontend", "Electric ⚡"))
 if role_choice not in ROLES:

@@ -157,20 +157,22 @@ echo ""
 echo "  $(yellow '[1]') ⚡ Frontend      $(yellow '[2]') 🪨 Backend       $(yellow '[3]') 💧 Database"
 echo "  $(yellow '[4]') ⚙️  DevOps        $(yellow '[5]') 🌑 Security      $(yellow '[6]') 🥊 Testing"
 echo "  $(yellow '[7]') 🧠 AI / ML       $(yellow '[8]') ⭐ Full-stack     $(yellow '[9]') 🐛 QA Engineer"
+echo "  $(yellow '[10]') 🐉 Mobile / Android"
 echo ""
-printf "$(bold 'Pick role') [1-9]: "
+printf "$(bold 'Pick role') [1-10]: "
 read -r ROLE_CHOICE
 
 case "$ROLE_CHOICE" in
-  2) ROLE="Backend";      ROLE_TYPE="Rock 🪨"    ;;
-  3) ROLE="Database";     ROLE_TYPE="Water 💧"   ;;
-  4) ROLE="DevOps";       ROLE_TYPE="Steel ⚙️"   ;;
-  5) ROLE="Security";     ROLE_TYPE="Dark 🌑"    ;;
-  6) ROLE="Testing";      ROLE_TYPE="Fighting 🥊" ;;
-  7) ROLE="AI / ML";      ROLE_TYPE="Psychic 🧠" ;;
-  8) ROLE="Full-stack";   ROLE_TYPE="Normal ⭐"  ;;
-  9) ROLE="QA Engineer";  ROLE_TYPE="Bug 🐛"     ;;
-  *) ROLE="Frontend";     ROLE_TYPE="Electric ⚡" ;;
+  2)  ROLE="Backend";          ROLE_TYPE="Rock 🪨"    ;;
+  3)  ROLE="Database";         ROLE_TYPE="Water 💧"   ;;
+  4)  ROLE="DevOps";           ROLE_TYPE="Steel ⚙️"   ;;
+  5)  ROLE="Security";         ROLE_TYPE="Dark 🌑"    ;;
+  6)  ROLE="Testing";          ROLE_TYPE="Fighting 🥊" ;;
+  7)  ROLE="AI / ML";          ROLE_TYPE="Psychic 🧠" ;;
+  8)  ROLE="Full-stack";       ROLE_TYPE="Normal ⭐"  ;;
+  9)  ROLE="QA Engineer";      ROLE_TYPE="Bug 🐛"     ;;
+  10) ROLE="Mobile / Android"; ROLE_TYPE="Dragon 🐉"  ;;
+  *)  ROLE="Frontend";         ROLE_TYPE="Electric ⚡" ;;
 esac
 
 TODAY=$(date +%Y-%m-%d)
