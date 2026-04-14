@@ -321,9 +321,8 @@ if [ ! -f "$SETTINGS" ]; then
   echo '{}' > "$SETTINGS"
 fi
 
-# Fix 1: Patch statusLine — handles empty or malformed settings.json
-if ! grep -q 'statusLine' "$SETTINGS" 2>/dev/null; then
-  python3 - "$SETTINGS" "$CLAUDE_DIR/statusline-buddy.sh" << 'PYSCRIPT'
+# Fix 1: Patch statusLine — handles empty, malformed, or missing-type settings.json
+python3 - "$SETTINGS" "$CLAUDE_DIR/statusline-buddy.sh" << 'PYSCRIPT'
 import json, sys, shutil
 path, cmd = sys.argv[1], sys.argv[2]
 try:
@@ -335,11 +334,11 @@ except (json.JSONDecodeError, ValueError):
     shutil.copy2(path, backup)
     print(f"  Warning: settings.json was malformed — backed up to {backup!r}, starting fresh.")
     data = {}
-data.setdefault('statusLine', {})['command'] = cmd
+# Always write the correct format with both type and command
+data['statusLine'] = {'type': 'command', 'command': cmd}
 with open(path, 'w') as f:
     json.dump(data, f, indent=2)
 PYSCRIPT
-fi
 
 # ── Stamp installed version ──────────────────────────────────────────────────
 
