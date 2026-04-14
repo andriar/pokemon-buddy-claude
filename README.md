@@ -9,6 +9,8 @@ A Pokemon companion system for [Claude Code](https://claude.ai/code) — your AI
 - **Daily streak bonus** — first XP award of the day gives +20 bonus XP; streak shown in status bar
 - **Level up & evolve** — Lv.16 → Charmeleon/Ivysaur/Wartortle · Lv.36 → Charizard/Venusaur/Blastoise
 - **Catch wild Pokemon** — rare encounters triggered by hard achievements (production ship = 4% legendary chance)
+- **Role-type affinity** — Pokemon matching your trainer role type appear 3× more often in wild encounters
+- **Rarity-based starting levels** — caught Pokemon join at Lv.1 (common) up to Lv.30 (mythical)
 - **Shiny Pokemon** — 0.5% (1 in 200) chance on any catch — full celebration box + `✨` in party
 - **Auto milestone badges** — 15 milestones awarded automatically (First Catch, Legend Seeker, Lv.10, 7-Day Streak, and more)
 - **Trainer titles** — earn titles like *Legend Hunter*, *Shiny Chaser*, *Elite Deployer* based on your achievements
@@ -36,6 +38,8 @@ During install, choose your role — each maps to a Pokemon type that flavors yo
 | 8 | Full-stack | Normal ⭐ |
 | 9 | QA Engineer | Bug 🐛 |
 | 10 | Mobile / Android | Dragon 🐉 |
+
+> Your role type influences wild encounters — Pokemon of the same type appear **3× more often** in your catches.
 
 ## Install
 

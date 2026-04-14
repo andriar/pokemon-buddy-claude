@@ -5,6 +5,23 @@ Format: [version] — date — description
 
 ---
 
+## [1.3.0] — 2026-04-14
+
+### Added
+- **Role-type weighted catches** — Pokemon matching your trainer role type appear 3× more often in wild encounters. Frontend (Electric ⚡) attracts Pikachu/Zapdos; Mobile/Android (Dragon 🐉) attracts Bagon/Dragonite; Security (Dark 🌑) attracts Umbreon/Grimmsnarl, etc.
+- **Rarity-based starting levels** — Caught Pokemon now join your party at a level reflecting their rarity: Common Lv.1 · Uncommon Lv.5 · Rare Lv.15 · Legendary Lv.25 · Mythical Lv.30
+- **QA Engineer role** — New trainer role: QA Engineer (Bug 🐛 type), option 9
+- **Mobile / Android role** — New trainer role: Mobile / Android (Dragon 🐉 type), option 10
+
+### Fixed
+- `install.sh` / `install.py`: `settings.json` now written with required `{"type": "command", "command": "..."}` format — Claude Code was rejecting the previous format missing `type`
+- `install.py`: sync'd QA Engineer and Mobile/Android roles (were missing after `install.sh` was updated)
+- `buddy-update.py` / `install.py`: added UTF-8 stdout reconfiguration on Windows so emoji output doesn't crash or garble on cp1252 terminals
+- `install.sh`: `BASH_SOURCE[0]` unbound variable crash on piped bash execution — fallback to `$0`
+- `install.sh`: 5 edge cases hardened — curl\|bash detection, preflight file check, write permission check, missing command file warnings, malformed/empty `settings.json` recovery
+
+---
+
 ## [1.2.1] — 2026-04-14
 
 ### Changed
