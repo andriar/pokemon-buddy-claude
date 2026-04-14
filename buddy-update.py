@@ -137,24 +137,24 @@ POKEMON_POOL = {
     'common': [
         # Gen 1
         ('Pidgey',    'Normal',   '🐦'),
-        ('Geodude',   'Rock',     '🪨'),
+        ('Geodude',   'Rock',     '🗿'),
         ('Magikarp',  'Water',    '🐟'),
         ('Weedle',    'Bug',      '🐛'),
         ('Zubat',     'Poison',   '🦇'),
         ('Rattata',   'Normal',   '🐭'),
         # Gen 2
-        ('Sentret',   'Normal',   '🦔'),
+        ('Sentret',   'Normal',   '🐹'),
         ('Hoothoot',  'Normal',   '🦉'),
-        ('Spinarak',  'Bug',      '🕷️'),
+        ('Spinarak',  'Bug',      '🐞'),
         # Gen 3
         ('Wurmple',   'Bug',      '🐛'),
-        ('Zigzagoon', 'Normal',   '🦡'),
+        ('Zigzagoon', 'Normal',   '🐺'),
         # Gen 4
-        ('Bidoof',    'Normal',   '🦫'),
+        ('Bidoof',    'Normal',   '🐻'),
         ('Starly',    'Normal',   '🐦'),
         # Gen 5
         ('Patrat',    'Normal',   '🐭'),
-        ('Pidove',    'Normal',   '🕊️'),
+        ('Pidove',    'Normal',   '🐦'),
         # Gen 6
         ('Fletchling','Normal',   '🐦'),
         ('Scatterbug','Bug',      '🐛'),
@@ -163,10 +163,10 @@ POKEMON_POOL = {
         ('Yungoos',   'Normal',   '🐾'),
         # Gen 8
         ('Wooloo',    'Normal',   '🐑'),
-        ('Skwovet',   'Normal',   '🐿️'),
+        ('Skwovet',   'Normal',   '🐹'),
         # Gen 9
         ('Lechonk',   'Normal',   '🐷'),
-        ('Tarountula','Bug',      '🕷️'),
+        ('Tarountula','Bug',      '🐞'),
     ],
     'uncommon': [
         # Gen 1
@@ -185,7 +185,7 @@ POKEMON_POOL = {
         # Gen 3
         ('Ralts',     'Psychic',  '🔮'),
         ('Bagon',     'Dragon',   '🐲'),
-        ('Beldum',    'Steel',    '⚙️'),
+        ('Beldum',    'Steel',    '🔧'),
         # Gen 4
         ('Riolu',     'Fighting', '💪'),
         ('Rotom',     'Electric', '⚡'),
@@ -211,10 +211,10 @@ POKEMON_POOL = {
     'rare': [
         # Gen 1
         ('Snorlax',   'Normal',   '😴'),
-        ('Lapras',    'Water',    '🧊'),
+        ('Lapras',    'Water',    '💎'),
         ('Dratini',   'Dragon',   '🐲'),
         ('Porygon',   'Normal',   '💻'),
-        ('Scyther',   'Bug',      '⚔️'),
+        ('Scyther',   'Bug',      '🔪'),
         ('Jolteon',   'Electric', '⚡'),
         # Gen 2
         ('Tyranitar', 'Rock',     '🦖'),
@@ -222,19 +222,19 @@ POKEMON_POOL = {
         ('Blissey',   'Normal',   '💗'),
         # Gen 3
         ('Flygon',    'Dragon',   '🐲'),
-        ('Metagross',  'Steel',   '⚙️'),
+        ('Metagross',  'Steel',   '🔧'),
         ('Salamence', 'Dragon',   '🐉'),
         # Gen 4
         ('Garchomp',  'Dragon',   '🐉'),
         ('Lucario',   'Fighting', '💪'),
-        ('Togekiss',  'Fairy',    '🕊️'),
+        ('Togekiss',  'Fairy',    '🐦'),
         # Gen 5
         ('Hydreigon', 'Dragon',   '🐲'),
         ('Volcarona', 'Fire',     '🦋'),
-        ('Haxorus',   'Dragon',   '⚔️'),
+        ('Haxorus',   'Dragon',   '🔪'),
         # Gen 6
         ('Goodra',    'Dragon',   '🐲'),
-        ('Aegislash', 'Steel',    '⚔️'),
+        ('Aegislash', 'Steel',    '🔪'),
         ('Sylveon',   'Fairy',    '🎀'),
         # Gen 7
         ('Kommo-o',   'Dragon',   '🐲'),
@@ -247,11 +247,11 @@ POKEMON_POOL = {
         # Gen 9
         ('Baxcalibur','Dragon',   '🐉'),
         ('Gholdengo', 'Steel',    '💰'),
-        ('Kingambit', 'Dark',     '♟️'),
+        ('Kingambit', 'Dark',     '👹'),
     ],
     'legendary': [
         # Gen 1 — Birds & Psychic
-        ('Articuno',  'Ice',          '❄️'),
+        ('Articuno',  'Ice',          '💎'),
         ('Zapdos',    'Electric',     '⚡'),
         ('Moltres',   'Fire',         '🔥'),
         ('Mewtwo',    'Psychic',      '🧬'),
@@ -268,24 +268,24 @@ POKEMON_POOL = {
         ('Latios',    'Dragon',       '🔵'),
         ('Latias',    'Dragon',       '🔴'),
         # Gen 4 — Dialga, Palkia, Giratina
-        ('Dialga',    'Steel',        '⏱️'),
+        ('Dialga',    'Steel',        '⏰'),
         ('Palkia',    'Water',        '🌀'),
-        ('Giratina',  'Ghost',        '👁️'),
+        ('Giratina',  'Ghost',        '👀'),
         ('Heatran',   'Fire',         '🌋'),
         ('Cresselia',  'Psychic',     '🌙'),
         # Gen 5 — Tao Trio
-        ('Reshiram',  'Dragon',       '☀️'),
+        ('Reshiram',  'Dragon',       '🌞'),
         ('Zekrom',    'Dragon',       '⚡'),
-        ('Kyurem',    'Dragon',       '❄️'),
-        ('Cobalion',  'Steel',        '⚔️'),
-        ('Terrakion', 'Rock',         '🪨'),
+        ('Kyurem',    'Dragon',       '💎'),
+        ('Cobalion',  'Steel',        '🔪'),
+        ('Terrakion', 'Rock',         '🗿'),
         ('Virizion',  'Grass',        '🌿'),
         # Gen 6 — Life & Death
         ('Xerneas',   'Fairy',        '🦌'),
         ('Yveltal',   'Dark',         '🦅'),
         ('Zygarde',   'Dragon',       '🐍'),
         # Gen 7 — Sun, Moon, UBs
-        ('Solgaleo',  'Psychic',      '☀️'),
+        ('Solgaleo',  'Psychic',      '🌞'),
         ('Lunala',    'Psychic',      '🌙'),
         ('Necrozma',  'Psychic',      '💎'),
         ('Tapu Koko', 'Electric',     '⚡'),
@@ -293,17 +293,17 @@ POKEMON_POOL = {
         ('Tapu Bulu', 'Grass',        '🌿'),
         ('Tapu Fini', 'Water',        '💧'),
         # Gen 8 — Galar
-        ('Zacian',    'Fairy',        '⚔️'),
-        ('Zamazenta', 'Fighting',     '🛡️'),
-        ('Eternatus', 'Poison',       '☠️'),
+        ('Zacian',    'Fairy',        '🔪'),
+        ('Zamazenta', 'Fighting',     '🏰'),
+        ('Eternatus', 'Poison',       '💀'),
         ('Calyrex',   'Psychic',      '👑'),
         ('Glastrier', 'Ice',          '🐎'),
         ('Spectrier', 'Ghost',        '🐎'),
         # Gen 9 — Paldea
         ('Koraidon',  'Dragon',       '🦖'),
         ('Miraidon',  'Dragon',       '🤖'),
-        ('Ting-Lu',   'Dark',         '🏺'),
-        ('Chien-Pao', 'Dark',         '🗡️'),
+        ('Ting-Lu',   'Dark',         '📿'),
+        ('Chien-Pao', 'Dark',         '🔪'),
         ('Wo-Chien',  'Dark',         '📜'),
         ('Chi-Yu',    'Dark',         '🐟'),
     ],
@@ -321,23 +321,23 @@ POKEMON_POOL = {
         ('Arceus',    'Normal',       '👑'),
         # Gen 5
         ('Victini',   'Psychic',      '🏆'),
-        ('Keldeo',    'Water',        '⚔️'),
+        ('Keldeo',    'Water',        '🔪'),
         ('Meloetta',  'Normal',       '🎵'),
         ('Genesect',  'Bug',          '🤖'),
         # Gen 6
         ('Diancie',   'Rock',         '💎'),
-        ('Hoopa',     'Psychic',      '🪄'),
-        ('Volcanion', 'Fire',         '♨️'),
+        ('Hoopa',     'Psychic',      '🎩'),
+        ('Volcanion', 'Fire',         '💥'),
         # Gen 7
         ('Magearna',  'Steel',        '🤖'),
         ('Marshadow', 'Fighting',     '👤'),
         ('Zeraora',   'Electric',     '⚡'),
         ('Meltan',    'Steel',        '🔩'),
-        ('Melmetal',  'Steel',        '⚙️'),
+        ('Melmetal',  'Steel',        '🔧'),
         # Gen 8
         ('Zarude',    'Dark',         '🌿'),
         # Gen 9
-        ('Pecharunt', 'Poison',       '🍑'),
+        ('Pecharunt', 'Poison',       '🍒'),
         ('Terapagos', 'Normal',       '💎'),
     ],
 }
@@ -371,15 +371,15 @@ MILESTONES = {
     'legendary_catch': ('🧬', 'Legend Seeker',     'Caught a legendary Pokemon!'),
     'mythical_catch':  ('✨', 'Myth Maker',         'Caught a mythical Pokemon — incredibly rare!'),
     'shiny_catch':     ('💫', 'Shiny Hunter',       'Caught a shiny Pokemon — 1 in 200 odds!'),
-    'first_evolution': ('⬆️',  'First Evolution',   'Your buddy evolved for the first time!'),
+    'first_evolution': ('🆙',  'First Evolution',   'Your buddy evolved for the first time!'),
     'final_evolution': ('🐉', 'Final Form',         'Reached the final evolution stage!'),
-    'level_10':        ('🔟', 'Lv.10 Reached',     'Reached Level 10 — the journey is real!'),
+    'level_10':        ('🥇', 'Lv.10 Reached',     'Reached Level 10 — the journey is real!'),
     'level_20':        ('💪', 'Lv.20 Reached',     'Reached Level 20 — seasoned developer!'),
     'level_30':        ('🏆', 'Lv.30 Reached',     'Reached Level 30 — elite coder!'),
     'level_50':        ('👑', 'Lv.50 Reached',     'Reached Level 50 — legendary developer!'),
     'dex_10':          ('📖', 'Budding Collector',  'Caught 10 unique Pokemon!'),
     'dex_20':          ('📚', 'Avid Collector',     'Caught 20 unique Pokemon!'),
-    'dex_30':          ('🗂️', 'Pokedex Scholar',   'Caught 30 unique Pokemon!'),
+    'dex_30':          ('📇', 'Pokedex Scholar',   'Caught 30 unique Pokemon!'),
     'streak_7':        ('🔥', '7-Day Streak',       'Coded 7 days in a row!'),
     'streak_30':       ('⚡', '30-Day Streak',      'Coded 30 days in a row — unstoppable!'),
 }
@@ -439,7 +439,7 @@ def get_chatter(xp_pct=0):
     if STATE_FILE.exists():
         age = now - STATE_FILE.stat().st_mtime
         if age < 300:
-            msg = STATE_FILE.read_text().strip()
+            msg = STATE_FILE.read_text(encoding='utf-8').strip()
             if msg:
                 return msg
     # XP-percentage-aware idle messages
@@ -464,7 +464,7 @@ def read_stats():
     }
     if not STATS_FILE.exists():
         return defaults
-    text = STATS_FILE.read_text()
+    text = STATS_FILE.read_text(encoding='utf-8')
     def gi(key):
         m = re.search(rf'\*\*{key}\*\*:\s*(\d+)', text)
         return int(m.group(1)) if m else defaults.get(key, 0)
@@ -591,7 +591,7 @@ def check_milestones(stats, col, old_level, new_level, catch_result, evolved):
 
 def append_badge(badge_line):
     """Append a badge line to buddy file."""
-    text = BUDDY_FILE.read_text()
+    text = BUDDY_FILE.read_text(encoding='utf-8')
     if '*No badges yet' in text:
         text = text.replace('*No badges yet — the journey begins now!*', badge_line)
     else:
@@ -603,7 +603,7 @@ def append_badge(badge_line):
                 break
         else:
             text = text  # no-op if pattern not found
-    BUDDY_FILE.write_text(text)
+    BUDDY_FILE.write_text(text, encoding='utf-8')
 
 # ── Collection I/O ────────────────────────────────────────────────────────────
 
@@ -614,7 +614,7 @@ def parse_int(text):
 def read_collection():
     if not COLLECTION_FILE.exists():
         return {'active': None, 'pokemon': []}
-    text = COLLECTION_FILE.read_text()
+    text = COLLECTION_FILE.read_text(encoding='utf-8')
     active_m = re.search(r'\*\*Active\*\*:\s*(\S+)', text)
     active = active_m.group(1).strip() if active_m else None
     pokemon = []
@@ -651,7 +651,7 @@ def write_collection(active, pokemon_list):
             f"| {p['name']} | {p['type']} | {p['emoji']} | "
             f"{p['level']} | {p['xp']} | {p['caught']} | {p['rarity']} |\n"
         )
-    COLLECTION_FILE.write_text(''.join(lines))
+    COLLECTION_FILE.write_text(''.join(lines), encoding='utf-8')
 
 def sync_active_to_collection(name, level, xp):
     col = read_collection()
@@ -670,7 +670,7 @@ def get_role_type():
     """
     if not BUDDY_FILE.exists():
         return None
-    m = re.search(r'\*\*Role\*\*:.*?\(([A-Za-z]+)', BUDDY_FILE.read_text())
+    m = re.search(r'\*\*Role\*\*:.*?\(([A-Za-z]+)', BUDDY_FILE.read_text(encoding='utf-8'))
     return m.group(1) if m else None
 
 def roll_catch(add_xp, owned_names, role_type=None):
@@ -710,7 +710,7 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
 # ── Buddy file I/O ────────────────────────────────────────────────────────────
 
 def read_buddy():
-    lines = BUDDY_FILE.read_text().splitlines(keepends=True)
+    lines = BUDDY_FILE.read_text(encoding='utf-8').splitlines(keepends=True)
     text  = ''.join(lines)
     level = parse_int(next((l for l in lines if l.startswith('**Level**:')), '1'))
     xp    = parse_int(next((l for l in lines if l.startswith('**XP**:')), '0'))
@@ -760,7 +760,7 @@ def patch_buddy(lines, new_level, new_xp, new_max, new_stage,
         if re.match(r'\| \d{4}-\d{2}-\d{2} \|', line):
             last_log_idx = len(out) - 1
 
-    if mode == 'badge' and badge_line and '*No badges yet' not in BUDDY_FILE.read_text():
+    if mode == 'badge' and badge_line and '*No badges yet' not in BUDDY_FILE.read_text(encoding='utf-8'):
         for i in range(len(out) - 1, -1, -1):
             if re.match(r'- .* \*\*.*Badge', out[i]):
                 out.insert(i + 1, badge_line + '\n')
@@ -862,7 +862,7 @@ def render_statusline():
     buddy_str  = f"{shiny_mark}{active['emoji']} {active['name']} Lv.{active['level']}"
 
     # ── Section 2: Colored XP bar ────────────────────────────────────────────
-    lines    = BUDDY_FILE.read_text().splitlines()
+    lines    = BUDDY_FILE.read_text(encoding='utf-8').splitlines()
     xp_line  = next((l for l in lines if l.startswith('**XP**:')), '')
     xp_cur   = parse_int(xp_line)
     xp_max_m = re.search(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)', xp_line)
@@ -871,7 +871,7 @@ def render_statusline():
     xp_str   = f'{colored_bar(xp_cur, xp_max, 10)} {xp_cur}/{xp_max}'
 
     # ── Section 3: Stats (streak · badges · party) ───────────────────────────
-    buddy_text  = BUDDY_FILE.read_text()
+    buddy_text  = BUDDY_FILE.read_text(encoding='utf-8')
     badges_sec  = re.search(r'## Badges Earned\n(.*?)(?=\n##|\Z)', buddy_text, re.DOTALL)
     badges_raw  = re.findall(r'^- (.+)$', badges_sec.group(1), re.MULTILINE) if badges_sec else []
     badge_count = sum(1 for b in badges_raw if 'No badges yet' not in b)
@@ -888,7 +888,7 @@ def render_statusline():
 
 def render_card():
     """Render a shareable ASCII trainer card."""
-    text     = BUDDY_FILE.read_text()
+    text     = BUDDY_FILE.read_text(encoding='utf-8')
     col      = read_collection()
     tr_stats = read_stats()
 
@@ -1149,7 +1149,7 @@ def do_switch(target_name):
     xp_max  = xp_for_level(level_from_xp(xp) + 1)
 
     starter = STARTER_DATA.get(name)
-    trainer = re.search(r'\*\*Trainer\*\*:\s*(.+)', BUDDY_FILE.read_text())
+    trainer = re.search(r'\*\*Trainer\*\*:\s*(.+)', BUDDY_FILE.read_text(encoding='utf-8'))
     trainer = trainer.group(1).strip() if trainer else 'Trainer'
 
     if starter:
@@ -1179,7 +1179,7 @@ def do_switch(target_name):
         spa=stats['Special Atk'], spd=stats['Special Def'], spe=stats['Speed'],
         moves_rows=moves_rows, today=TODAY,
     )
-    BUDDY_FILE.write_text(content)
+    BUDDY_FILE.write_text(content, encoding='utf-8')
 
     col['active'] = name
     write_collection(col['active'], col['pokemon'])
@@ -1199,7 +1199,7 @@ def main():
     mode = args[0]
 
     if mode == 'status':
-        print(render_status(BUDDY_FILE.read_text()))
+        print(render_status(BUDDY_FILE.read_text(encoding='utf-8')))
         sys.exit(0)
 
     if mode == 'statusline':
@@ -1284,7 +1284,7 @@ def main():
         out.insert(last_log_idx + 1, f'| {TODAY} | {log_desc} | +{add_xp} XP |\n')
 
     out = cap_journal(out)
-    BUDDY_FILE.write_text(''.join(out))
+    BUDDY_FILE.write_text(''.join(out), encoding='utf-8')
 
     # Sync collection
     sync_active_to_collection(buddy_name, new_level, new_xp)
@@ -1326,9 +1326,9 @@ def main():
             chatter_msg = f'Caught {catch_result[1]}! 🧬'
         else:
             chatter_msg = f'+{add_xp} XP! Back to work ⚡'
-        STATE_FILE.write_text(chatter_msg + '\n')
+        STATE_FILE.write_text(chatter_msg + '\n', encoding='utf-8')
     elif mode == 'badge':
-        STATE_FILE.write_text(f'Badge earned! {b_emoji} {b_name} 🏅\n')
+        STATE_FILE.write_text(f'Badge earned! {b_emoji} {b_name} 🏅\n', encoding='utf-8')
 
     print(render_announcement(
         mode, add_xp, old_level, new_level, new_xp, new_max,
