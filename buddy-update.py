@@ -1368,19 +1368,15 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                     'uncommon':  ('✨', 'BUDDY AURA ACTIVE',    f'{buddy_name.upper()}\'S AURA ATTRACTED IT!'),
                 }.get(tier, ('✨', 'AURA ACTIVE', f'{buddy_name.upper()}\'S AURA RESONATED!'))
                 aura_icon, aura_title, aura_msg = aura_flavor
-                W = 54
-                title_line = f' {aura_icon}  {aura_title}  {aura_icon}'
-                msg_line   = f'    {aura_msg}'
-                catch_line = f'    You hurled a Pokéball...  ★ GOTCHA!  {cname} was caught!'
-                pad = lambda s: s + ' ' * max(0, W - len(s) - 2)
+                divider = ' ◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆'
                 lines += [
                     '',
-                    f' ╔{"═" * W}╗',
-                    f' ║  {pad(aura_title + "  " + aura_icon)}║',
-                    f' ║  {pad("🎉 Wild " + cemoji + " " + cname + " appeared!  (" + display_tier + ")")}║',
-                    f' ║  {pad(aura_msg)}║',
-                    f' ║  {pad("You hurled a Pokéball...  ★ GOTCHA!  " + cname + " caught!")}║',
-                    f' ╚{"═" * W}╝',
+                    divider,
+                    f'   {aura_icon}  {aura_title}  {aura_icon}',
+                    f'   🎉 Wild {cemoji} {cname} appeared!  ({display_tier})',
+                    f'   {aura_msg}',
+                    f'   You hurled a Pokéball...  ★ GOTCHA!  {cname} caught!',
+                    divider,
                 ]
             else:
                 lines += [
