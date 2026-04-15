@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile all Python files
+        run: |
+          python3 -m py_compile buddy-update.py
+          python3 -m py_compile install.py
+          python3 -m py_compile update.py
+          python3 -m py_compile uninstall.py
+          python3 -m py_compile hooks/session-start.py
+          python3 -m py_compile scripts/migrate_from_legacy.py
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pytest
+        run: pip install pytest
+      - name: Run tests
+        run: pytest tests/ -v
+
+  legendaries:
+    name: LEGENDARIES.md sync check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify all legendaries/mythicals are documented
+        run: python3 scripts/check-legendaries.py

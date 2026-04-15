@@ -269,6 +269,13 @@ def copy_exec(src_name, dst_name=None):
 copy_exec("buddy-update.py")
 copy_exec("statusline-buddy.sh")
 
+# ── Copy lib/ (engine data modules) ──────────────────────────────────────────
+
+lib_dst = CLAUDE_DIR / "lib"
+lib_dst.mkdir(exist_ok=True)
+for lib_file in (SCRIPT_DIR / "lib").glob("*.py"):
+    shutil.copy2(lib_file, lib_dst / lib_file.name)
+
 # ── Copy commands ─────────────────────────────────────────────────────────────
 
 (CLAUDE_DIR / "commands").mkdir(exist_ok=True)

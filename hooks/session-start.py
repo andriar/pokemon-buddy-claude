@@ -108,5 +108,14 @@ def main():
 if __name__ == '__main__':
     try: main()
     except Exception as e:
-        # Never fail session start
-        print(f'[pokemon-buddy hook] {e}', file=sys.stderr)
+        # Never fail session start — log to file for later diagnosis
+        import traceback
+        log_path = CLAUDE_DIR / 'pokemon-buddy-error.log'
+        try:
+            with open(log_path, 'a', encoding='utf-8') as f:
+                from datetime import datetime
+                f.write(f'\n[{datetime.now().isoformat()}] session-start error:\n')
+                f.write(traceback.format_exc())
+        except Exception:
+            pass
+        print(f'[pokemon-buddy] session-start error logged to {log_path}', file=sys.stderr)

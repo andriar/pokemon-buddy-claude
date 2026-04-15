@@ -5,6 +5,19 @@ Format: [version] — date — description
 
 ---
 
+## [2.1.0] — 2026-04-15
+
+### Added
+- **Engine split** — static Pokémon data (pools, XP rules, milestones, BUDDY_TEMPLATE) extracted to `lib/data.py`; `buddy-update.py` shrinks from 1763 → 1322 lines and imports from `lib`
+- **CI workflow** — `.github/workflows/ci.yml` with three jobs: syntax check (`py_compile`), unit tests (`pytest`), and LEGENDARIES.md sync check
+- **74 unit tests** — `tests/test_engine.py` covering XP math, level-up boundaries, evolution thresholds, streak logic, trainer titles, milestones, and full I/O round-trips (stats, collection, catch system, buddy file parsing)
+- **Schema versioning** — `buddy-stats.md` now writes a `schema_version` field; `read_stats` handles legacy files without it gracefully; migration hook ready for future format changes
+- **LEGENDARIES sync check** — `scripts/check-legendaries.py` verifies every legendary/mythical in `POKEMON_POOL` is documented in `LEGENDARIES.md`; passes for all 69 entries
+- **/ship workflow** — `.claude/commands/ship.md` project-local slash command: 9-step pre-commit checklist (simplify → syntax → tests → new feature tests → legendaries → version bump → CHANGELOG → smoke test)
+- **Error logging** — `hooks/session-start.py` now writes exceptions to `~/.claude/pokemon-buddy-error.log` instead of silently swallowing them
+
+---
+
 ## [2.0.8] — 2026-04-15
 
 ### Fixed
