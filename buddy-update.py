@@ -12,7 +12,7 @@ Commands:
   catch "<name>"               Manually add a Pokemon to collection
 """
 
-import sys, re, random, unicodedata
+import sys, re, random, unicodedata, json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -924,9 +924,16 @@ def render_status(text):
 
     return '\n'.join(out)
 
+def get_plugin_version():
+    plugin_json = Path(__file__).parent / '.claude-plugin' / 'plugin.json'
+    try:
+        return json.loads(plugin_json.read_text(encoding='utf-8')).get('version', '2.x')
+    except Exception:
+        return '2.x'
+
 def render_statusline(plugin_mode=False):
     col = read_collection()
-    prefix = '⚡v2  ' if plugin_mode else ''
+    prefix = f'⚡v{get_plugin_version()}  ' if plugin_mode else ''
     if not col['pokemon']:
         return f'{prefix}🎮 No buddy yet'
 
