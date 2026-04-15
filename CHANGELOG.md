@@ -5,6 +5,13 @@ Format: [version] — date — description
 
 ---
 
+## [2.0.1] — 2026-04-14
+
+### Fixed
+- **README** — Files installed, Token cost, Updating, Uninstalling, and Requirements sections now reflect v2.x plugin architecture (removed all v1.x shell-installer references)
+
+---
+
 ## [2.0.0] — 2026-04-14
 
 ### Breaking — architectural rewrite

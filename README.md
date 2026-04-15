@@ -140,50 +140,73 @@ Squirtle   Lv.1  ──>  Wartortle  Lv.16  ──>  Blastoise Lv.36
 
 ## Files installed
 
+The plugin lives in your Claude Code plugin directory. Your buddy data stays in `~/.claude/`.
+
+**Plugin files** (managed by Claude Code, don't touch):
+
+```
+<plugin-root>/
+├── .claude-plugin/
+│   ├── plugin.json         ← Plugin manifest
+│   └── marketplace.json    ← Marketplace listing
+├── buddy-update.py         ← Core engine (XP, evolution, catches)
+├── statusline-buddy.sh     ← Status bar script
+├── hooks/
+│   └── session-start.py    ← Session hook (welcome, migration nudge)
+├── skills/
+│   └── pokemon-coach/
+│       └── SKILL.md        ← Coach persona (opt-in)
+└── commands/               ← Slash commands (/poke:*)
+    ├── status.md
+    ├── card.md
+    ├── xp.md
+    ├── badge.md
+    ├── switch.md
+    ├── choose.md
+    ├── persona.md
+    ├── migrate.md
+    ├── backup.md
+    ├── export.md
+    └── import.md
+```
+
+**State files** (yours — never touched by updates):
+
 ```
 ~/.claude/
 ├── buddy-pokemon.md        ← Active buddy data
 ├── pokemon-collection.md   ← Full party roster
-├── buddy-stats.md          ← Streak, counters, milestones
-├── buddy-update.py         ← Core engine
-├── statusline-buddy.sh     ← Status bar script
-├── pokemon-persona.md      ← Coach persona
-└── commands/
-    ├── buddy.md
-    ├── buddy-card.md
-    ├── buddy-xp.md
-    ├── buddy-badge.md
-    └── pokemon-switch.md
+└── buddy-stats.md          ← Streak, counters, milestones
 ```
 
 ## Token cost
 
-Every token spent on the buddy system is a token taken from your actual coding work. This system was designed to be as cheap as possible. Here's exactly what it costs.
+Every token spent on the buddy system is a token taken from your actual coding work. This system was designed to be as cheap as possible.
 
-### Per-session overhead (loaded on every Claude Code start)
+### Default install: zero ongoing cost
 
-These files are always loaded into context via `CLAUDE.md`:
+The v2.x plugin is **free by default**:
 
-| File | Size | Tokens |
-|---|---|---|
-| `buddy-pokemon.md` (active buddy data) | ~1 KB | ~250 |
-| `pokemon-persona.md` (coach persona) | ~350 B | ~90 |
-| `CLAUDE.md` buddy section (auto-award rules) | ~150 B | ~40 |
-| **Total per session** | | **~380 tokens** |
+| Component | Cost |
+|---|---|
+| Status bar | **0 tokens** — runs as a shell command outside Claude context |
+| Slash commands | **~200 tokens** — only when you invoke one |
+| Session hook | **~50 tokens** — one-time on session start, skipped if no buddy |
+| Pokémon Coach persona | **opt-in** — ~150–250 tokens/turn when enabled |
 
-This is a fixed cost you pay once per conversation, regardless of how many commands you run.
+There is no always-on CLAUDE.md import in v2.x. The coach persona that previously loaded into every conversation (~380 tokens/session always) is now fully opt-in via `/poke:persona on`.
 
 ### Per-command cost
 
-Each command runs a single Python script via one `Bash` tool call. No file reads, no multiple edits.
+Each command runs a single Python script via one `Bash` tool call.
 
-| Command | Tool calls | Tokens | What happens |
-|---|---|---|---|
-| `/buddy` | 1 Bash | ~200 | Script reads files, renders full status card |
-| `/buddy-xp` | 1 Bash | ~200 | Script detects XP, patches file, prints announcement |
-| `/buddy-badge` | 1 Bash | ~250 | Script patches file, prints badge box + announcement |
-| `/pokemon-switch` | 1 Bash | ~150 | Script swaps active buddy, regenerates buddy file |
-| Auto XP award | 1 Bash | ~200 | Same as `/buddy-xp`, triggered after task completion |
+| Command | Tokens | What happens |
+|---|---|---|
+| `/poke:status` | ~200 | Script reads files, renders full status card |
+| `/poke:xp` | ~200 | Script detects XP, patches file, prints announcement |
+| `/poke:badge` | ~250 | Script patches file, prints badge box + announcement |
+| `/poke:switch` | ~150 | Script swaps active buddy, regenerates buddy file |
+| Auto XP (persona on) | ~200 | Same as `/poke:xp`, triggered after task completion |
 
 ### Why it's cheap: the design decisions
 
@@ -194,96 +217,39 @@ Most Claude Code customizations are expensive because they make Claude do the wo
 | ❌ Naive (Claude reads + edits file) | Read + 3× Edit | ~1,200 |
 | ✅ This system (script does everything) | 1× Bash | ~200 |
 
-**6× cheaper** than the naive approach.
+**6× cheaper** than the naive approach. Key decisions:
 
-The key decisions that keep it cheap:
-
-1. **Script renders output** — Claude never formats the status card or announcement. The Python script outputs the final text verbatim.
-2. **Script detects XP** — keyword matching in Python means Claude doesn't need to reason about which XP tier applies.
-3. **Single Bash call** — one tool call covers read + calculate + patch + output. No round-trips.
-4. **Lazy persona loading** — `pokemon-persona.md` is referenced in `CLAUDE.md` but kept at 350 bytes (stripped from 4.7 KB original).
-5. **No runtime API calls** — PokeAPI (or any external data) is never fetched during commands.
-
-### Real-world cost estimate
-
-A typical coding session with 5 auto XP awards and 1 `/buddy` check:
-
-```
-Session load:       380 tokens  (one-time)
-5× auto XP award:  1,000 tokens (5 × 200)
-1× /buddy status:   200 tokens
-
-Total:            ~1,580 tokens per session
-```
-
-At typical Claude API pricing (~$3 per 1M input tokens), that's roughly **$0.005 per session** — less than half a cent.
-
-### Status bar cost
-
-The status bar (`statusline-buddy.sh`) calls Python directly via the shell — it runs **outside** the Claude context entirely. It costs **0 Claude tokens**.
+1. **Script renders output** — Claude never formats the status card. Python outputs final text verbatim.
+2. **Script detects XP** — keyword matching in Python; Claude doesn't reason about XP tiers.
+3. **Single Bash call** — read + calculate + patch + output in one tool call.
+4. **No runtime API calls** — PokeAPI (or any external data) is never fetched.
 
 ## Updating
 
-Run the updater to get the latest version **without losing your buddy data**:
+Inside Claude Code:
 
-**macOS / Linux**
-
-```bash
-# From cloned repo:
-bash update.sh
-
-# Or remotely (no clone needed):
-curl -sSL https://raw.githubusercontent.com/andriar/pokemon-buddy-claude/main/update.sh | bash
+```
+/plugin update poke
 ```
 
-**Windows**
-
-```powershell
-# From cloned repo:
-python update.py
-
-# Or remotely (no clone needed):
-python update.py --remote
-```
-
-The updater **never touches**:
-- `~/.claude/buddy-pokemon.md` — your active buddy
-- `~/.claude/pokemon-collection.md` — your party roster
-- `~/.claude/buddy-stats.md` — your streak, counters, milestones
-- `~/.claude/buddy-log-archive.md` — your history
-
-It **only updates**: `buddy-update.py`, `statusline-buddy.sh`, `pokemon-persona.md`, and all `commands/`.
+Your state files (`buddy-pokemon.md`, `pokemon-collection.md`, `buddy-stats.md`) are never touched — they live in `~/.claude/` outside the plugin directory.
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 
 ## Uninstalling
 
-Remove the engine + slash commands + status bar patch. By default, your buddy data (party, stats, journey log) is **kept** in `~/.claude/`.
+Inside Claude Code:
 
-**macOS / Linux**
-
-```bash
-bash uninstall.sh              # keep buddy data
-bash uninstall.sh --purge      # also delete buddy/collection/stats
+```
+/plugin uninstall poke
 ```
 
-**Windows**
-
-```powershell
-python uninstall.py            # keep buddy data
-python uninstall.py --purge    # also delete buddy/collection/stats
-```
-
-Or double-click `uninstall.bat` from Explorer.
-
-The uninstaller also un-patches `CLAUDE.md` (backup saved as `CLAUDE.md.bak.<timestamp>`) and removes the `statusLine` entry from `settings.json` if it points to the buddy status script.
+Your buddy data (`buddy-pokemon.md`, `pokemon-collection.md`, `buddy-stats.md`) is **kept** in `~/.claude/` by default. To remove everything including state files, delete those three files manually after uninstalling.
 
 ## Requirements
 
-- [Claude Code](https://claude.ai/code) CLI
+- [Claude Code](https://claude.ai/code) CLI (with plugin support)
 - Python 3.6+
-- **macOS / Linux**: Bash
-- **Windows**: Windows Terminal (recommended) on Windows 10 20H1 or later — for full emoji + UTF-8 support
 
 ## License
 
