@@ -343,24 +343,81 @@ POKEMON_POOL = {
 }
 
 # ── XP detection ──────────────────────────────────────────────────────────────
+# Each entry: (xp_value, [english_keywords], [bahasa_indonesia_keywords])
+# First matching rule wins (highest XP first).
 
 XP_RULES = [
-    (100, ['ship', 'deploy', 'production', 'prod', 'release']),
-    ( 75, ['framework', 'library', 'new tool', 'new tech']),
-    ( 50, ['feature', 'complete', 'implement', 'finish']),
-    ( 40, ['hard', 'complex', 'difficult', 'tricky', 'solve']),
-    ( 30, ['test', 'spec', 'coverage']),
-    ( 25, ['concept', 'learn', 'understand', 'explain']),
-    ( 20, ['component', 'ui ', 'build', 'create', 'widget', 'refactor', 'review', 'clean']),
-    ( 10, ['bug', 'fix', 'error', 'issue', 'patch']),
+    # 100 XP — Ship / deploy
+    (100,
+     ['ship', 'deploy', 'production', 'prod', 'release', 'publish', 'launch', 'go live', 'rollout'],
+     ['rilis', 'deploy', 'produksi', 'luncurkan', 'launching', 'publish', 'kirim ke prod']),
+
+    # 75 XP — New tech / architecture
+    (75,
+     ['framework', 'library', 'new tool', 'new tech', 'architecture', 'design system',
+      'infrastructure', 'infra', 'terraform', 'kubernetes', 'k8s', 'docker', 'pipeline',
+      'ci/cd', 'ci cd', 'microservice'],
+     ['arsitektur', 'infrastruktur', 'framework baru', 'teknologi baru', 'sistem baru',
+      'microservice', 'docker', 'pipeline']),
+
+    # 50 XP — Feature / implementation
+    (50,
+     ['feature', 'complete', 'implement', 'finish', 'integration', 'api', 'endpoint',
+      'migration', 'schema', 'model', 'auth', 'authentication', 'authorization',
+      'dashboard', 'module', 'service', 'workflow', 'automation'],
+     ['fitur', 'selesai', 'implementasi', 'integrasi', 'migrasi', 'skema', 'model',
+      'autentikasi', 'otorisasi', 'dashboard', 'modul', 'layanan', 'otomasi', 'alur kerja']),
+
+    # 40 XP — Hard problem / performance / security
+    (40,
+     ['hard', 'complex', 'difficult', 'tricky', 'solve', 'performance', 'optimize',
+      'security', 'vulnerability', 'cve', 'encrypt', 'scaling', 'bottleneck', 'memory leak',
+      'race condition', 'concurrency', 'algorithm'],
+     ['susah', 'kompleks', 'sulit', 'rumit', 'selesaikan', 'performa', 'optimasi',
+      'keamanan', 'enkripsi', 'skalabilitas', 'algoritma', 'kebocoran memori']),
+
+    # 35 XP — AI / ML
+    (35,
+     ['model', 'prompt', 'dataset', 'train', 'fine-tune', 'finetune', 'inference',
+      'embedding', 'vector', 'llm', 'ai ', 'ml ', 'machine learning', 'deep learning',
+      'neural', 'rag', 'agent'],
+     ['model', 'prompt', 'dataset', 'latih', 'pelatihan', 'inferensi', 'kecerdasan buatan',
+      'pembelajaran mesin', 'vektor', 'agen']),
+
+    # 30 XP — Tests / QA / monitoring
+    (30,
+     ['test', 'spec', 'coverage', 'unit test', 'e2e', 'integration test', 'qa',
+      'monitor', 'alert', 'logging', 'observability', 'dashboard', 'metric', 'oncall'],
+     ['tes', 'pengujian', 'cakupan', 'monitor', 'pemantauan', 'log', 'metrik', 'observabilitas']),
+
+    # 25 XP — Learning / concept / research
+    (25,
+     ['concept', 'learn', 'understand', 'explain', 'research', 'study', 'read',
+      'document', 'readme', 'docs', 'wiki', 'writeup', 'rfc', 'adr'],
+     ['konsep', 'belajar', 'pahami', 'jelaskan', 'riset', 'pelajari', 'baca',
+      'dokumentasi', 'dokumen', 'tulis']),
+
+    # 20 XP — Build / refactor / review
+    (20,
+     ['component', 'ui', 'build', 'create', 'widget', 'refactor', 'review', 'clean',
+      'page', 'form', 'layout', 'style', 'css', 'design', 'prototype', 'wireframe',
+      'query', 'index', 'database', 'db '],
+     ['komponen', 'bangun', 'buat', 'refaktor', 'tinjau', 'review', 'bersihkan',
+      'halaman', 'formulir', 'tampilan', 'gaya', 'desain', 'prototipe', 'kueri', 'basis data']),
+
+    # 10 XP — Bug fix / patch
+    (10,
+     ['bug', 'fix', 'error', 'issue', 'patch', 'hotfix', 'typo', 'crash', 'broken'],
+     ['bug', 'perbaiki', 'kesalahan', 'masalah', 'error', 'hotfix', 'rusak', 'crash']),
 ]
 
 def detect_xp(description):
     m = re.search(r'\b(\d+)\s*xp\b', description.lower())
     if m: return int(m.group(1))
     desc = description.lower()
-    for xp, keywords in XP_RULES:
-        if any(k in desc for k in keywords):
+    for rule in XP_RULES:
+        xp, en_keywords, id_keywords = rule
+        if any(k in desc for k in en_keywords) or any(k in desc for k in id_keywords):
             return xp
     return 10
 
