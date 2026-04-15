@@ -1357,21 +1357,40 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                 f' ╚{"═"*54}╝',
             ]
         else:
-            aura_tiers = {'uncommon', 'rare', 'legendary', 'mythical'}
             boosted_tiers = set(BUDDY_RARITY_BOOST.get(buddy_rarity, {}).keys())
             show_aura = (buddy_rarity in BUDDY_RARITY_BOOST
-                         and tier in boosted_tiers
-                         and tier in aura_tiers)
-            aura_line = (f'    [✨ {buddy_name}\'s aura drew it closer!]' if show_aura else
-                         f'    [{cname} added to your party — use /pokemon-switch to buddy up]')
-            lines += [
-                '',
-                f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-                f' 🎉 Wild {cemoji} {cname} appeared!  ({display_tier})',
-                f'    You threw a Pokéball...  ★ Gotcha!  {cname} was caught!',
-                aura_line,
-                f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-            ]
+                         and tier in boosted_tiers)
+            if show_aura:
+                aura_flavor = {
+                    'mythical':  ('🌌', 'THE COSMOS ALIGNED',   f'{buddy_name.upper()} CALLED ACROSS DIMENSIONS!'),
+                    'legendary': ('⚡', 'LEGENDARY AURA SURGE', f'{buddy_name.upper()}\'S POWER SHOOK THE WILD!'),
+                    'rare':      ('🔮', 'AURA RESONANCE',       f'{buddy_name.upper()}\'S PRESENCE DREW IT NEAR!'),
+                    'uncommon':  ('✨', 'BUDDY AURA ACTIVE',    f'{buddy_name.upper()}\'S AURA ATTRACTED IT!'),
+                }.get(tier, ('✨', 'AURA ACTIVE', f'{buddy_name.upper()}\'S AURA RESONATED!'))
+                aura_icon, aura_title, aura_msg = aura_flavor
+                W = 54
+                title_line = f' {aura_icon}  {aura_title}  {aura_icon}'
+                msg_line   = f'    {aura_msg}'
+                catch_line = f'    You hurled a Pokéball...  ★ GOTCHA!  {cname} was caught!'
+                pad = lambda s: s + ' ' * max(0, W - len(s) - 2)
+                lines += [
+                    '',
+                    f' ╔{"═" * W}╗',
+                    f' ║  {pad(aura_title + "  " + aura_icon)}║',
+                    f' ║  {pad("🎉 Wild " + cemoji + " " + cname + " appeared!  (" + display_tier + ")")}║',
+                    f' ║  {pad(aura_msg)}║',
+                    f' ║  {pad("You hurled a Pokéball...  ★ GOTCHA!  " + cname + " caught!")}║',
+                    f' ╚{"═" * W}╝',
+                ]
+            else:
+                lines += [
+                    '',
+                    f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                    f' 🎉 Wild {cemoji} {cname} appeared!  ({display_tier})',
+                    f'    You threw a Pokéball...  ★ Gotcha!  {cname} was caught!',
+                    f'    [{cname} added to your party — use /pokemon-switch to buddy up]',
+                    f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                ]
 
     return '\n'.join(lines)
 
