@@ -363,10 +363,10 @@ XP_RULES = [
     # 50 XP — Feature / implementation
     (50,
      ['feature', 'complete', 'implement', 'finish', 'integration', 'api', 'endpoint',
-      'migration', 'schema', 'model', 'auth', 'authentication', 'authorization',
-      'dashboard', 'module', 'service', 'workflow', 'automation'],
-     ['fitur', 'selesai', 'implementasi', 'integrasi', 'migrasi', 'skema', 'model',
-      'autentikasi', 'otorisasi', 'dashboard', 'modul', 'layanan', 'otomasi', 'alur kerja']),
+      'migration', 'schema', 'authentication', 'authorization', 'oauth',
+      'dashboard', 'workflow', 'automation'],
+     ['fitur', 'selesai', 'implementasi', 'integrasi', 'migrasi', 'skema',
+      'autentikasi', 'otorisasi', 'dashboard', 'layanan', 'otomasi', 'alur kerja']),
 
     # 40 XP — Hard problem / performance / security
     (40,
@@ -387,8 +387,8 @@ XP_RULES = [
     # 30 XP — Tests / QA / monitoring
     (30,
      ['test', 'spec', 'coverage', 'unit test', 'e2e', 'integration test', 'qa',
-      'monitor', 'alert', 'logging', 'observability', 'dashboard', 'metric', 'oncall'],
-     ['tes', 'pengujian', 'cakupan', 'monitor', 'pemantauan', 'log', 'metrik', 'observabilitas']),
+      'monitor', 'alert', 'logging', 'observability', 'metric', 'oncall'],
+     ['tes', 'pengujian', 'cakupan', 'monitor', 'pemantauan', 'logging', 'metrik', 'observabilitas']),
 
     # 25 XP — Learning / concept / research
     (25,
