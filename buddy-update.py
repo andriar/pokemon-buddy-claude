@@ -122,6 +122,15 @@ RARITY_START_LEVEL = {
     'mythical':  30,
 }
 
+# Catch-rate multipliers granted by buddy's rarity — applied per tier probability
+# Common buddy = no boost (baseline). Higher buddy rarity = better odds at rare+ tiers.
+BUDDY_RARITY_BOOST = {
+    'uncommon':  {'rare': 1.5},
+    'rare':      {'rare': 2.0, 'legendary': 1.5},
+    'legendary': {'rare': 2.5, 'legendary': 2.0, 'mythical': 1.5},
+    'mythical':  {'rare': 3.0, 'legendary': 2.5, 'mythical': 2.0},
+}
+
 CATCH_RATES = {
     10:  [('common',    0.08)],
     20:  [('common',    0.10)],
@@ -742,14 +751,28 @@ def get_role_type():
     m = re.search(r'\*\*Role\*\*:.*?\(([A-Za-z]+)', BUDDY_FILE.read_text(encoding='utf-8'))
     return m.group(1) if m else None
 
-def roll_catch(add_xp, owned_names, role_type=None):
+def get_buddy_rarity():
+    """Return the active buddy's rarity tier (strips -shiny suffix). Returns None if unknown."""
+    col = read_collection()
+    active_name = col.get('active')
+    if not active_name:
+        return None
+    active = next((p for p in col['pokemon'] if p['name'] == active_name), None)
+    if not active:
+        return None
+    return active.get('rarity', '').replace('-shiny', '') or None
+
+def roll_catch(add_xp, owned_names, role_type=None, buddy_rarity=None):
     """Returns (tier, name, type, emoji, is_shiny) or None.
     role_type: if set, matching-type Pokemon are 3× more likely to be chosen.
+    buddy_rarity: if set, boosts catch probabilities for higher-rarity tiers.
     """
     rates = CATCH_RATES.get(add_xp, [('common', 0.05)])
+    boosts = BUDDY_RARITY_BOOST.get(buddy_rarity, {}) if buddy_rarity else {}
     caught_tier = None
     for tier, prob in sorted(rates, key=lambda x: list(POKEMON_POOL.keys()).index(x[0])):
-        if random.random() < prob:
+        boosted_prob = min(1.0, prob * boosts.get(tier, 1.0))
+        if random.random() < boosted_prob:
             caught_tier = tier
     if not caught_tier:
         return None
@@ -1278,7 +1301,8 @@ def render_readme_snippet(svg_path='trainer-card.svg'):
 def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         new_stage, stat_boost, new_moves_data, evolved,
                         catch_result=None, b_emoji='', b_name='', b_desc='',
-                        streak_bonus=0, streak_count=0, new_badges=None):
+                        streak_bonus=0, streak_count=0, new_badges=None,
+                        buddy_rarity=None, buddy_name=''):
     xp_b  = bar(new_xp, new_max, 24)
     lines = []
 
@@ -1333,12 +1357,19 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                 f' ╚{"═"*54}╝',
             ]
         else:
+            aura_tiers = {'uncommon', 'rare', 'legendary', 'mythical'}
+            boosted_tiers = set(BUDDY_RARITY_BOOST.get(buddy_rarity, {}).keys())
+            show_aura = (buddy_rarity in BUDDY_RARITY_BOOST
+                         and tier in boosted_tiers
+                         and tier in aura_tiers)
+            aura_line = (f'    [✨ {buddy_name}\'s aura drew it closer!]' if show_aura else
+                         f'    [{cname} added to your party — use /pokemon-switch to buddy up]')
             lines += [
                 '',
                 f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
                 f' 🎉 Wild {cemoji} {cname} appeared!  ({display_tier})',
                 f'    You threw a Pokéball...  ★ Gotcha!  {cname} was caught!',
-                f'    [{cname} added to your party — use /pokemon-switch to buddy up]',
+                aura_line,
                 f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
             ]
 
@@ -1633,7 +1664,8 @@ def main():
     base_xp_for_catch = detect_xp(args[1] if len(args) > 1 and mode == 'xp' else '') if mode == 'xp' else add_xp
     col = read_collection()
     owned = {p['name'] for p in col['pokemon']}
-    catch_result = roll_catch(base_xp_for_catch, owned, get_role_type())
+    buddy_rarity = get_buddy_rarity()
+    catch_result = roll_catch(base_xp_for_catch, owned, get_role_type(), buddy_rarity)
     if catch_result:
         tier, cname, ctype, cemoji, is_shiny = catch_result
         add_to_collection(cname, ctype, cemoji, tier, is_shiny)
@@ -1675,6 +1707,7 @@ def main():
         new_stage, stat_boost, new_moves_data, evolved,
         catch_result, b_emoji, b_name, b_desc,
         streak_bonus, streak_count, new_badges,
+        buddy_rarity, buddy_name,
     ))
 
 if __name__ == '__main__':
