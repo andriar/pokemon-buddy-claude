@@ -5,6 +5,14 @@ Format: [version] — date — description
 
 ---
 
+## [2.0.8] — 2026-04-15
+
+### Fixed
+- **XP bar overflow after switch** — `do_switch` now stores the cumulative XP threshold (`xp_for_level(level+1)`) instead of the relative per-level delta, fixing the 160/100 overflow display.
+- **XP bar shows relative progress** — all five render functions (`status`, `statusline`, `card`, `svg`, `announcement`) now subtract `xp_for_level(level)` before display, so the bar always shows progress *within* the current level (e.g. 60/100 at Lv.2 with 160 total XP).
+
+---
+
 ## [2.0.7] — 2026-04-15
 
 ### Fixed

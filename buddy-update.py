@@ -877,6 +877,9 @@ def render_status(text):
     stage   = g(r'\*\*Stage\*\*:\s*(\w+)')
     xp_cur  = int(g(r'\*\*XP\*\*:\s*(\d+)', '0'))
     xp_max  = int(g(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)', '100'))
+    xp_floor    = xp_for_level(int(level) if str(level).isdigit() else 1)
+    xp_disp     = xp_cur - xp_floor
+    xp_max_disp = xp_max - xp_floor
 
     stats = {}
     for stat in ('HP', 'Attack', 'Speed', 'Special Atk', 'Defense', 'Special Def'):
@@ -899,7 +902,7 @@ def render_status(text):
     streak  = trainer_stats.get('streak', 0)
     longest = trainer_stats.get('longest_streak', 0)
 
-    xp_b = bar(xp_cur, xp_max, 24)
+    xp_b = bar(xp_disp, xp_max_disp, 24)
     sep  = '─' * 52
 
     streak_icon = '🔥' if streak >= 7 else '📅'
@@ -907,7 +910,7 @@ def render_status(text):
         f' 🔥 {stage.upper():<12} Lv.{level:<4}      Trainer: {trainer}',
         f'    · {title} ·',
         f' {sep}',
-        f' XP  [{xp_b}]  {xp_cur} / {xp_max}',
+        f' XP  [{xp_b}]  {xp_disp} / {xp_max_disp}',
         '',
     ]
 
@@ -973,8 +976,11 @@ def render_statusline(plugin_mode=False):
     xp_cur   = parse_int(xp_line)
     xp_max_m = re.search(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)', xp_line)
     xp_max   = int(xp_max_m.group(1)) if xp_max_m else 100
-    pct      = int(xp_cur * 100 / xp_max) if xp_max else 0
-    xp_str   = f'{colored_bar(xp_cur, xp_max, 10)} {xp_cur}/{xp_max}'
+    xp_floor    = xp_for_level(active['level'])
+    xp_disp     = xp_cur - xp_floor
+    xp_max_disp = xp_max - xp_floor
+    pct      = int(xp_disp * 100 / xp_max_disp) if xp_max_disp else 0
+    xp_str   = f'{colored_bar(xp_disp, xp_max_disp, 10)} {xp_disp}/{xp_max_disp}'
 
     # ── Section 3: Stats (streak · badges · party) ───────────────────────────
     buddy_text  = BUDDY_FILE.read_text(encoding='utf-8')
@@ -1007,6 +1013,9 @@ def render_card():
     trainer  = g(r'\*\*Trainer\*\*:\s*(.+)')
     xp_cur   = int(g(r'\*\*XP\*\*:\s*(\d+)', '0'))
     xp_max   = int(g(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)', '100'))
+    xp_floor    = xp_for_level(int(level) if str(level).isdigit() else 1)
+    xp_disp     = xp_cur - xp_floor
+    xp_max_disp = xp_max - xp_floor
     specialty = g(r'\*\*Specialty\*\*:\s*(.+)')
 
     title = get_trainer_title(tr_stats, col)
@@ -1037,7 +1046,7 @@ def render_card():
         'Squirtle':'💧','Wartortle':'💧','Blastoise':'💦',
     }
     buddy_emoji = emoji_map.get(stage, '🎮')
-    xp_b = bar(xp_cur, xp_max, 20)
+    xp_b = bar(xp_disp, xp_max_disp, 20)
 
     W   = 54
     SEP = f' ╠{"═" * (W + 3)}╣'
@@ -1073,7 +1082,7 @@ def render_card():
         SEP,
         row('ACTIVE BUDDY'),
         row(f'{buddy_emoji} {stage.upper():<14} Lv.{level}'),
-        row(f'[{xp_b}]  {xp_cur}/{xp_max} XP'),
+        row(f'[{xp_b}]  {xp_disp}/{xp_max_disp} XP'),
         row(f'Specialty: {specialty}'),
         SEP,
         row('ACHIEVEMENTS'),
@@ -1135,6 +1144,9 @@ def render_svg_card():
     trainer  = g(r'\*\*Trainer\*\*:\s*(.+)')
     xp_cur   = int(g(r'\*\*XP\*\*:\s*(\d+)', '0'))
     xp_max   = int(g(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)', '100'))
+    xp_floor    = xp_for_level(int(level) if str(level).isdigit() else 1)
+    xp_disp     = xp_cur - xp_floor
+    xp_max_disp = xp_max - xp_floor
     specialty = g(r'\*\*Specialty\*\*:\s*(.+)')
     title = get_trainer_title(tr_stats, col)
 
@@ -1171,7 +1183,7 @@ def render_svg_card():
     ACCENT, GOLD = '#7aa2f7', '#e0af68'
     RED, GREEN = '#f7768e', '#9ece6a'
 
-    pct = xp_cur / xp_max if xp_max else 0
+    pct = xp_disp / xp_max_disp if xp_max_disp else 0
     bar_w = W - PAD * 2
     fill_w = int(bar_w * max(0, min(1, pct)))
 
@@ -1199,7 +1211,7 @@ def render_svg_card():
     parts.append(f'<rect x="{PAD}" y="{by}" width="{bar_w}" height="10" rx="5" fill="#2f3350"/>')
     parts.append(f'<rect x="{PAD}" y="{by}" width="{fill_w}" height="10" rx="5" fill="{GREEN}"/>')
     parts.append(f'<text x="{W-PAD}" y="{by-4}" text-anchor="end" font-size="11" fill="{MUTED}">'
-                 f'{xp_cur}/{xp_max} XP</text>')
+                 f'{xp_disp}/{xp_max_disp} XP</text>')
     y += buddy_h
 
     # ---- Achievements row ----
@@ -1303,7 +1315,10 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         catch_result=None, b_emoji='', b_name='', b_desc='',
                         streak_bonus=0, streak_count=0, new_badges=None,
                         buddy_rarity=None, buddy_name=''):
-    xp_b  = bar(new_xp, new_max, 24)
+    xp_floor    = xp_for_level(new_level)
+    xp_disp     = new_xp - xp_floor
+    xp_max_disp = new_max - xp_floor
+    xp_b  = bar(xp_disp, xp_max_disp, 24)
     lines = []
 
     if mode == 'badge':
@@ -1324,7 +1339,7 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
     lines += [
         f' 🔥 {new_stage.upper():<12} Lv.{new_level:<4}',
         ' ' + '─' * 52,
-        f' XP  [{xp_b}]  {new_xp} / {new_max}',
+        f' XP  [{xp_b}]  {xp_disp} / {xp_max_disp}',
     ]
     if stat_boost > 0:
         lines.append(f' All stats +{stat_boost}!')
@@ -1460,7 +1475,7 @@ def do_switch(target_name):
     emoji   = match['emoji']
     level   = match['level']
     xp      = match['xp']
-    xp_max  = xp_for_level(level + 1) - xp_for_level(level)
+    xp_max  = xp_for_level(level + 1)
 
     starter = STARTER_DATA.get(name)
     trainer = re.search(r'\*\*Trainer\*\*:\s*(.+)', BUDDY_FILE.read_text(encoding='utf-8'))
