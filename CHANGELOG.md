@@ -5,6 +5,37 @@ Format: [version] — date — description
 
 ---
 
+## [2.0.5] — 2026-04-15
+
+### Added
+- **Buddy rarity aura** — active buddy's rarity passively boosts wild catch odds for higher-rarity tiers. Rare buddy: rare ×2.0, legendary ×1.5. Legendary buddy: rare ×2.5, legendary ×2.0, mythical ×1.5. Mythical buddy: rare ×3.0, legendary ×2.5, mythical ×2.0.
+- **Aura banner display** — when a catch is boosted by buddy aura, a `◆◆◆` banner fires with tier-scaled headline: `AURA RESONANCE` / `LEGENDARY AURA SURGE` / `THE COSMOS ALIGNED`. Banner uses fixed-width dividers (no right border) so emoji never misalign.
+
+---
+
+## [2.0.4] — 2026-04-15
+
+### Added
+- **Live plugin version in status bar** — statusline now reads and displays the installed plugin version
+
+---
+
+## [2.0.3] — 2026-04-15
+
+### Fixed
+- Pre-push hook: version bump now verified with automated test
+
+---
+
+## [2.0.2] — 2026-04-15
+
+### Fixed
+- **XP keyword matching** — substring collision bugs where short keywords (e.g. `fix`) would match inside longer unrelated words, awarding wrong XP amounts
+- **XP rules expanded** — broader keyword coverage; added Bahasa Indonesia XP trigger support
+- **Persona decoupled from auto-XP** — auto-XP now fires independently of whether Coach persona is active
+
+---
+
 ## [2.0.1] — 2026-04-14
 
 ### Fixed
