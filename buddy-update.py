@@ -1466,18 +1466,35 @@ def do_switch(target_name):
     trainer = re.search(r'\*\*Trainer\*\*:\s*(.+)', BUDDY_FILE.read_text(encoding='utf-8'))
     trainer = trainer.group(1).strip() if trainer else 'Trainer'
 
+    # Stat boosts accumulate at every level divisible by 5 (+5 each time)
+    total_stat_boost = sum(5 for lv in range(1, level + 1) if lv % 5 == 0)
+
     if starter:
-        stats     = starter['stats']
+        base_stats = starter['stats']
+        stats = {k: v + total_stat_boost for k, v in base_stats.items()}
         evos      = starter['evolutions']
         evo_parts = [f'{name} Lv.1-{evos[0][1]-1}'] + \
                     [f'{e[0]} Lv.{evos[i][1]}-{evos[i+1][1]-1 if i+1 < len(evos) else "∞"}'
                      for i, e in enumerate(evos)]
         evo_line  = ' → '.join(evo_parts)
-        moves     = starter['moves']
         specialty = starter['specialty']
+        # Unlock moves already reached at the pokemon's current level
+        move_defs = MOVE_UNLOCKS.get(name, {})
+        moves = []
+        for m in starter['moves']:
+            if m[0] == '???' and m[2].startswith('Lv.'):
+                lv_num = int(m[2][3:])
+                if lv_num in move_defs and level >= lv_num:
+                    mn, mt, md = move_defs[lv_num]
+                    moves.append((mn, mt, m[2], md))
+                else:
+                    moves.append(m)
+            else:
+                moves.append(m)
     else:
-        stats    = {'HP': 40, 'Attack': 50, 'Defense': 50,
-                    'Special Atk': 50, 'Special Def': 50, 'Speed': 50}
+        base_stats = {'HP': 40, 'Attack': 50, 'Defense': 50,
+                      'Special Atk': 50, 'Special Def': 50, 'Speed': 50}
+        stats    = {k: v + total_stat_boost for k, v in base_stats.items()}
         evo_line = f'{name} Lv.1+ → ???'
         moves    = [('Tackle', 'Normal', 'Lv.1', 'Basic attack'),
                     ('???',    '???',    'Lv.5',  'Learn more to unlock!')]
@@ -1497,6 +1514,8 @@ def do_switch(target_name):
 
     col['active'] = name
     write_collection(col['active'], col['pokemon'])
+
+    STATE_FILE.write_text(f'Switched to {name}! 🔄\n', encoding='utf-8')
 
     prev = cur_name
     print(f' 🔄 Switched buddy: {prev} → {emoji} {name}')

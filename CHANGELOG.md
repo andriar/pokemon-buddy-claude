@@ -5,6 +5,22 @@ Format: [version] — date — description
 
 ---
 
+## [2.0.7] — 2026-04-15
+
+### Fixed
+- **Switch: stats reset on swap** — `do_switch` now applies accumulated level-up stat boosts (+5 per level divisible by 5) so a Lv.15 buddy no longer reverts to Lv.1 base stats when switched back in.
+- **Switch: moves reset on swap** — locked `???` moves are now replaced with the correct unlocked moves for the buddy's current level when switching.
+- **Statusline chatter stale after switch** — `do_switch` now writes `Switched to <name>! 🔄` to `STATE_FILE` so the right-side chatter in the status bar reflects the swap immediately.
+
+---
+
+## [2.0.6] — 2026-04-15
+
+### Changed
+- Bump plugin.json version to 2.0.6
+
+---
+
 ## [2.0.5] — 2026-04-15
 
 ### Added
