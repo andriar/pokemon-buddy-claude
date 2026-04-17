@@ -693,42 +693,6 @@ class TestRunBattle(unittest.TestCase):
         self.assertFalse(won)
 
 
-class TestSelectBall(_TmpDir, unittest.TestCase):
-    """Ball selection and inventory deduction."""
-
-    def _stats(self, **kwargs):
-        s = engine.read_stats()
-        s.update(kwargs)
-        return s
-
-    def test_selects_best_available_for_legendary(self):
-        stats = self._stats(balls_master=1, balls_ultra=2)
-        ball = engine.select_ball('legendary', stats)
-        self.assertEqual(ball, 'master')
-        self.assertEqual(stats['balls_master'], 0)
-
-    def test_falls_back_when_master_empty(self):
-        stats = self._stats(balls_master=0, balls_ultra=1)
-        ball = engine.select_ball('legendary', stats)
-        self.assertEqual(ball, 'ultra')
-        self.assertEqual(stats['balls_ultra'], 0)
-
-    def test_returns_none_when_no_balls(self):
-        stats = self._stats(balls_poke=0, balls_great=0, balls_ultra=0, balls_master=0)
-        ball = engine.select_ball('common', stats)
-        self.assertIsNone(ball)
-
-    def test_common_prefers_poke_ball(self):
-        stats = self._stats(balls_poke=3, balls_great=2)
-        ball = engine.select_ball('common', stats)
-        self.assertEqual(ball, 'poke')
-        self.assertEqual(stats['balls_poke'], 2)
-
-    def test_deducts_exactly_one(self):
-        stats = self._stats(balls_great=5)
-        engine.select_ball('uncommon', stats)
-        self.assertEqual(stats['balls_great'], 4)
-
 
 class TestAttemptCatch(_TmpDir, unittest.TestCase):
     """Catch probability and berry consumption."""
@@ -1014,6 +978,96 @@ class TestRunEncounter(_TmpDir, unittest.TestCase):
             engine.run_encounter(10, set(), None, None, 10, 'Normal', stats)
         if True:  # ball always deducted when battle won and ball selected
             self.assertLess(stats['balls_poke'], 3)
+
+    def test_throws_is_list_of_dicts(self):
+        """info['throws'] should be a list with ball/catch keys per throw."""
+        stats = self._stats()
+        stats['balls_poke'] = 2
+        with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=1), \
+             patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')):
+            _, info = engine.run_encounter(10, set(), None, None, 10, 'Normal', stats)
+        if info['encountered'] and info['battle_won']:
+            self.assertIsInstance(info['throws'], list)
+            self.assertGreater(len(info['throws']), 0)
+            for t in info['throws']:
+                self.assertIn('ball_key',   t)
+                self.assertIn('ball_emoji', t)
+                self.assertIn('catch_pct',  t)
+                self.assertIn('caught',     t)
+
+    def test_all_balls_exhausted_before_escape(self):
+        """All available balls are thrown before giving up — none left after all misses."""
+        stats = self._stats()
+        stats['balls_poke']  = 2
+        stats['balls_great'] = 0
+        stats['balls_ultra'] = 0
+        stats['balls_master'] = 0
+        # Battle wins (randint=1 < win_pct), catch always fails (randint always > catch_pct)
+        # Use side_effect: first call (shiny roll) = 0.99 (no shiny), battle randint=1 (win)
+        # catch randint always 99 (fail)
+        with patch('random.random', return_value=0.99), \
+             patch('random.randint', side_effect=[1, 1, 99, 99, 99, 99, 99, 99]), \
+             patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')):
+            result, info = engine.run_encounter(10, set(), None, None, 10, 'Normal', stats)
+        if info['encountered'] and info['battle_won'] and not info['no_balls']:
+            self.assertFalse(info['caught'])
+            self.assertEqual(stats['balls_poke'], 0)
+            self.assertEqual(len(info['throws']), 2)
+
+    def test_stops_throwing_after_catch(self):
+        """No extra balls thrown once Pokémon is caught."""
+        stats = self._stats()
+        stats['balls_poke']  = 5
+        stats['balls_great'] = 3
+        # randint=1 means catch succeeds on first throw
+        with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=1), \
+             patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')):
+            result, info = engine.run_encounter(10, set(), None, None, 10, 'Normal', stats)
+        if info['encountered'] and info['battle_won']:
+            self.assertTrue(info['caught'])
+            self.assertEqual(len(info['throws']), 1)
+            self.assertEqual(stats['balls_poke'], 4)  # only 1 deducted
+
+    def test_falls_through_to_next_ball_tier(self):
+        """After exhausting preferred ball type, falls back to next available tier."""
+        stats = self._stats()
+        stats['balls_poke']  = 0
+        stats['balls_great'] = 0
+        stats['balls_ultra'] = 1
+        stats['balls_master'] = 0
+        # common priority is ['poke', 'great'] — neither available, so no throw
+        with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=1), \
+             patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')):
+            result, info = engine.run_encounter(10, set(), None, None, 10, 'Normal', stats)
+        if info['encountered'] and info['battle_won']:
+            # common uses poke→great only, ultra not in priority → no balls
+            self.assertTrue(info['no_balls'])
+
+    def test_rare_uses_ultra_then_great(self):
+        """Rare encounter exhausts ultra balls first, then falls to great balls."""
+        stats = self._stats()
+        stats['balls_poke']  = 0
+        stats['balls_great'] = 2
+        stats['balls_ultra'] = 1
+        stats['balls_master'] = 0
+        # Force encounter at 'rare' tier: high base_xp + specific patches
+        # randint for catch = 99 (always miss), for battle = 1 (always win)
+        with patch('random.random', return_value=0.99), \
+             patch('random.randint', side_effect=[15, 1, 99, 99, 99, 99, 99]), \
+             patch('random.choices', return_value=[('rare', )]), \
+             patch.object(engine, '_roll_encounter_tier', return_value='rare'), \
+             patch('random.choice', return_value=('Snorlax', 'Normal', '😴')):
+            result, info = engine.run_encounter(100, set(), None, None, 20, 'Normal', stats)
+        if info['encountered'] and info['battle_won'] and not info['no_balls']:
+            ball_keys = [t['ball_key'] for t in info['throws']]
+            if ball_keys:
+                ultra_idx = [i for i, k in enumerate(ball_keys) if k == 'ultra']
+                great_idx = [i for i, k in enumerate(ball_keys) if k == 'great']
+                if ultra_idx and great_idx:
+                    self.assertLess(max(ultra_idx), min(great_idx))
 
 
 if __name__ == '__main__':

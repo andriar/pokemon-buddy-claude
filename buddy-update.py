@@ -443,15 +443,6 @@ def run_battle(buddy_level, buddy_type, wild_level, wild_type):
     win_pct = max(20, min(95, int(base)))
     return random.randint(1, 100) <= win_pct, win_pct
 
-def select_ball(tier, stats):
-    """Pick best available ball for the tier. Deducts 1 from stats. Returns ball_key or None."""
-    for ball in BALL_BY_RARITY.get(tier, ['poke']):
-        key = f'balls_{ball}'
-        if stats.get(key, 0) > 0:
-            stats[key] -= 1
-            return ball
-    return None
-
 def attempt_catch(tier, ball_key, stats):
     """Roll the catch. Returns (caught: bool, catch_pct: int). Uses best berry automatically."""
     if ball_key == 'master':
@@ -597,7 +588,7 @@ def level_up_rewards(old_level, new_level, stats):
 
 def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
                   buddy_level, buddy_type, stats):
-    """Full adventure flow: spawn → battle → ball throw.
+    """Full adventure flow: spawn → battle → ball throws until caught or empty.
 
     Returns (catch_result, encounter_info) where:
       catch_result = (tier, name, type, emoji, is_shiny) or None  (for milestone compat)
@@ -624,11 +615,8 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
         'is_shiny':     is_shiny,
         'battle_won':   battle_won,
         'win_pct':      win_pct,
-        'ball_key':     None,
-        'ball_emoji':   None,
-        'ball_name':    None,
+        'throws':       [],
         'caught':       False,
-        'catch_pct':    0,
         'no_balls':     False,
         'combo':        stats.get('combo', 1),
         'balls_poke':   stats.get('balls_poke', 0),
@@ -640,20 +628,34 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
     if not battle_won:
         return None, info
 
-    ball_key = select_ball(tier, stats)
-    if ball_key is None:
+    caught = False
+    for ball in BALL_BY_RARITY.get(tier, ['poke']):
+        key       = f'balls_{ball}'
+        ball_info = POKEBALL_TYPES.get(ball, {})
+        while stats.get(key, 0) > 0:
+            stats[key] -= 1
+            c, catch_pct = attempt_catch(tier, ball, stats)
+            info['throws'].append({
+                'ball_key':   ball,
+                'ball_emoji': ball_info.get('emoji', '🔴'),
+                'ball_name':  ball_info.get('name', 'Ball'),
+                'catch_pct':  catch_pct,
+                'caught':     c,
+                'rem_poke':   stats.get('balls_poke', 0),
+                'rem_great':  stats.get('balls_great', 0),
+                'rem_ultra':  stats.get('balls_ultra', 0),
+            })
+            if c:
+                caught = True
+                break
+        if caught:
+            break
+
+    if not info['throws']:
         info['no_balls'] = True
         return None, info
 
-    ball_info = POKEBALL_TYPES.get(ball_key, {})
-    info['ball_key']   = ball_key
-    info['ball_emoji'] = ball_info.get('emoji', '🔴')
-    info['ball_name']  = ball_info.get('name', 'Ball')
-
-    caught, catch_pct = attempt_catch(tier, ball_key, stats)
-    info['caught']    = caught
-    info['catch_pct'] = catch_pct
-    # Update inventory snapshot after ball was used
+    info['caught'] = caught
     info['balls_poke']   = stats.get('balls_poke', 0)
     info['balls_great']  = stats.get('balls_great', 0)
     info['balls_ultra']  = stats.get('balls_ultra', 0)
@@ -742,6 +744,25 @@ def patch_buddy(lines, new_level, new_xp, new_max, new_stage,
                 break
 
     return out, last_log_idx
+
+# ── Encounter display constants ───────────────────────────────────────────────
+
+_ENC_DIV  = ' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+_ENC_DIV2 = ' ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─'
+_TIER_BADGE = {
+    'common':    '◌  COMMON',
+    'uncommon':  '◈  UNCOMMON',
+    'rare':      '◆  RARE',
+    'legendary': '★  LEGENDARY',
+    'mythical':  '✦  MYTHICAL',
+}
+_TIER_FLAVOR = {
+    'common':    'A wild Pokémon crossed your path!',
+    'uncommon':  'Something unusual stirs nearby...',
+    'rare':      'A powerful presence emerges from the shadows!',
+    'legendary': 'THE GROUND TREMBLES — A LEGEND APPEARS!',
+    'mythical':  '✨  A MYTHICAL BEING DESCENDS FROM BEYOND!  ✨',
+}
 
 # ── Renderers ─────────────────────────────────────────────────────────────────
 
@@ -893,15 +914,16 @@ def render_statusline(plugin_mode=False):
         combo_str = f'{sep}🔥 ×{combo}' if combo >= 2 else ''
         wname     = enc["wild_name"]
         wemoji    = enc["wild_emoji"]
-        ball_e    = enc.get("ball_emoji", "🔴")
+        throws    = enc.get("throws", [])
+        last_ball = throws[-1]["ball_emoji"] if throws else "🔴"
         if not enc.get('battle_won'):
             result = f'⚔️  {wemoji} {wname} fled'
         elif enc.get('no_balls'):
             result = f'⚔️  WIN  ·  no balls!  {wemoji} {wname} escaped'
         elif enc.get('caught'):
-            result = f'⚔️  WIN  ·  {ball_e} caught {wemoji} {wname}!'
+            result = f'⚔️  WIN  ·  {last_ball} caught {wemoji} {wname}!'
         else:
-            result = f'⚔️  WIN  ·  {ball_e} {wemoji} {wname} broke free!'
+            result = f'⚔️  WIN  ·  {last_ball} {wemoji} {wname} broke free!'
         return f'{prefix}{buddy_str}{sep}{result}{sep}{balls_str}{combo_str}'
 
     chatter_str = f'💭 {get_chatter(pct)}'
@@ -1278,64 +1300,99 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
             ]
 
     if encounter_info and encounter_info.get('encountered'):
-        ei = encounter_info
-        wname  = ei['wild_name']
-        wemoji = ei['wild_emoji']
-        wtier  = ei['wild_tier'].upper()
-        wlv    = ei['wild_level']
+        ei       = encounter_info
+        wname    = ei['wild_name']
+        wemoji   = ei['wild_emoji']
+        wtier    = ei['wild_tier']
+        wlv      = ei['wild_level']
         is_shiny = ei.get('is_shiny', False)
-        div    = ' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-        shiny_prefix = '✨ SHINY ' if is_shiny else ''
-        lines += ['', div]
 
-        # Aura line for buddy-boosted encounters
+        lines += ['', _ENC_DIV]
+
         boosted_tiers = set(BUDDY_RARITY_BOOST.get(buddy_rarity, {}).keys())
-        if buddy_rarity in BUDDY_RARITY_BOOST and ei['wild_tier'] in boosted_tiers:
+        if buddy_rarity in BUDDY_RARITY_BOOST and wtier in boosted_tiers:
             aura_msgs = {
-                'mythical':  f'⚡ {buddy_name.upper()}\'S AURA CALLED ACROSS DIMENSIONS!',
-                'legendary': f'⚡ {buddy_name.upper()}\'S POWER SHOOK THE WILD!',
-                'rare':      f'🔮 {buddy_name.upper()}\'S PRESENCE DREW IT NEAR!',
+                'mythical':  f'✦  {buddy_name.upper()}\'S AURA CALLED ACROSS DIMENSIONS!',
+                'legendary': f'★  {buddy_name.upper()}\'S POWER SHOOK THE WILD!',
+                'rare':      f'◆  {buddy_name.upper()}\'S PRESENCE DREW IT NEAR!',
             }
-            lines.append(f' {aura_msgs.get(ei["wild_tier"], "")}')
+            lines.append(f' {aura_msgs.get(wtier, "")}')
 
-        lines.append(f' 🎉 {shiny_prefix}Wild {wemoji} {wname} appeared!  ({wtier}, Lv.{wlv})')
-        lines.append(f' ⚔️  {buddy_name} Lv.{new_level} vs {wname} Lv.{wlv}  —  win chance: {ei["win_pct"]}%')
+        shiny_tag = '  ✨ SHINY' if is_shiny else ''
+        lines += [
+            f' {_TIER_BADGE.get(wtier, wtier.upper())}{shiny_tag}',
+            f' {_TIER_FLAVOR.get(wtier, "")}',
+            '',
+            f'   {wemoji}  {wname}  ·  Lv.{wlv}',
+            _ENC_DIV2,
+        ]
+
+        win_pct = ei["win_pct"]
+        lines += [
+            ' ⚔️   BATTLE',
+            f'     {buddy_name} Lv.{new_level}  vs  {wname} Lv.{wlv}',
+            f'     [{stat_bar(win_pct, 20)}]  {win_pct}% win chance',
+        ]
 
         if not ei['battle_won']:
-            lines += [f' ❌ DEFEAT — {wname} fled into the wild!', div]
-        elif ei.get('no_balls'):
-            lines += [f' ✅ YOU WIN!  But you have no Pokéballs!  {wname} escaped...', div]
+            lines += [
+                f'     ✗  DEFEAT — {wname} fled into the wild!',
+                _ENC_DIV,
+            ]
         else:
-            lines.append(f' ✅ YOU WIN!')
-            ball_line = f'    {ei["ball_emoji"]} {ei["ball_name"]} thrown...  ({ei["catch_pct"]}% catch rate)'
-            if ei['caught']:
-                if is_shiny:
-                    lines += [
-                        f' ╔{"═"*54}╗',
-                        f' ║  ✨✨✨  SHINY {wemoji} {wname} CAUGHT!  ✨✨✨{" "*max(0,19-len(wname))}║',
-                        f' ║  AN INCREDIBLY RARE SHINY — 1 in 200!{" "*15}║',
-                        f' ╚{"═"*54}╝',
-                    ]
-                else:
-                    lines += [ball_line, f'    ★ GOTCHA!  {wname} was caught!',
-                               f'    [Use /poke:switch to buddy up]']
-            else:
-                lines += [ball_line, f'    💨 Oh no!  {wname} broke free!']
-            lines.append(div)
+            lines += ['     ✓  VICTORY!', '']
 
-        # Inventory snapshot
-        inv = (f' 🔴{ei.get("balls_poke",0)} 🔵{ei.get("balls_great",0)} '
-               f'🟡{ei.get("balls_ultra",0)} 🟣{ei.get("balls_master",0)}  ← remaining balls')
-        lines.append(inv)
+            if ei.get('no_balls'):
+                lines += [
+                    ' 🎯  CATCH PHASE',
+                    f'     No Pokéballs left!  {wname} slipped away...',
+                    _ENC_DIV,
+                ]
+            else:
+                lines.append(' 🎯  CATCH PHASE')
+                throws = ei.get('throws', [])
+                for i, t in enumerate(throws):
+                    lines.append(f'     Throw #{i+1}  {t["ball_emoji"]}  {t["ball_name"]}')
+                    lines.append(f'               [{stat_bar(t["catch_pct"], 20)}]  {t["catch_pct"]}% catch rate')
+                    if t['caught']:
+                        if is_shiny:
+                            w = max(len(wname) + 28, 50)
+                            lines += [
+                                '',
+                                f' ╔{"═" * w}╗',
+                                f' ║   ✨✨✨  SHINY {wemoji} {wname.upper()} CAUGHT!  ✨✨✨{" " * max(0, w - len(wname) - 27)}║',
+                                f' ║   AN INCREDIBLY RARE SHINY — 1 in 200 ODDS!{" " * max(0, w - 44)}║',
+                                f' ╚{"═" * w}╝',
+                            ]
+                        else:
+                            lines += [
+                                f'               ★  GOTCHA!  {wname} was caught!',
+                                '               → /poke:switch to make them your buddy',
+                            ]
+                        break
+                    else:
+                        lines.append(
+                            f'               💨  Broke free!  '
+                            f'(🔴×{t["rem_poke"]} 🔵×{t["rem_great"]} 🟡×{t["rem_ultra"]} left)'
+                        )
+
+                if not ei['caught']:
+                    lines += ['', f'     😔  Every Pokéball was used — {wname} escaped!']
+                lines.append(_ENC_DIV)
+
+        lines.append(
+            f' Balls remaining:  🔴×{ei.get("balls_poke",0)}  🔵×{ei.get("balls_great",0)}'
+            f'  🟡×{ei.get("balls_ultra",0)}  🟣×{ei.get("balls_master",0)}'
+        )
 
     elif catch_result:
         # Legacy path (manual /catch command)
         tier, cname, ctype, cemoji, is_shiny = catch_result
         lines += [
             '',
-            f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            _ENC_DIV,
             f' {"✨ SHINY " if is_shiny else ""}🎉 {cemoji} {cname} added to party!',
-            f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            _ENC_DIV,
         ]
 
     return '\n'.join(lines)

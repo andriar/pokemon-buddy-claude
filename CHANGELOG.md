@@ -5,6 +5,17 @@ Format: [version] — date — description
 
 ---
 
+## [2.3.0] — 2026-04-17
+
+### Added
+- **Multi-throw catch mechanic** — When a wild Pokémon breaks free, the game keeps throwing balls in priority order (Ultra → Great → Poké) until the Pokémon is caught or all applicable balls are exhausted
+- **Encounter display overhaul** — Rarity tier badges (`◌ ◈ ◆ ★ ✦`), flavor text per tier, progress bars for win chance and catch rate, and live inventory countdown on each missed throw
+
+### Changed
+- **"Broke free" counter is now accurate** — Each missed throw shows the remaining ball count at that exact moment, not the final end-of-encounter count
+
+---
+
 ## [2.2.0] — 2026-04-17
 
 ### Added
