@@ -5,6 +5,31 @@ Format: [version] — date — description
 
 ---
 
+## [2.2.0] — 2026-04-17
+
+### Added
+- **Pokéball inventory** — trainers now collect Poké Balls, Great Balls, Ultra Balls, and Master Balls; stored in `buddy-stats.md` alongside XP; new trainers start with 5 Poké Balls
+- **Battle mechanic** — wild encounters now require a battle before catching; win % = `clamp(buddy_lv / wild_lv × 70%, 20%, 95%)` with +20% for type advantage; losing means the Pokémon flees with no ball used
+- **Wild Pokémon levels** — each wild Pokémon spawns with a random level by tier (common 1–5, uncommon 5–15, rare 15–30, legendary 30–50, mythical 40–60)
+- **Ball auto-selection** — best available ball chosen automatically by rarity; Master Ball guarantees 100% catch; falls back through Ultra → Great → Poké Ball
+- **Berry system** — Razz Berry (+20% catch), Nanab Berry (flavor), Pinap Berry (×2 XP), Golden Razz Berry (+50% catch); earned as random drops alongside ball rewards; best available berry auto-used on each throw
+- **Combo multiplier** — tasks completed within the same hour stack a combo (×1.2 at 2, ×1.5 at 3, ×2.0 at 5); combo counter and timestamp stored in stats
+- **Daily quest** — one quest per day from a pool of 9 (fix bug, learn something, ship, catch, etc.); rewards balls, berries, or Master Ball shards on completion
+- **Level-up rewards** — every level awards +2 Poké Balls; every 5 levels +1 Great Ball; every 10 levels +1 Ultra Ball; Lv.50 awards 2 Ultra Balls
+- **Master Ball shards** — badges each award 1 shard; collecting 3 shards automatically converts to 1 Master Ball
+- **Contextual statusline** — statusbar shows encounter result (battle outcome, ball used, catch result, inventory snapshot) for 5 minutes after an encounter, then reverts to normal view
+- **Increased encounter rates** — wild Pokémon now appear 2–3× more often since catching is no longer automatic
+- **`dev.sh` script** — `bash dev.sh` syncs repo → plugin cache instantly for local testing; `bash dev.sh status` shows sync state; `bash dev.sh restore` reinstalls from `install.sh`
+- **48 new unit tests** — covering all new systems: inventory round-trip, battle logic, ball selection, catch probability, berry consumption, combo multiplier, daily quest lifecycle, level-up rewards, and full `run_encounter` flow (122 total)
+
+### Changed
+- **`roll_catch()` replaced by `run_encounter()`** — old auto-catch is gone; new function runs the full battle → ball-select → attempt-catch pipeline and returns `(catch_result, encounter_info)` for announcement rendering
+- **Announcement output** — encounter block now shows wild Pokémon level, battle win %, ball type used, catch %, and remaining inventory; combo and earned items printed above the XP bar
+- **`CATCH_RATES` renamed `ENCOUNTER_RATES`** — reflects that these are spawn probabilities, not catch probabilities (separate `BASE_CATCH_RATES` dict added per tier)
+- **`STATS_SCHEMA_VER` bumped to 2** — new inventory, combo, and daily quest fields added to `buddy-stats.md`
+
+---
+
 ## [2.1.0] — 2026-04-15
 
 ### Added

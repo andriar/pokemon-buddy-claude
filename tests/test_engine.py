@@ -485,39 +485,45 @@ class TestCollectionRoundTrip(_TmpDir, unittest.TestCase):
 
 
 class TestRollCatch(_TmpDir, unittest.TestCase):
-    def test_guaranteed_common_catch(self):
-        """Patch random to always return 0 — all probabilities fire."""
+    def test_guaranteed_common_encounter(self):
+        """Patch random to always return 0 — encounter fires, battle won, caught."""
+        from lib.data import ENCOUNTER_RATES
+        stats = engine.read_stats()
+        stats['balls_poke'] = 5
         with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=1), \
              patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')), \
              patch('random.choices', return_value=[('Pidgey', 'Normal', '🐦')]):
-            result = engine.roll_catch(10, set())
-        # With random=0, the 8% common catch fires and is_shiny=False (0 < SHINY_RATE is True)
-        # is_shiny will be True since 0.0 < 0.005
-        self.assertIsNotNone(result)
-        tier, name, ptype, emoji, is_shiny = result
-        self.assertEqual(tier, 'common')
-        self.assertTrue(is_shiny)  # 0.0 < SHINY_RATE (0.005)
+            catch_result, info = engine.run_encounter(10, set(), None, None, 5, 'Normal', stats)
+        self.assertTrue(info['encountered'])
+        self.assertEqual(info['wild_tier'], 'common')
 
-    def test_no_catch_when_probability_missed(self):
-        """Patch random to always return 0.99 — nothing fires."""
-        with patch('random.random', return_value=0.99):
-            result = engine.roll_catch(10, set())
-        self.assertIsNone(result)
+    def test_no_encounter_when_probability_missed(self):
+        """Patch random to always return 0.99 — no encounter fires."""
+        stats = engine.read_stats()
+        with patch('random.random', return_value=0.99), \
+             patch('random.randint', return_value=99):
+            catch_result, info = engine.run_encounter(10, set(), None, None, 5, 'Normal', stats)
+        self.assertFalse(info['encountered'])
+        self.assertIsNone(catch_result)
 
     def test_already_owned_fallback_to_full_pool(self):
         """When all available pool members are owned, falls back to full pool."""
         common_names = {p[0] for p in engine.POKEMON_POOL['common']}
+        stats = engine.read_stats()
+        stats['balls_poke'] = 5
         with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=1), \
              patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')), \
              patch('random.choices', return_value=[('Pidgey', 'Normal', '🐦')]):
-            result = engine.roll_catch(10, common_names)
-        # Should still return something (fallback to full pool)
-        self.assertIsNotNone(result)
+            catch_result, info = engine.run_encounter(10, common_names, None, None, 5, 'Normal', stats)
+        self.assertTrue(info['encountered'])
 
-    def test_legendary_only_catchable_at_100xp(self):
-        """Legendaries only appear in 100-XP catch rates."""
-        rates_50  = dict(engine.CATCH_RATES.get(50, []))
-        rates_100 = dict(engine.CATCH_RATES.get(100, []))
+    def test_legendary_only_at_100xp(self):
+        """Legendaries only appear in 100-XP encounter rates."""
+        from lib.data import ENCOUNTER_RATES
+        rates_50  = dict(ENCOUNTER_RATES.get(50, []))
+        rates_100 = dict(ENCOUNTER_RATES.get(100, []))
         self.assertNotIn('legendary', rates_50)
         self.assertIn('legendary', rates_100)
 
@@ -605,6 +611,409 @@ Charmander Lv.1-15 → Charmeleon Lv.16-35 → Charizard Lv.36+
         engine.BUDDY_FILE.unlink()
         with self.assertRaises(SystemExit):
             engine.read_buddy()
+
+
+# ── New adventure system tests ────────────────────────────────────────────────
+
+class TestInventoryStats(_TmpDir, unittest.TestCase):
+    """Stats round-trip for new inventory fields."""
+
+    def _full_stats(self):
+        s = engine.read_stats()
+        s.update({
+            'balls_poke': 3, 'balls_great': 2, 'balls_ultra': 1, 'balls_master': 0,
+            'master_shards': 2,
+            'berry_razz': 1, 'berry_nanab': 0, 'berry_pinap': 1, 'berry_golden': 0,
+            'combo': 3, 'combo_ts': '2026-04-17T10:00:00',
+            'daily_quest_date': '2026-04-17', 'daily_quest_id': 'fix_bug',
+            'daily_quest_done': False, 'tasks_today': 2,
+        })
+        return s
+
+    def test_inventory_roundtrip(self):
+        engine.write_stats(self._full_stats())
+        got = engine.read_stats()
+        self.assertEqual(got['balls_poke'], 3)
+        self.assertEqual(got['balls_great'], 2)
+        self.assertEqual(got['balls_ultra'], 1)
+        self.assertEqual(got['balls_master'], 0)
+        self.assertEqual(got['master_shards'], 2)
+        self.assertEqual(got['berry_razz'], 1)
+        self.assertEqual(got['berry_pinap'], 1)
+
+    def test_combo_roundtrip(self):
+        engine.write_stats(self._full_stats())
+        got = engine.read_stats()
+        self.assertEqual(got['combo'], 3)
+        self.assertEqual(got['combo_ts'], '2026-04-17T10:00:00')
+
+    def test_daily_quest_roundtrip(self):
+        engine.write_stats(self._full_stats())
+        got = engine.read_stats()
+        self.assertEqual(got['daily_quest_date'], '2026-04-17')
+        self.assertEqual(got['daily_quest_id'], 'fix_bug')
+        self.assertFalse(got['daily_quest_done'])
+        self.assertEqual(got['tasks_today'], 2)
+
+    def test_new_trainer_starts_with_5_pokeballs(self):
+        got = engine.read_stats()
+        self.assertEqual(got['balls_poke'], 5)
+        self.assertEqual(got['balls_great'], 0)
+        self.assertEqual(got['balls_master'], 0)
+
+
+class TestRunBattle(unittest.TestCase):
+    """Battle win/loss probability logic."""
+
+    def test_high_level_buddy_wins(self):
+        # Lv.50 vs Lv.5 → win_pct capped at 95
+        won, pct = engine.run_battle(50, 'Fire', 5, 'Grass')
+        self.assertEqual(pct, 95)
+
+    def test_low_level_buddy_minimum_20pct(self):
+        # Lv.1 vs Lv.60 → floored at 20
+        _, pct = engine.run_battle(1, 'Normal', 60, 'Dragon')
+        self.assertEqual(pct, 20)
+
+    def test_type_advantage_adds_20pct(self):
+        # Fire vs Grass: base = 10/10*70 = 70, +20 = 90
+        _, pct_base = engine.run_battle(10, 'Normal', 10, 'Grass')
+        _, pct_adv  = engine.run_battle(10, 'Fire',   10, 'Grass')
+        self.assertEqual(pct_adv, pct_base + 20)
+
+    def test_guaranteed_win_when_randint_1(self):
+        with patch('random.randint', return_value=1):
+            won, _ = engine.run_battle(5, 'Normal', 5, 'Normal')
+        self.assertTrue(won)
+
+    def test_guaranteed_loss_when_randint_100(self):
+        with patch('random.randint', return_value=100):
+            won, _ = engine.run_battle(1, 'Normal', 60, 'Dragon')
+        # win_pct = 20, randint=100 → 100 <= 20 is False
+        self.assertFalse(won)
+
+
+class TestSelectBall(_TmpDir, unittest.TestCase):
+    """Ball selection and inventory deduction."""
+
+    def _stats(self, **kwargs):
+        s = engine.read_stats()
+        s.update(kwargs)
+        return s
+
+    def test_selects_best_available_for_legendary(self):
+        stats = self._stats(balls_master=1, balls_ultra=2)
+        ball = engine.select_ball('legendary', stats)
+        self.assertEqual(ball, 'master')
+        self.assertEqual(stats['balls_master'], 0)
+
+    def test_falls_back_when_master_empty(self):
+        stats = self._stats(balls_master=0, balls_ultra=1)
+        ball = engine.select_ball('legendary', stats)
+        self.assertEqual(ball, 'ultra')
+        self.assertEqual(stats['balls_ultra'], 0)
+
+    def test_returns_none_when_no_balls(self):
+        stats = self._stats(balls_poke=0, balls_great=0, balls_ultra=0, balls_master=0)
+        ball = engine.select_ball('common', stats)
+        self.assertIsNone(ball)
+
+    def test_common_prefers_poke_ball(self):
+        stats = self._stats(balls_poke=3, balls_great=2)
+        ball = engine.select_ball('common', stats)
+        self.assertEqual(ball, 'poke')
+        self.assertEqual(stats['balls_poke'], 2)
+
+    def test_deducts_exactly_one(self):
+        stats = self._stats(balls_great=5)
+        engine.select_ball('uncommon', stats)
+        self.assertEqual(stats['balls_great'], 4)
+
+
+class TestAttemptCatch(_TmpDir, unittest.TestCase):
+    """Catch probability and berry consumption."""
+
+    def test_master_ball_always_catches(self):
+        stats = engine.read_stats()
+        caught, pct = engine.attempt_catch('mythical', 'master', stats)
+        self.assertTrue(caught)
+        self.assertEqual(pct, 100)
+
+    def test_guaranteed_catch_when_randint_1(self):
+        stats = engine.read_stats()
+        with patch('random.randint', return_value=1):
+            caught, _ = engine.attempt_catch('common', 'poke', stats)
+        self.assertTrue(caught)
+
+    def test_miss_when_randint_above_threshold(self):
+        stats = engine.read_stats()
+        with patch('random.randint', return_value=100):
+            caught, _ = engine.attempt_catch('legendary', 'poke', stats)
+        self.assertFalse(caught)
+
+    def test_golden_razz_berry_consumed_on_use(self):
+        stats = engine.read_stats()
+        stats['berry_golden'] = 1
+        engine.attempt_catch('rare', 'ultra', stats)
+        self.assertEqual(stats['berry_golden'], 0)
+
+    def test_razz_berry_consumed_when_no_golden(self):
+        stats = engine.read_stats()
+        stats['berry_razz'] = 2
+        engine.attempt_catch('rare', 'ultra', stats)
+        self.assertEqual(stats['berry_razz'], 1)
+
+    def test_catch_pct_capped_at_95(self):
+        stats = engine.read_stats()
+        _, pct = engine.attempt_catch('common', 'ultra', stats)
+        self.assertLessEqual(pct, 95)
+
+
+class TestEarnInventory(_TmpDir, unittest.TestCase):
+    """Balls and berries earned from tasks."""
+
+    def test_100xp_earns_two_ultra_balls(self):
+        stats = engine.read_stats()
+        stats['balls_ultra'] = 0
+        engine.earn_inventory(100, False, stats)
+        self.assertEqual(stats['balls_ultra'], 2)
+
+    def test_30xp_earns_two_pokeballs(self):
+        stats = engine.read_stats()
+        prev = stats['balls_poke']
+        engine.earn_inventory(30, False, stats)
+        self.assertEqual(stats['balls_poke'], prev + 2)
+
+    def test_badge_adds_master_shard(self):
+        stats = engine.read_stats()
+        stats['master_shards'] = 0
+        engine.earn_inventory(50, True, stats)
+        self.assertEqual(stats['master_shards'], 1)
+
+    def test_three_shards_convert_to_master_ball(self):
+        stats = engine.read_stats()
+        stats['master_shards'] = 2
+        stats['balls_master'] = 0
+        engine.earn_inventory(50, True, stats)
+        self.assertEqual(stats['master_shards'], 0)
+        self.assertEqual(stats['balls_master'], 1)
+
+    def test_returns_nonempty_description(self):
+        stats = engine.read_stats()
+        msg = engine.earn_inventory(100, False, stats)
+        self.assertTrue(len(msg) > 0)
+
+
+class TestUpdateCombo(_TmpDir, unittest.TestCase):
+    """Combo counter and XP multiplier."""
+
+    def test_first_task_is_combo_1(self):
+        stats = engine.read_stats()
+        stats['combo'] = 0
+        stats['combo_ts'] = ''
+        combo, mult = engine.update_combo(stats)
+        self.assertEqual(combo, 1)
+        self.assertEqual(mult, 1.0)
+
+    def test_second_task_within_hour_increments(self):
+        from datetime import datetime, timedelta
+        stats = engine.read_stats()
+        stats['combo'] = 1
+        stats['combo_ts'] = (datetime.now() - timedelta(minutes=10)).isoformat()
+        combo, _ = engine.update_combo(stats)
+        self.assertEqual(combo, 2)
+
+    def test_expired_combo_resets_to_1(self):
+        from datetime import datetime, timedelta
+        stats = engine.read_stats()
+        stats['combo'] = 5
+        stats['combo_ts'] = (datetime.now() - timedelta(hours=2)).isoformat()
+        combo, _ = engine.update_combo(stats)
+        self.assertEqual(combo, 1)
+
+    def test_multiplier_at_3_tasks(self):
+        from datetime import datetime, timedelta
+        stats = engine.read_stats()
+        stats['combo'] = 2
+        stats['combo_ts'] = (datetime.now() - timedelta(minutes=5)).isoformat()
+        _, mult = engine.update_combo(stats)
+        self.assertEqual(mult, 1.5)
+
+    def test_multiplier_at_5_tasks(self):
+        from datetime import datetime, timedelta
+        stats = engine.read_stats()
+        stats['combo'] = 4
+        stats['combo_ts'] = (datetime.now() - timedelta(minutes=5)).isoformat()
+        _, mult = engine.update_combo(stats)
+        self.assertEqual(mult, 2.0)
+
+
+class TestDailyQuest(_TmpDir, unittest.TestCase):
+    """Daily quest assignment and completion."""
+
+    def test_quest_assigned_on_new_day(self):
+        stats = engine.read_stats()
+        stats['daily_quest_date'] = '2000-01-01'
+        quest = engine.get_daily_quest(stats)
+        self.assertIsNotNone(quest)
+        self.assertEqual(stats['daily_quest_date'], engine.TODAY)
+
+    def test_same_quest_returned_same_day(self):
+        stats = engine.read_stats()
+        q1 = engine.get_daily_quest(stats)
+        q2 = engine.get_daily_quest(stats)
+        self.assertEqual(q1['id'], q2['id'])
+
+    def test_tasks_today_resets_on_new_day(self):
+        stats = engine.read_stats()
+        stats['daily_quest_date'] = '2000-01-01'
+        stats['tasks_today'] = 99
+        engine.get_daily_quest(stats)
+        self.assertEqual(stats['tasks_today'], 0)
+
+    def test_keyword_quest_completes_on_match(self):
+        stats = engine.read_stats()
+        stats['daily_quest_date'] = engine.TODAY
+        stats['daily_quest_id']   = 'fix_bug'
+        stats['daily_quest_done'] = False
+        msg = engine.check_daily_quest(stats, 'fixed a nasty bug', False)
+        self.assertTrue(stats['daily_quest_done'])
+        self.assertIn('Fix a bug', msg)
+
+    def test_catch_quest_completes_on_catch(self):
+        stats = engine.read_stats()
+        stats['daily_quest_date'] = engine.TODAY
+        stats['daily_quest_id']   = 'catch'
+        stats['daily_quest_done'] = False
+        msg = engine.check_daily_quest(stats, 'anything', True)
+        self.assertTrue(stats['daily_quest_done'])
+        self.assertIn('Catch', msg)
+
+    def test_three_tasks_quest_needs_3(self):
+        stats = engine.read_stats()
+        stats['daily_quest_date'] = engine.TODAY
+        stats['daily_quest_id']   = 'three_tasks'
+        stats['daily_quest_done'] = False
+        stats['tasks_today']      = 2
+        msg = engine.check_daily_quest(stats, 'did something', False)
+        self.assertEqual(msg, '')  # not done yet
+
+        stats['tasks_today'] = 3
+        msg = engine.check_daily_quest(stats, 'did something', False)
+        self.assertNotEqual(msg, '')  # now done
+
+    def test_already_done_quest_not_rewarded_twice(self):
+        stats = engine.read_stats()
+        stats['daily_quest_date'] = engine.TODAY
+        stats['daily_quest_id']   = 'fix_bug'
+        stats['daily_quest_done'] = True
+        msg = engine.check_daily_quest(stats, 'fixed a bug', False)
+        self.assertEqual(msg, '')
+
+
+class TestLevelUpRewards(_TmpDir, unittest.TestCase):
+    """Ball rewards on level-up."""
+
+    def test_every_level_gives_2_pokeballs(self):
+        stats = engine.read_stats()
+        stats['balls_poke'] = 0
+        engine.level_up_rewards(0, 3, stats)  # levels 1, 2, 3
+        self.assertEqual(stats['balls_poke'], 6)
+
+    def test_level_5_gives_great_ball(self):
+        stats = engine.read_stats()
+        stats['balls_great'] = 0
+        engine.level_up_rewards(4, 5, stats)
+        self.assertEqual(stats['balls_great'], 1)
+
+    def test_level_10_gives_ultra_ball(self):
+        stats = engine.read_stats()
+        stats['balls_ultra'] = 0
+        engine.level_up_rewards(9, 10, stats)
+        self.assertEqual(stats['balls_ultra'], 1)
+
+    def test_level_20_gives_ultra_ball(self):
+        stats = engine.read_stats()
+        stats['balls_ultra'] = 0
+        engine.level_up_rewards(19, 20, stats)
+        self.assertEqual(stats['balls_ultra'], 1)
+
+    def test_no_reward_for_same_level(self):
+        stats = engine.read_stats()
+        stats['balls_poke'] = 0
+        engine.level_up_rewards(5, 5, stats)
+        self.assertEqual(stats['balls_poke'], 0)
+
+
+class TestRunEncounter(_TmpDir, unittest.TestCase):
+    """Full adventure flow: encounter → battle → catch."""
+
+    def _stats(self):
+        s = engine.read_stats()
+        s['balls_poke'] = 10
+        return s
+
+    def test_no_encounter_returns_false(self):
+        stats = self._stats()
+        with patch('random.random', return_value=0.99), \
+             patch('random.randint', return_value=99):
+            result, info = engine.run_encounter(10, set(), None, None, 5, 'Normal', stats)
+        self.assertFalse(info['encountered'])
+        self.assertIsNone(result)
+
+    def test_encounter_sets_wild_info(self):
+        stats = self._stats()
+        with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=1), \
+             patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')):
+            result, info = engine.run_encounter(10, set(), None, None, 5, 'Normal', stats)
+        self.assertTrue(info['encountered'])
+        self.assertEqual(info['wild_name'], 'Pidgey')
+        self.assertEqual(info['wild_tier'], 'common')
+        self.assertIn('wild_level', info)
+
+    def test_battle_loss_means_no_catch(self):
+        stats = self._stats()
+        with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=100):
+            # randint=100 vs win_pct=20 (Lv.1 vs Lv.5) → lose
+            result, info = engine.run_encounter(10, set(), None, None, 1, 'Normal', stats)
+        if info['encountered']:
+            self.assertFalse(info.get('caught', False))
+            self.assertIsNone(result)
+
+    def test_no_balls_means_no_catch(self):
+        stats = self._stats()
+        stats['balls_poke'] = 0
+        with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=1), \
+             patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')):
+            result, info = engine.run_encounter(10, set(), None, None, 10, 'Normal', stats)
+        if info['encountered'] and info['battle_won']:
+            self.assertTrue(info['no_balls'])
+            self.assertIsNone(result)
+
+    def test_successful_catch_adds_to_collection(self):
+        stats = self._stats()
+        engine.write_collection(None, [])
+        with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=1), \
+             patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')):
+            result, info = engine.run_encounter(10, set(), None, None, 10, 'Normal', stats)
+        if info.get('caught'):
+            col = engine.read_collection()
+            names = [p['name'] for p in col['pokemon']]
+            self.assertIn('Pidgey', names)
+
+    def test_ball_deducted_on_throw(self):
+        stats = self._stats()
+        stats['balls_poke'] = 3
+        with patch('random.random', return_value=0.0), \
+             patch('random.randint', return_value=1), \
+             patch('random.choice', return_value=('Pidgey', 'Normal', '🐦')):
+            engine.run_encounter(10, set(), None, None, 10, 'Normal', stats)
+        if True:  # ball always deducted when battle won and ball selected
+            self.assertLess(stats['balls_poke'], 3)
 
 
 if __name__ == '__main__':

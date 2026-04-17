@@ -86,16 +86,143 @@ BUDDY_RARITY_BOOST = {
     'mythical':  {'rare': 3.0, 'legendary': 2.5, 'mythical': 2.0},
 }
 
-CATCH_RATES = {
-    10:  [('common',    0.08)],
-    20:  [('common',    0.10)],
-    25:  [('common',    0.10)],
-    30:  [('common',    0.15), ('uncommon',  0.03)],
-    40:  [('common',    0.25), ('uncommon',  0.10), ('rare',      0.02)],
-    50:  [('uncommon',  0.15), ('rare',      0.04)],
-    75:  [('uncommon',  0.25), ('rare',      0.08)],
-    100: [('uncommon',  0.20), ('rare',      0.15), ('legendary', 0.04), ('mythical', 0.01)],
+# Encounter rates — chance a wild Pokémon appears per XP tier (increased; catching is no longer auto)
+ENCOUNTER_RATES = {
+    10:  [('common',    0.25)],
+    20:  [('common',    0.35)],
+    25:  [('common',    0.40)],
+    30:  [('common',    0.50), ('uncommon',  0.12)],
+    35:  [('common',    0.45), ('uncommon',  0.12)],
+    40:  [('common',    0.60), ('uncommon',  0.28), ('rare',      0.06)],
+    50:  [('uncommon',  0.40), ('rare',      0.12)],
+    75:  [('uncommon',  0.50), ('rare',      0.22)],
+    100: [('uncommon',  0.45), ('rare',      0.35), ('legendary', 0.10), ('mythical', 0.03)],
 }
+
+# ── Pokéball system ───────────────────────────────────────────────────────────
+
+POKEBALL_TYPES = {
+    'master': {'emoji': '🟣', 'name': 'Master Ball', 'multiplier': 999.0},
+    'ultra':  {'emoji': '🟡', 'name': 'Ultra Ball',  'multiplier': 2.0},
+    'great':  {'emoji': '🔵', 'name': 'Great Ball',  'multiplier': 1.5},
+    'poke':   {'emoji': '🔴', 'name': 'Poké Ball',   'multiplier': 1.0},
+}
+
+# Auto-select priority per wild Pokémon rarity (first available wins)
+BALL_BY_RARITY = {
+    'mythical':  ['master', 'ultra', 'great', 'poke'],
+    'legendary': ['master', 'ultra', 'great', 'poke'],
+    'rare':      ['ultra', 'great', 'poke'],
+    'uncommon':  ['great', 'poke'],
+    'common':    ['poke', 'great'],
+}
+
+# Balls earned alongside XP (by base XP value)
+BALL_EARN_BY_XP = {
+    10:  {'poke': 1},
+    20:  {'poke': 1},
+    25:  {'poke': 1},
+    30:  {'poke': 2},
+    35:  {'poke': 1, 'great': 1},
+    40:  {'poke': 1, 'great': 1},
+    50:  {'great': 1},
+    75:  {'great': 1, 'ultra': 1},
+    100: {'ultra': 2},
+}
+
+# ── Berry system ──────────────────────────────────────────────────────────────
+
+BERRY_TYPES = {
+    'razz':   {'emoji': '🍓', 'name': 'Razz Berry',        'catch_boost': 1.2},
+    'nanab':  {'emoji': '🍌', 'name': 'Nanab Berry',       'flee_reduce': 0.5},
+    'pinap':  {'emoji': '🍍', 'name': 'Pinap Berry',       'xp_boost': 2.0},
+    'golden': {'emoji': '🌟', 'name': 'Golden Razz Berry', 'catch_boost': 1.5},
+}
+
+# Berry drop chances by base XP (rolled independently after task)
+BERRY_DROP_RATES = {
+    10:  [('razz', 0.05)],
+    20:  [('razz', 0.08)],
+    25:  [('razz', 0.10)],
+    30:  [('razz', 0.12), ('nanab', 0.04)],
+    35:  [('razz', 0.12), ('nanab', 0.04)],
+    40:  [('razz', 0.15), ('nanab', 0.08), ('pinap', 0.03)],
+    50:  [('nanab', 0.10), ('pinap', 0.05)],
+    75:  [('pinap', 0.10), ('golden', 0.03)],
+    100: [('pinap', 0.15), ('golden', 0.08)],
+}
+
+# ── Battle system ─────────────────────────────────────────────────────────────
+
+# Wild Pokémon level range per tier (min, max)
+WILD_LEVELS = {
+    'common':    (1,  5),
+    'uncommon':  (5,  15),
+    'rare':      (15, 30),
+    'legendary': (30, 50),
+    'mythical':  (40, 60),
+}
+
+# Base catch probability per tier (post-battle, pre-ball multiplier)
+BASE_CATCH_RATES = {
+    'common':    0.85,
+    'uncommon':  0.65,
+    'rare':      0.40,
+    'legendary': 0.12,
+    'mythical':  0.05,
+}
+
+# Type advantage: buddy_type → wild types it's strong against (+20% win chance)
+TYPE_ADVANTAGE = {
+    'Fire':     ['Grass', 'Bug', 'Steel', 'Ice'],
+    'Water':    ['Fire', 'Ground', 'Rock'],
+    'Grass':    ['Water', 'Ground', 'Rock'],
+    'Electric': ['Water', 'Flying'],
+    'Normal':   [],
+    'Poison':   ['Grass', 'Fairy'],
+    'Rock':     ['Fire', 'Ice', 'Flying', 'Bug'],
+    'Ground':   ['Fire', 'Electric', 'Poison', 'Rock', 'Steel'],
+    'Bug':      ['Grass', 'Poison', 'Psychic'],
+    'Ice':      ['Grass', 'Ground', 'Flying', 'Dragon'],
+    'Psychic':  ['Fighting', 'Poison'],
+    'Dragon':   ['Dragon'],
+    'Dark':     ['Psychic', 'Ghost'],
+    'Fighting': ['Normal', 'Ice', 'Rock', 'Dark', 'Steel'],
+    'Ghost':    ['Psychic', 'Ghost'],
+    'Steel':    ['Ice', 'Rock', 'Fairy'],
+    'Fairy':    ['Fighting', 'Dragon', 'Dark'],
+    'Flying':   ['Grass', 'Fighting', 'Bug'],
+}
+
+# ── Combo & rewards ───────────────────────────────────────────────────────────
+
+# Combo multipliers: (min_tasks_this_hour, xp_multiplier)
+COMBO_MULTIPLIERS = [
+    (5, 2.0),
+    (3, 1.5),
+    (2, 1.2),
+    (1, 1.0),
+]
+COMBO_WINDOW_SECS = 3600  # 1 hour window for combo
+
+# Ball rewards on level-up (every level: +2 poke; every 5: +1 great; every 10: +1 ultra)
+# Milestone overrides for special levels
+LEVEL_UP_MILESTONE_REWARDS = {
+    50: {'ultra': 2, 'msg': '🏆 Lv.50 milestone!'},
+}
+
+# Daily quest pool — picked by hash(TODAY) % len
+DAILY_QUESTS = [
+    {'id': 'fix_bug',     'desc': 'Fix a bug today',        'keywords': ['bug', 'fix', 'error', 'patch', 'hotfix'],       'reward': 'ultra',  'qty': 1},
+    {'id': 'learn',       'desc': 'Learn something new',    'keywords': ['learn', 'understand', 'concept', 'explain', 'study', 'research'], 'reward': 'xp', 'qty': 25},
+    {'id': 'feature',     'desc': 'Implement a feature',    'keywords': ['feature', 'implement', 'complete', 'finish'],    'reward': 'great',  'qty': 2},
+    {'id': 'ship',        'desc': 'Ship to production',     'keywords': ['ship', 'deploy', 'release', 'production'],       'reward': 'shard',  'qty': 1},
+    {'id': 'test',        'desc': 'Write or fix tests',     'keywords': ['test', 'spec', 'coverage', 'e2e', 'unit test'],  'reward': 'great',  'qty': 1},
+    {'id': 'refactor',    'desc': 'Refactor some code',     'keywords': ['refactor', 'cleanup', 'rewrite', 'clean'],       'reward': 'razz',   'qty': 2},
+    {'id': 'catch',       'desc': 'Catch a wild Pokémon',   'keywords': [],                                                'reward': 'great',  'qty': 1},
+    {'id': 'research',    'desc': 'Research something',     'keywords': ['research', 'explore', 'discover', 'study'],      'reward': 'pinap',  'qty': 1},
+    {'id': 'three_tasks', 'desc': 'Complete 3 tasks',       'keywords': [],                                                'reward': 'ultra',  'qty': 1},
+]
 
 POKEMON_POOL = {
     'common': [

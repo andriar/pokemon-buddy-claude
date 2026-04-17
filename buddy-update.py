@@ -19,7 +19,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from lib.data import (
     STARTER_DATA, MOVE_UNLOCKS, RARITY_START_LEVEL, BUDDY_RARITY_BOOST,
-    CATCH_RATES, POKEMON_POOL, XP_RULES, MILESTONES, TITLE_RULES, BUDDY_TEMPLATE,
+    ENCOUNTER_RATES, POKEMON_POOL, XP_RULES, MILESTONES, TITLE_RULES, BUDDY_TEMPLATE,
+    POKEBALL_TYPES, BALL_BY_RARITY, BALL_EARN_BY_XP,
+    BERRY_TYPES, BERRY_DROP_RATES,
+    WILD_LEVELS, BASE_CATCH_RATES, TYPE_ADVANTAGE,
+    COMBO_MULTIPLIERS, COMBO_WINDOW_SECS, LEVEL_UP_MILESTONE_REWARDS,
+    DAILY_QUESTS,
 )
 
 # ── Windows UTF-8 stdout (emoji safe) ────────────────────────────────────────
@@ -47,13 +52,14 @@ BUDDY_FILE      = Path.home() / '.claude' / 'buddy-pokemon.md'
 COLLECTION_FILE = Path.home() / '.claude' / 'pokemon-collection.md'
 STATS_FILE      = Path.home() / '.claude' / 'buddy-stats.md'
 STATE_FILE      = Path.home() / '.claude' / 'buddy-state.txt'
+ENCOUNTER_FILE  = Path.home() / '.claude' / 'buddy-encounter.json'
 TODAY           = date.today().strftime('%Y-%m-%d')
 LOG_CAP         = 15
 ARCHIVE_FILE    = Path.home() / '.claude' / 'buddy-log-archive.md'
 
-SHINY_RATE        = 1 / 200   # 0.5% — rarer than legendary
+SHINY_RATE        = 1 / 200   # 0.5%
 STREAK_BONUS_XP   = 20        # bonus XP for first award of the day
-STATS_SCHEMA_VER  = 1         # bump when buddy-stats.md format changes
+STATS_SCHEMA_VER  = 2         # bumped: added inventory, combo, daily quest
 
 # ── Pokemon data, XP rules — see lib/data.py ──────────────────────────────────
 
@@ -132,36 +138,59 @@ def read_stats():
         'total_xp_ever': 0, 'bug_fixes': 0, 'features': 0, 'ships': 0,
         'caught_legendary': False, 'caught_mythical': False, 'caught_shiny': False,
         'milestones': set(),
+        # Inventory (new trainers start with 5 Poké Balls)
+        'balls_poke': 5, 'balls_great': 0, 'balls_ultra': 0, 'balls_master': 0,
+        'master_shards': 0,
+        'berry_razz': 0, 'berry_nanab': 0, 'berry_pinap': 0, 'berry_golden': 0,
+        # Combo
+        'combo': 0, 'combo_ts': '',
+        # Daily quest
+        'daily_quest_date': '', 'daily_quest_id': '', 'daily_quest_done': False,
+        'tasks_today': 0,
     }
     if not STATS_FILE.exists():
         return defaults
     text = STATS_FILE.read_text(encoding='utf-8')
     def gi(key):
-        m = re.search(rf'\*\*{key}\*\*:\s*(\d+)', text)
+        m = re.search(rf'\*\*{key}\*\*:\s*(-?\d+)', text)
         return int(m.group(1)) if m else defaults.get(key, 0)
     def gb(key):
         m = re.search(rf'\*\*{key}\*\*:\s*(true|false)', text)
         return (m.group(1) == 'true') if m else defaults.get(key, False)
     def gs(key):
-        m = re.search(rf'\*\*{key}\*\*:\s*(\S+)', text)
-        return m.group(1) if m else defaults.get(key, '')
+        m = re.search(rf'\*\*{key}\*\*:\s*(.+)', text)
+        return m.group(1).strip() if m else defaults.get(key, '')
     ms_section = re.search(r'## Milestones Awarded\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
     milestones = set(re.findall(r'^- (\S+)', ms_section.group(1), re.MULTILINE)) if ms_section else set()
     stats = {
-        'schema_version':   gi('schema_version') or STATS_SCHEMA_VER,
-        'streak':           gi('streak'),
-        'last_xp_date':     gs('last_xp_date'),
-        'longest_streak':   gi('longest_streak'),
-        'total_xp_ever':    gi('total_xp_ever'),
-        'bug_fixes':        gi('bug_fixes'),
-        'features':         gi('features'),
-        'ships':            gi('ships'),
-        'caught_legendary': gb('caught_legendary'),
-        'caught_mythical':  gb('caught_mythical'),
-        'caught_shiny':     gb('caught_shiny'),
-        'milestones':       milestones,
+        'schema_version':    gi('schema_version') or STATS_SCHEMA_VER,
+        'streak':            gi('streak'),
+        'last_xp_date':      gs('last_xp_date'),
+        'longest_streak':    gi('longest_streak'),
+        'total_xp_ever':     gi('total_xp_ever'),
+        'bug_fixes':         gi('bug_fixes'),
+        'features':          gi('features'),
+        'ships':             gi('ships'),
+        'caught_legendary':  gb('caught_legendary'),
+        'caught_mythical':   gb('caught_mythical'),
+        'caught_shiny':      gb('caught_shiny'),
+        'milestones':        milestones,
+        'balls_poke':        gi('balls_poke') if '**balls_poke**' in text else defaults['balls_poke'],
+        'balls_great':       gi('balls_great'),
+        'balls_ultra':       gi('balls_ultra'),
+        'balls_master':      gi('balls_master'),
+        'master_shards':     gi('master_shards'),
+        'berry_razz':        gi('berry_razz'),
+        'berry_nanab':       gi('berry_nanab'),
+        'berry_pinap':       gi('berry_pinap'),
+        'berry_golden':      gi('berry_golden'),
+        'combo':             gi('combo'),
+        'combo_ts':          gs('combo_ts'),
+        'daily_quest_date':  gs('daily_quest_date'),
+        'daily_quest_id':    gs('daily_quest_id'),
+        'daily_quest_done':  gb('daily_quest_done'),
+        'tasks_today':       gi('tasks_today'),
     }
-    # Future migrations go here: if stats['schema_version'] < N: _migrate_stats_vN(stats)
     return stats
 
 def write_stats(s):
@@ -179,7 +208,22 @@ def write_stats(s):
         f'**ships**: {s["ships"]}\n'
         f'**caught_legendary**: {b(s["caught_legendary"])}\n'
         f'**caught_mythical**: {b(s["caught_mythical"])}\n'
-        f'**caught_shiny**: {b(s["caught_shiny"])}\n\n'
+        f'**caught_shiny**: {b(s["caught_shiny"])}\n'
+        f'**balls_poke**: {s.get("balls_poke", 0)}\n'
+        f'**balls_great**: {s.get("balls_great", 0)}\n'
+        f'**balls_ultra**: {s.get("balls_ultra", 0)}\n'
+        f'**balls_master**: {s.get("balls_master", 0)}\n'
+        f'**master_shards**: {s.get("master_shards", 0)}\n'
+        f'**berry_razz**: {s.get("berry_razz", 0)}\n'
+        f'**berry_nanab**: {s.get("berry_nanab", 0)}\n'
+        f'**berry_pinap**: {s.get("berry_pinap", 0)}\n'
+        f'**berry_golden**: {s.get("berry_golden", 0)}\n'
+        f'**combo**: {s.get("combo", 0)}\n'
+        f'**combo_ts**: {s.get("combo_ts", "")}\n'
+        f'**daily_quest_date**: {s.get("daily_quest_date", "")}\n'
+        f'**daily_quest_id**: {s.get("daily_quest_id", "")}\n'
+        f'**daily_quest_done**: {b(s.get("daily_quest_done", False))}\n'
+        f'**tasks_today**: {s.get("tasks_today", 0)}\n\n'
         f'## Milestones Awarded\n\n'
         f'{ms_lines}\n'
     )
@@ -371,31 +415,257 @@ def get_buddy_rarity():
         return None
     return active.get('rarity', '').replace('-shiny', '') or None
 
-def roll_catch(add_xp, owned_names, role_type=None, buddy_rarity=None):
-    """Returns (tier, name, type, emoji, is_shiny) or None.
-    role_type: if set, matching-type Pokemon are 3× more likely to be chosen.
-    buddy_rarity: if set, boosts catch probabilities for higher-rarity tiers.
-    """
-    rates = CATCH_RATES.get(add_xp, [('common', 0.05)])
+def _roll_encounter_tier(base_xp, buddy_rarity):
+    """Roll which tier of wild Pokémon appears, or None if no encounter."""
+    rates  = ENCOUNTER_RATES.get(base_xp, [('common', 0.25)])
     boosts = BUDDY_RARITY_BOOST.get(buddy_rarity, {}) if buddy_rarity else {}
-    caught_tier = None
+    found  = None
     for tier, prob in sorted(rates, key=lambda x: list(POKEMON_POOL.keys()).index(x[0])):
-        boosted_prob = min(1.0, prob * boosts.get(tier, 1.0))
-        if random.random() < boosted_prob:
-            caught_tier = tier
-    if not caught_tier:
-        return None
-    pool = POKEMON_POOL[caught_tier]
-    available = [p for p in pool if p[0] not in owned_names]
-    if not available:
-        available = pool
+        if random.random() < min(1.0, prob * boosts.get(tier, 1.0)):
+            found = tier
+    return found
+
+def _pick_wild(tier, owned_names, role_type):
+    """Pick a wild Pokémon from the pool, preferring unseen and role-type matches."""
+    pool      = POKEMON_POOL[tier]
+    available = [p for p in pool if p[0] not in owned_names] or pool
     if role_type:
         weights = [3 if p[1] == role_type else 1 for p in available]
-        chosen = random.choices(available, weights=weights, k=1)[0]
+        return random.choices(available, weights=weights, k=1)[0]
+    return random.choice(available)
+
+def run_battle(buddy_level, buddy_type, wild_level, wild_type):
+    """Returns (won: bool, win_pct: int)."""
+    advantage = wild_type in TYPE_ADVANTAGE.get(buddy_type or '', [])
+    base = buddy_level / max(1, wild_level) * 70
+    if advantage:
+        base += 20
+    win_pct = max(20, min(95, int(base)))
+    return random.randint(1, 100) <= win_pct, win_pct
+
+def select_ball(tier, stats):
+    """Pick best available ball for the tier. Deducts 1 from stats. Returns ball_key or None."""
+    for ball in BALL_BY_RARITY.get(tier, ['poke']):
+        key = f'balls_{ball}'
+        if stats.get(key, 0) > 0:
+            stats[key] -= 1
+            return ball
+    return None
+
+def attempt_catch(tier, ball_key, stats):
+    """Roll the catch. Returns (caught: bool, catch_pct: int). Uses best berry automatically."""
+    if ball_key == 'master':
+        return True, 100
+    base = BASE_CATCH_RATES.get(tier, 0.5)
+    mult = POKEBALL_TYPES.get(ball_key, {}).get('multiplier', 1.0)
+    # Auto-use best available berry
+    berry_used = None
+    if stats.get('berry_golden', 0) > 0:
+        mult *= BERRY_TYPES['golden']['catch_boost']
+        stats['berry_golden'] -= 1
+        berry_used = 'golden'
+    elif stats.get('berry_razz', 0) > 0:
+        mult *= BERRY_TYPES['razz']['catch_boost']
+        stats['berry_razz'] -= 1
+        berry_used = 'razz'
+    catch_pct = min(95, int(base * mult * 100))
+    return random.randint(1, 100) <= catch_pct, catch_pct
+
+def earn_inventory(base_xp, is_badge, stats):
+    """Add balls and berries earned from the task. Returns description string."""
+    earned = []
+    ball_gains = BALL_EARN_BY_XP.get(base_xp, {'poke': 1})
+    if is_badge:
+        ball_gains = {'poke': 1}  # badge gives shard separately
+    for ball, qty in ball_gains.items():
+        key = f'balls_{ball}'
+        stats[key] = stats.get(key, 0) + qty
+        info = POKEBALL_TYPES.get(ball, {})
+        earned.append(f'{info.get("emoji","🔴")} {info.get("name","Ball")} ×{qty}')
+    # Roll berries
+    for berry, chance in BERRY_DROP_RATES.get(base_xp, []):
+        if random.random() < chance:
+            key = f'berry_{berry}'
+            stats[key] = stats.get(key, 0) + 1
+            info = BERRY_TYPES.get(berry, {})
+            earned.append(f'{info.get("emoji","🍓")} {info.get("name","Berry")} ×1')
+            break  # max 1 berry per task
+    if is_badge:
+        stats['master_shards'] = stats.get('master_shards', 0) + 1
+        if stats['master_shards'] >= 3:
+            stats['master_shards'] -= 3
+            stats['balls_master'] = stats.get('balls_master', 0) + 1
+            earned.append('🟣 Master Ball ×1 (3 shards!)')
+        else:
+            earned.append(f'💠 Master Shard ×1 ({stats["master_shards"]}/3)')
+    return '  '.join(earned) if earned else ''
+
+def update_combo(stats):
+    """Update combo counter. Returns (combo_count: int, xp_multiplier: float)."""
+    now = datetime.now()
+    ts_str = stats.get('combo_ts', '')
+    if ts_str:
+        try:
+            last = datetime.fromisoformat(ts_str)
+            elapsed = (now - last).total_seconds()
+        except ValueError:
+            elapsed = COMBO_WINDOW_SECS + 1
     else:
-        chosen = random.choice(available)
-    is_shiny = random.random() < SHINY_RATE
-    return (caught_tier, chosen[0], chosen[1], chosen[2], is_shiny)
+        elapsed = COMBO_WINDOW_SECS + 1
+    if elapsed > COMBO_WINDOW_SECS:
+        stats['combo'] = 1
+    else:
+        stats['combo'] = stats.get('combo', 0) + 1
+    stats['combo_ts'] = now.isoformat()
+    combo = stats['combo']
+    mult = next((m for min_c, m in COMBO_MULTIPLIERS if combo >= min_c), 1.0)
+    return combo, mult
+
+def get_daily_quest(stats):
+    """Return today's quest dict (resets each day)."""
+    if stats.get('daily_quest_date') != TODAY:
+        idx = hash(TODAY) % len(DAILY_QUESTS)
+        stats['daily_quest_date'] = TODAY
+        stats['daily_quest_id']   = DAILY_QUESTS[idx]['id']
+        stats['daily_quest_done'] = False
+        stats['tasks_today']      = 0
+    return next((q for q in DAILY_QUESTS if q['id'] == stats['daily_quest_id']), None)
+
+def check_daily_quest(stats, desc, did_catch):
+    """Check if daily quest completed. Returns reward description or ''."""
+    if stats.get('daily_quest_done'):
+        return ''
+    quest = get_daily_quest(stats)
+    if not quest:
+        return ''
+    dl = desc.lower()
+    completed = False
+    if quest['id'] == 'catch':
+        completed = did_catch
+    elif quest['id'] == 'three_tasks':
+        completed = stats.get('tasks_today', 0) >= 3
+    elif quest['keywords']:
+        completed = any(k in dl for k in quest['keywords'])
+    if not completed:
+        return ''
+    stats['daily_quest_done'] = True
+    reward = quest['reward']
+    qty    = quest['qty']
+    if reward == 'ultra':
+        stats['balls_ultra'] = stats.get('balls_ultra', 0) + qty
+        return f'📋 Quest "{quest["desc"]}" done! → 🟡 Ultra Ball ×{qty}'
+    elif reward == 'great':
+        stats['balls_great'] = stats.get('balls_great', 0) + qty
+        return f'📋 Quest "{quest["desc"]}" done! → 🔵 Great Ball ×{qty}'
+    elif reward == 'xp':
+        return f'📋 Quest "{quest["desc"]}" done! → +{qty} bonus XP'
+    elif reward == 'shard':
+        stats['master_shards'] = stats.get('master_shards', 0) + 1
+        if stats['master_shards'] >= 3:
+            stats['master_shards'] -= 3
+            stats['balls_master']   = stats.get('balls_master', 0) + 1
+            return f'📋 Quest "{quest["desc"]}" done! → 🟣 Master Ball ×1 (3 shards!)'
+        return f'📋 Quest "{quest["desc"]}" done! → 💠 Master Shard ({stats["master_shards"]}/3)'
+    elif reward == 'razz':
+        stats['berry_razz'] = stats.get('berry_razz', 0) + qty
+        return f'📋 Quest "{quest["desc"]}" done! → 🍓 Razz Berry ×{qty}'
+    elif reward == 'pinap':
+        stats['berry_pinap'] = stats.get('berry_pinap', 0) + qty
+        return f'📋 Quest "{quest["desc"]}" done! → 🍍 Pinap Berry ×{qty}'
+    return ''
+
+def level_up_rewards(old_level, new_level, stats):
+    """Award balls for levels gained. Returns description or ''."""
+    parts = []
+    for lv in range(old_level + 1, new_level + 1):
+        stats['balls_poke'] = stats.get('balls_poke', 0) + 2
+        if lv % 10 == 0:
+            stats['balls_ultra'] = stats.get('balls_ultra', 0) + 1
+            parts.append(f'🟡 Lv.{lv}: Ultra Ball +1')
+        elif lv % 5 == 0:
+            stats['balls_great'] = stats.get('balls_great', 0) + 1
+            parts.append(f'🔵 Lv.{lv}: Great Ball +1')
+        if lv in LEVEL_UP_MILESTONE_REWARDS:
+            ms = LEVEL_UP_MILESTONE_REWARDS[lv]
+            for ball, qty in ms.items():
+                if ball == 'msg':
+                    continue
+                key = f'balls_{ball}'
+                stats[key] = stats.get(key, 0) + qty
+            parts.append(ms.get('msg', ''))
+    return '  '.join(p for p in parts if p)
+
+def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
+                  buddy_level, buddy_type, stats):
+    """Full adventure flow: spawn → battle → ball throw.
+
+    Returns (catch_result, encounter_info) where:
+      catch_result = (tier, name, type, emoji, is_shiny) or None  (for milestone compat)
+      encounter_info = dict with full battle/catch details
+    """
+    tier = _roll_encounter_tier(base_xp, buddy_rarity)
+    if not tier:
+        return None, {'encountered': False}
+
+    wild_name, wild_type, wild_emoji = _pick_wild(tier, owned_names, role_type)
+    lv_min, lv_max = WILD_LEVELS.get(tier, (1, 5))
+    wild_level = random.randint(lv_min, lv_max)
+    is_shiny   = random.random() < SHINY_RATE
+
+    battle_won, win_pct = run_battle(buddy_level, buddy_type, wild_level, wild_type)
+
+    info = {
+        'encountered':  True,
+        'wild_name':    wild_name,
+        'wild_emoji':   wild_emoji,
+        'wild_tier':    tier,
+        'wild_level':   wild_level,
+        'wild_type':    wild_type,
+        'is_shiny':     is_shiny,
+        'battle_won':   battle_won,
+        'win_pct':      win_pct,
+        'ball_key':     None,
+        'ball_emoji':   None,
+        'ball_name':    None,
+        'caught':       False,
+        'catch_pct':    0,
+        'no_balls':     False,
+        'combo':        stats.get('combo', 1),
+        'balls_poke':   stats.get('balls_poke', 0),
+        'balls_great':  stats.get('balls_great', 0),
+        'balls_ultra':  stats.get('balls_ultra', 0),
+        'balls_master': stats.get('balls_master', 0),
+    }
+
+    if not battle_won:
+        return None, info
+
+    ball_key = select_ball(tier, stats)
+    if ball_key is None:
+        info['no_balls'] = True
+        return None, info
+
+    ball_info = POKEBALL_TYPES.get(ball_key, {})
+    info['ball_key']   = ball_key
+    info['ball_emoji'] = ball_info.get('emoji', '🔴')
+    info['ball_name']  = ball_info.get('name', 'Ball')
+
+    caught, catch_pct = attempt_catch(tier, ball_key, stats)
+    info['caught']    = caught
+    info['catch_pct'] = catch_pct
+    # Update inventory snapshot after ball was used
+    info['balls_poke']   = stats.get('balls_poke', 0)
+    info['balls_great']  = stats.get('balls_great', 0)
+    info['balls_ultra']  = stats.get('balls_ultra', 0)
+    info['balls_master'] = stats.get('balls_master', 0)
+
+    if caught:
+        add_to_collection(wild_name, wild_type, wild_emoji, tier, is_shiny)
+        stored_tier  = (tier + '-shiny') if is_shiny else tier
+        catch_result = (stored_tier, wild_name, wild_type, wild_emoji, is_shiny)
+        return catch_result, info
+
+    return None, info
 
 def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
     col = read_collection()
@@ -599,12 +869,42 @@ def render_statusline(plugin_mode=False):
     tr_stats    = read_stats()
     streak      = tr_stats.get('streak', 0)
     party_count = len(col['pokemon'])
-    stats_str   = f'🔥 ×{streak}  ·  🏅 {badge_count}  ·  👥 {party_count}'
+    stats_str   = f'🔥 ×{streak}   🏅 {badge_count}   👥 {party_count}'
 
-    # ── Section 4: Buddy chatter (right side) ────────────────────────────────
-    chatter_str = f'💭 {get_chatter(pct)}'
-
+    # ── Section 4: Contextual display or chatter ────────────────────────────
     sep = '  ┃  ' if plugin_mode else '  │  '
+
+    enc = None
+    if ENCOUNTER_FILE.exists():
+        try:
+            age = datetime.now().timestamp() - ENCOUNTER_FILE.stat().st_mtime
+            if age < 300:
+                enc = json.loads(ENCOUNTER_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            enc = None
+
+    if enc and enc.get('encountered'):
+        pb = enc.get("balls_poke", 0)
+        gb = enc.get("balls_great", 0)
+        ub = enc.get("balls_ultra", 0)
+        mb = enc.get("balls_master", 0)
+        balls_str = f'🔴 {pb}  🔵 {gb}  🟡 {ub}  🟣 {mb}'
+        combo     = enc.get('combo', 1)
+        combo_str = f'{sep}🔥 ×{combo}' if combo >= 2 else ''
+        wname     = enc["wild_name"]
+        wemoji    = enc["wild_emoji"]
+        ball_e    = enc.get("ball_emoji", "🔴")
+        if not enc.get('battle_won'):
+            result = f'⚔️  {wemoji} {wname} fled'
+        elif enc.get('no_balls'):
+            result = f'⚔️  WIN  ·  no balls!  {wemoji} {wname} escaped'
+        elif enc.get('caught'):
+            result = f'⚔️  WIN  ·  {ball_e} caught {wemoji} {wname}!'
+        else:
+            result = f'⚔️  WIN  ·  {ball_e} {wemoji} {wname} broke free!'
+        return f'{prefix}{buddy_str}{sep}{result}{sep}{balls_str}{combo_str}'
+
+    chatter_str = f'💭 {get_chatter(pct)}'
     return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{stats_str}{sep}{chatter_str}'
 
 def render_card():
@@ -923,7 +1223,10 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         new_stage, stat_boost, new_moves_data, evolved,
                         catch_result=None, b_emoji='', b_name='', b_desc='',
                         streak_bonus=0, streak_count=0, new_badges=None,
-                        buddy_rarity=None, buddy_name=''):
+                        buddy_rarity=None, buddy_name='',
+                        inventory_msg='', combo=1, combo_mult=1.0,
+                        quest_msg='', lv_reward_msg='',
+                        encounter_info=None):
     xp_floor    = xp_for_level(new_level)
     xp_disp     = new_xp - xp_floor
     xp_max_disp = new_max - xp_floor
@@ -940,11 +1243,16 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
         ]
 
     parts = [f'+{add_xp} XP!']
+    if combo_mult > 1.0: parts.append(f'🔥 Combo ×{combo} ({combo_mult:.1f}× XP)!')
     if streak_bonus and streak_count:
         parts.append(f'🔥 Day {streak_count} streak (+{streak_bonus} bonus)!')
     if new_level > old_level: parts.append(f'★ LEVEL UP! Lv.{old_level} → Lv.{new_level}')
     if evolved:               parts.append(f'✨ EVOLVED into {evolved}!')
     lines.append(' ' + '   '.join(parts))
+    if inventory_msg:
+        lines.append(f' 🎁 Earned: {inventory_msg}')
+    if lv_reward_msg:
+        lines.append(f' 🎁 Level reward: {lv_reward_msg}')
     lines += [
         f' 🔥 {new_stage.upper():<12} Lv.{new_level:<4}',
         ' ' + '─' * 52,
@@ -954,6 +1262,8 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
         lines.append(f' All stats +{stat_boost}!')
     for _, name, mtype, desc in new_moves_data:
         lines.append(f' New move: {name} [{mtype}] — {desc}')
+    if quest_msg:
+        lines.append(f' {quest_msg}')
 
     # Auto-milestone badges announcement
     if new_badges:
@@ -967,50 +1277,66 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                 f' └{"─" * inner}┘',
             ]
 
-    if catch_result:
-        tier, cname, ctype, cemoji, is_shiny = catch_result
-        display_tier = tier.upper()
-        if is_shiny:
-            lines += [
-                '',
-                f' ╔{"═"*54}╗',
-                f' ║  ✨✨✨  SHINY {cemoji} {cname} appeared!  ✨✨✨{" " * max(0, 20 - len(cname))}║',
-                f' ║  AN INCREDIBLY RARE SHINY POKEMON!  1 in 200!{" " * 7}║',
-                f' ║  You threw a Pokéball...  ★ GOTCHA!  {cname} caught!{" " * max(0, 14 - len(cname))}║',
-                f' ║  [Added to party — use /pokemon-switch to buddy up]{" " * 4}║',
-                f' ╚{"═"*54}╝',
-            ]
+    if encounter_info and encounter_info.get('encountered'):
+        ei = encounter_info
+        wname  = ei['wild_name']
+        wemoji = ei['wild_emoji']
+        wtier  = ei['wild_tier'].upper()
+        wlv    = ei['wild_level']
+        is_shiny = ei.get('is_shiny', False)
+        div    = ' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+        shiny_prefix = '✨ SHINY ' if is_shiny else ''
+        lines += ['', div]
+
+        # Aura line for buddy-boosted encounters
+        boosted_tiers = set(BUDDY_RARITY_BOOST.get(buddy_rarity, {}).keys())
+        if buddy_rarity in BUDDY_RARITY_BOOST and ei['wild_tier'] in boosted_tiers:
+            aura_msgs = {
+                'mythical':  f'⚡ {buddy_name.upper()}\'S AURA CALLED ACROSS DIMENSIONS!',
+                'legendary': f'⚡ {buddy_name.upper()}\'S POWER SHOOK THE WILD!',
+                'rare':      f'🔮 {buddy_name.upper()}\'S PRESENCE DREW IT NEAR!',
+            }
+            lines.append(f' {aura_msgs.get(ei["wild_tier"], "")}')
+
+        lines.append(f' 🎉 {shiny_prefix}Wild {wemoji} {wname} appeared!  ({wtier}, Lv.{wlv})')
+        lines.append(f' ⚔️  {buddy_name} Lv.{new_level} vs {wname} Lv.{wlv}  —  win chance: {ei["win_pct"]}%')
+
+        if not ei['battle_won']:
+            lines += [f' ❌ DEFEAT — {wname} fled into the wild!', div]
+        elif ei.get('no_balls'):
+            lines += [f' ✅ YOU WIN!  But you have no Pokéballs!  {wname} escaped...', div]
         else:
-            boosted_tiers = set(BUDDY_RARITY_BOOST.get(buddy_rarity, {}).keys())
-            show_aura = (buddy_rarity in BUDDY_RARITY_BOOST
-                         and tier in boosted_tiers)
-            if show_aura:
-                aura_flavor = {
-                    'mythical':  ('🌌', 'THE COSMOS ALIGNED',   f'{buddy_name.upper()} CALLED ACROSS DIMENSIONS!'),
-                    'legendary': ('⚡', 'LEGENDARY AURA SURGE', f'{buddy_name.upper()}\'S POWER SHOOK THE WILD!'),
-                    'rare':      ('🔮', 'AURA RESONANCE',       f'{buddy_name.upper()}\'S PRESENCE DREW IT NEAR!'),
-                    'uncommon':  ('✨', 'BUDDY AURA ACTIVE',    f'{buddy_name.upper()}\'S AURA ATTRACTED IT!'),
-                }.get(tier, ('✨', 'AURA ACTIVE', f'{buddy_name.upper()}\'S AURA RESONATED!'))
-                aura_icon, aura_title, aura_msg = aura_flavor
-                divider = ' ◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆◆'
-                lines += [
-                    '',
-                    divider,
-                    f'   {aura_icon}  {aura_title}  {aura_icon}',
-                    f'   🎉 Wild {cemoji} {cname} appeared!  ({display_tier})',
-                    f'   {aura_msg}',
-                    f'   You hurled a Pokéball...  ★ GOTCHA!  {cname} caught!',
-                    divider,
-                ]
+            lines.append(f' ✅ YOU WIN!')
+            ball_line = f'    {ei["ball_emoji"]} {ei["ball_name"]} thrown...  ({ei["catch_pct"]}% catch rate)'
+            if ei['caught']:
+                if is_shiny:
+                    lines += [
+                        f' ╔{"═"*54}╗',
+                        f' ║  ✨✨✨  SHINY {wemoji} {wname} CAUGHT!  ✨✨✨{" "*max(0,19-len(wname))}║',
+                        f' ║  AN INCREDIBLY RARE SHINY — 1 in 200!{" "*15}║',
+                        f' ╚{"═"*54}╝',
+                    ]
+                else:
+                    lines += [ball_line, f'    ★ GOTCHA!  {wname} was caught!',
+                               f'    [Use /poke:switch to buddy up]']
             else:
-                lines += [
-                    '',
-                    f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-                    f' 🎉 Wild {cemoji} {cname} appeared!  ({display_tier})',
-                    f'    You threw a Pokéball...  ★ Gotcha!  {cname} was caught!',
-                    f'    [{cname} added to your party — use /pokemon-switch to buddy up]',
-                    f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-                ]
+                lines += [ball_line, f'    💨 Oh no!  {wname} broke free!']
+            lines.append(div)
+
+        # Inventory snapshot
+        inv = (f' 🔴{ei.get("balls_poke",0)} 🔵{ei.get("balls_great",0)} '
+               f'🟡{ei.get("balls_ultra",0)} 🟣{ei.get("balls_master",0)}  ← remaining balls')
+        lines.append(inv)
+
+    elif catch_result:
+        # Legacy path (manual /catch command)
+        tier, cname, ctype, cemoji, is_shiny = catch_result
+        lines += [
+            '',
+            f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            f' {"✨ SHINY " if is_shiny else ""}🎉 {cemoji} {cname} added to party!',
+            f' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+        ]
 
     return '\n'.join(lines)
 
@@ -1138,7 +1464,6 @@ def main():
         sys.exit(0)
 
     if mode == 'backup':
-        import json
         out_path = Path(args[1]) if len(args) > 1 else Path.cwd() / 'buddy-export.json'
         payload = {'schema': 'pokemon-buddy-export/1', 'exported_at': TODAY}
         for key, p in [('buddy', BUDDY_FILE), ('stats', STATS_FILE), ('collection', COLLECTION_FILE)]:
@@ -1154,7 +1479,7 @@ def main():
         sys.exit(0)
 
     if mode == 'import':
-        import json, shutil
+        import shutil
         src = Path(args[1]) if len(args) > 1 else Path.cwd() / 'buddy-export.json'
         if not src.exists():
             print(f' ❌ File not found: {src}')
@@ -1198,22 +1523,28 @@ def main():
     add_xp = 0; log_desc = ''; badge_line = ''
     b_emoji = b_name = b_desc = ''
     streak_bonus = 0; streak_count = 0
+    inventory_msg = ''; combo = 1; combo_mult = 1.0
+    quest_msg = ''; lv_reward_msg = ''
 
     # Load stats early — needed for streak and milestone tracking
     tr_stats = read_stats()
 
     if mode == 'xp':
-        desc     = args[1] if len(args) > 1 else ''
-        base_xp  = detect_xp(desc)
+        desc    = args[1] if len(args) > 1 else ''
+        base_xp = detect_xp(desc)
         log_desc = desc or 'XP awarded'
+
+        # Combo multiplier
+        combo, combo_mult = update_combo(tr_stats)
 
         # Streak: bonus XP for first award of the day
         bonus, streak_count, is_new_day = update_streak(tr_stats)
         if is_new_day:
             streak_bonus = bonus
-        add_xp = base_xp + streak_bonus
 
-        # Track achievement counters
+        add_xp = int(base_xp * combo_mult) + streak_bonus
+
+        # Track achievement counters + daily task count
         dl = desc.lower()
         if any(k in dl for k in ['ship','deploy','production','prod','release']):
             tr_stats['ships'] = tr_stats.get('ships', 0) + 1
@@ -1221,8 +1552,15 @@ def main():
             tr_stats['features'] = tr_stats.get('features', 0) + 1
         if any(k in dl for k in ['bug','fix','error','issue','patch']):
             tr_stats['bug_fixes'] = tr_stats.get('bug_fixes', 0) + 1
+        tr_stats['tasks_today'] = tr_stats.get('tasks_today', 0) + 1
 
         tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + add_xp
+
+        # Earn balls & berries
+        inventory_msg = earn_inventory(base_xp, False, tr_stats)
+
+        # Initialize daily quest for today (resets if new day)
+        get_daily_quest(tr_stats)
 
     elif mode == 'badge':
         add_xp  = 50
@@ -1232,6 +1570,7 @@ def main():
         log_desc  = f'Earned {b_emoji} {b_name}'
         badge_line = f'- {b_emoji} **{b_name}** — *{b_desc}* `{TODAY}`'
         tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + add_xp
+        inventory_msg = earn_inventory(add_xp, True, tr_stats)
 
     new_xp    = old_xp + add_xp
     new_level = level_from_xp(new_xp)
@@ -1268,22 +1607,38 @@ def main():
     # Sync collection
     sync_active_to_collection(buddy_name, new_level, new_xp)
 
-    # Roll for wild encounter (use base XP for catch rates, not streak-boosted)
-    base_xp_for_catch = detect_xp(args[1] if len(args) > 1 and mode == 'xp' else '') if mode == 'xp' else add_xp
-    col = read_collection()
-    owned = {p['name'] for p in col['pokemon']}
+    # Run wild encounter (battle + ball throw)
+    base_xp_for_enc = detect_xp(args[1] if len(args) > 1 and mode == 'xp' else '') if mode == 'xp' else add_xp
+    col          = read_collection()
+    owned        = {p['name'] for p in col['pokemon']}
     buddy_rarity = get_buddy_rarity()
-    catch_result = roll_catch(base_xp_for_catch, owned, get_role_type(), buddy_rarity)
+    buddy_type   = STARTER_DATA.get(buddy_name, {}).get('type', 'Normal')
+
+    catch_result, encounter_info = run_encounter(
+        base_xp_for_enc, owned, get_role_type(), buddy_rarity,
+        new_level, buddy_type, tr_stats,
+    )
+
     if catch_result:
-        tier, cname, ctype, cemoji, is_shiny = catch_result
-        add_to_collection(cname, ctype, cemoji, tier, is_shiny)
-        # Update stats flags
-        base_tier = tier.replace('-shiny', '')
+        # Update stats flags (collection already updated inside run_encounter)
+        base_tier = catch_result[0].replace('-shiny', '')
         if base_tier == 'legendary': tr_stats['caught_legendary'] = True
         if base_tier == 'mythical':  tr_stats['caught_mythical']  = True
-        if is_shiny:                 tr_stats['caught_shiny']      = True
-        # Re-read collection after adding new catch for milestone checks
+        if catch_result[4]:          tr_stats['caught_shiny']      = True
         col = read_collection()
+
+    # Level-up rewards (after XP resolved)
+    if new_level > old_level:
+        lv_reward_msg = level_up_rewards(old_level, new_level, tr_stats)
+
+    # Daily quest check
+    did_catch = catch_result is not None
+    quest_msg = check_daily_quest(tr_stats, desc if mode == 'xp' else '', did_catch)
+
+    # Write ENCOUNTER_FILE for contextual statusline
+    if encounter_info.get('encountered'):
+        encounter_info['combo'] = combo
+        ENCOUNTER_FILE.write_text(json.dumps(encounter_info), encoding='utf-8')
 
     # Check and award auto milestone badges
     new_badges = check_milestones(tr_stats, col, old_level, new_level, catch_result, evolved)
@@ -1316,6 +1671,9 @@ def main():
         catch_result, b_emoji, b_name, b_desc,
         streak_bonus, streak_count, new_badges,
         buddy_rarity, buddy_name,
+        inventory_msg, combo, combo_mult,
+        quest_msg, lv_reward_msg,
+        encounter_info,
     ))
 
 if __name__ == '__main__':
