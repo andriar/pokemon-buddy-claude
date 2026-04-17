@@ -61,6 +61,29 @@ SHINY_RATE        = 1 / 200   # 0.5%
 STREAK_BONUS_XP   = 20        # bonus XP for first award of the day
 STATS_SCHEMA_VER  = 2         # bumped: added inventory, combo, daily quest
 
+RARITY_TIER_ORDER = ['mythical', 'legendary', 'rare', 'uncommon', 'common', 'starter']
+RARITY_LABELS_ASCII = {
+    'mythical':  '★  MYTHICAL',
+    'legendary': '★  LEGENDARY',
+    'rare':      '◆  RARE',
+    'uncommon':  '◈  UNCOMMON',
+    'common':    '◌  COMMON',
+    'starter':   '◌  STARTER',
+}
+
+def _pokemon_tier(p):
+    r = p.get('rarity', '')
+    for t in RARITY_TIER_ORDER:
+        if t in r:
+            return t
+    return 'common'
+
+def _group_by_tier(pokemon):
+    grouped = {}
+    for p in pokemon:
+        grouped.setdefault(_pokemon_tier(p), []).append(p)
+    return grouped
+
 # ── Pokemon data, XP rules — see lib/data.py ──────────────────────────────────
 
 def detect_xp(description):
@@ -993,18 +1016,18 @@ def render_card():
     )
     shiny_str = '  ✨ Shiny Caught' if tr_stats.get('caught_shiny') else ''
 
-    # Build party rows (2 per line)
-    party_rows = []
-    row_buf = []
-    for p in col['pokemon']:
-        mark = '✨' if p.get('shiny') else ''
-        entry = f'{mark}{p["emoji"]}{p["name"]}{"*" if p["name"] == col["active"] else ""} Lv.{p["level"]}'
-        row_buf.append(entry)
-        if len(row_buf) == 2:
-            party_rows.append(f'{row_buf[0]:<28}{row_buf[1]}')
-            row_buf = []
-    if row_buf:
-        party_rows.append(row_buf[0])
+    grouped = _group_by_tier(col['pokemon'])
+
+    balls_parts = []
+    for emoji, key in [('🔴','balls_poke'),('🔵','balls_great'),('🟡','balls_ultra'),('🟣','balls_master')]:
+        n = tr_stats.get(key, 0)
+        if n: balls_parts.append(f'{emoji}×{n}')
+    balls_str = '  '.join(balls_parts) if balls_parts else 'No balls'
+
+    active_quest = get_daily_quest(tr_stats)
+    quest_done   = tr_stats.get('daily_quest_done', False)
+    quest_line   = (f'Quest: {active_quest["desc"]}  {"✓ DONE" if quest_done else "[active]"}'
+                    if active_quest else '')
 
     out = [
         f' ╔{"═" * (W + 3)}╗',
@@ -1020,8 +1043,11 @@ def render_card():
         row(f'Badges: {len(badges)}   Dex: {n_caught}/{n_total} caught'),
         row(f'Streak: 🔥{streak} days  (best: {longest}){shiny_str}'),
         row(f'Rarest: {rarest_str}'),
-        SEP,
+        row(f'Balls:  {balls_str}'),
     ]
+    if quest_line:
+        out.append(row(f'📋 {quest_line}'))
+    out.append(SEP)
 
     if badge_names:
         out.append(row('BADGES'))
@@ -1037,12 +1063,6 @@ def render_card():
             out.append(row(line))
         out.append(SEP)
 
-    if col['pokemon']:
-        out.append(row(f'PARTY  ({n_caught} Pokemon)'))
-        for pr in party_rows:
-            out.append(row(pr))
-        out.append(SEP)
-
     out += [
         row(f'Total XP earned: {tr_stats.get("total_xp_ever", 0)}'),
         row(f'Bugs fixed: {tr_stats.get("bug_fixes",0)}   '
@@ -1051,17 +1071,50 @@ def render_card():
         f' ╚{"═" * (W + 3)}╝',
     ]
 
+    if col['pokemon']:
+        TW = W + 3
+        NC, LC = 24, 5
+        RC = TW - NC - LC - 6
+
+        def trow(name='', lv='', rar=''):
+            n_pad = NC - visual_len(name)
+            l_pad = LC - visual_len(str(lv))
+            r_pad = RC - visual_len(rar)
+            return (f' ║ {name}{" "*max(0,n_pad)} │ '
+                    f'{lv}{" "*max(0,l_pad)} │ '
+                    f'{rar}{" "*max(0,r_pad)} ║')
+
+        tsep = f' ╠{"═"*(NC+2)}╪{"═"*(LC+2)}╪{"═"*(RC+2)}╣'
+        tdiv = f' ╟{"─"*(NC+2)}┼{"─"*(LC+2)}┼{"─"*(RC+2)}╢'
+        ttop = f' ╔{"═"*(NC+2)}╤{"═"*(LC+2)}╤{"═"*(RC+2)}╗'
+        tbot = f' ╚{"═"*(NC+2)}╧{"═"*(LC+2)}╧{"═"*(RC+2)}╝'
+
+        party_lines = ['', ttop, trow('  POKEMON', ' LV.', ' RARITY'), tsep]
+        first_tier = True
+        for tier in RARITY_TIER_ORDER:
+            members = grouped.get(tier)
+            if not members:
+                continue
+            if not first_tier:
+                party_lines.append(tdiv)
+            first_tier = False
+            for p in members:
+                mark = '✨' if p.get('shiny') else ''
+                name = f'  {mark}{p["emoji"]} {p["name"]}{"*" if p["name"] == col["active"] else ""}'
+                party_lines.append(trow(name, f'  {p["level"]}', f' {RARITY_LABELS_ASCII.get(tier, tier.upper())}'))
+        party_lines.append(tbot)
+        out += party_lines
+
     return '\n'.join(out)
 
-# ── SVG trainer card (shareable — GitHub README, Discord, Twitter) ────────────
+# ── HTML trainer card (shareable — full-page interactive Pokemon theme) ────────
 
-def _svg_escape(s):
+def _he(s):
     return (str(s).replace('&', '&amp;').replace('<', '&lt;')
                   .replace('>', '&gt;').replace('"', '&quot;'))
 
-def render_svg_card():
-    """Render a shareable SVG trainer card — pure Python, no deps.
-    Width fixed at 620; height grows with content."""
+def render_html_card():
+    """Render a full-page interactive Pokemon-themed HTML trainer card."""
     text     = BUDDY_FILE.read_text(encoding='utf-8')
     col      = read_collection()
     tr_stats = read_stats()
@@ -1071,155 +1124,402 @@ def render_svg_card():
         return m.group(1).strip() if m else default
 
     stage    = g(r'\*\*Stage\*\*:\s*(\w+)')
-    level    = g(r'\*\*Level\*\*:\s*(\d+)')
+    level    = int(g(r'\*\*Level\*\*:\s*(\d+)', '1'))
     trainer  = g(r'\*\*Trainer\*\*:\s*(.+)')
     xp_cur   = int(g(r'\*\*XP\*\*:\s*(\d+)', '0'))
     xp_max   = int(g(r'\*\*XP\*\*:\s*\d+\s*/\s*(\d+)', '100'))
-    xp_floor    = xp_for_level(int(level) if str(level).isdigit() else 1)
+    xp_floor    = xp_for_level(level)
     xp_disp     = xp_cur - xp_floor
     xp_max_disp = xp_max - xp_floor
-    specialty = g(r'\*\*Specialty\*\*:\s*(.+)')
-    title = get_trainer_title(tr_stats, col)
+    specialty   = g(r'\*\*Specialty\*\*:\s*(.+)')
+    title       = get_trainer_title(tr_stats, col)
 
     badges_section = re.search(r'## Badges Earned\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
     badges_raw = re.findall(r'^- (.+)$', badges_section.group(1), re.MULTILINE) if badges_section else []
     badge_entries = []
     for b in badges_raw:
         if 'No badges yet' in b: continue
-        em = re.match(r'^\s*([^\s\w])', b)
         nm = re.search(r'\*\*(.+?)\*\*', b)
+        em = re.match(r'^\s*([^\w\s])', b)
         if nm:
             badge_entries.append((em.group(1) if em else '🏅', nm.group(1)))
 
-    rarity_order = ['mythical', 'legendary', 'rare', 'uncommon', 'common']
-    rarest = None
-    for tier in rarity_order:
-        for p in col['pokemon']:
-            if tier in p.get('rarity', ''):
-                rarest = p; break
-        if rarest: break
+    rarity_labels_html = {
+        'mythical':  ('★ Mythical',  '#c084fc', '#2d1b69'),
+        'legendary': ('★ Legendary', '#ffd700', '#3d2e00'),
+        'rare':      ('◆ Rare',      '#60a5fa', '#1a2f5a'),
+        'uncommon':  ('◈ Uncommon',  '#4ade80', '#143322'),
+        'common':    ('◌ Common',    '#94a3b8', '#1e2433'),
+        'starter':   ('◌ Starter',   '#fb923c', '#3d1f0a'),
+    }
+
+    grouped = _group_by_tier(col['pokemon'])
+    rarest  = next((grouped[t][0] for t in RARITY_TIER_ORDER if grouped.get(t)), None)
 
     n_caught = len(col['pokemon'])
     n_total  = sum(len(v) for v in POKEMON_POOL.values())
     streak   = tr_stats.get('streak', 0)
     longest  = tr_stats.get('longest_streak', 0)
     total_xp = tr_stats.get('total_xp_ever', 0)
+    pct = min(100, int(xp_disp / xp_max_disp * 100)) if xp_max_disp else 0
 
-    # Layout constants
-    W = 620
-    PAD = 24
-    # Dark theme colors
-    BG1, BG2 = '#1a1b26', '#24283b'
-    FG, MUTED = '#c0caf5', '#7982a9'
-    ACCENT, GOLD = '#7aa2f7', '#e0af68'
-    RED, GREEN = '#f7768e', '#9ece6a'
+    balls_poke  = tr_stats.get('balls_poke', 0)
+    balls_great = tr_stats.get('balls_great', 0)
+    balls_ultra = tr_stats.get('balls_ultra', 0)
+    balls_mast  = tr_stats.get('balls_master', 0)
 
-    pct = xp_disp / xp_max_disp if xp_max_disp else 0
-    bar_w = W - PAD * 2
-    fill_w = int(bar_w * max(0, min(1, pct)))
+    active_quest = get_daily_quest(tr_stats)
+    quest_done   = tr_stats.get('daily_quest_done', False)
 
-    # Build sections into list, track current y
-    parts = []
-    y = 0
+    party_rows_html = []
+    for tier in RARITY_TIER_ORDER:
+        members = grouped.get(tier)
+        if not members:
+            continue
+        label, color, bg = rarity_labels_html.get(tier, ('?', '#fff', '#222'))
+        for p in members:
+            is_active = p['name'] == col['active']
+            shiny     = '✨ ' if p.get('shiny') else ''
+            mark      = ' ★' if is_active else ''
+            row_cls   = 'active-row' if is_active else ''
+            party_rows_html.append(
+                f'<tr class="{row_cls}">'
+                f'<td>{_he(shiny)}{_he(p["emoji"])} {_he(p["name"])}{_he(mark)}</td>'
+                f'<td class="center">{p["level"]}</td>'
+                f'<td><span class="rarity-badge" style="color:{color};background:{bg}">'
+                f'{_he(label)}</span></td>'
+                f'</tr>'
+            )
 
-    # ---- Header ----
-    header_h = 96
-    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{header_h}" fill="url(#hdr)"/>')
-    parts.append(f'<text x="{PAD}" y="{y+38}" font-size="22" font-weight="700" fill="{FG}">🏆 TRAINER CARD</text>')
-    parts.append(f'<text x="{PAD}" y="{y+66}" font-size="18" fill="{GOLD}">{_svg_escape(trainer)}</text>')
-    parts.append(f'<text x="{PAD}" y="{y+86}" font-size="13" fill="{MUTED}">· {_svg_escape(title)} ·</text>')
-    y += header_h
+    badge_chips = ''.join(
+        f'<span class="badge-chip">{_he(em)} {_he(nm)}</span>'
+        for em, nm in badge_entries
+    ) or '<span class="muted">No badges yet</span>'
 
-    # ---- Active buddy ----
-    buddy_h = 118
-    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{buddy_h}" fill="{BG2}"/>')
-    parts.append(f'<text x="{PAD}" y="{y+24}" font-size="11" letter-spacing="2" fill="{MUTED}">ACTIVE BUDDY</text>')
-    parts.append(f'<text x="{PAD}" y="{y+58}" font-size="26" font-weight="700" fill="{FG}">'
-                 f'{_svg_escape(stage)} <tspan fill="{ACCENT}">Lv.{_svg_escape(level)}</tspan></text>')
-    parts.append(f'<text x="{PAD}" y="{y+78}" font-size="12" fill="{MUTED}">{_svg_escape(specialty)}</text>')
-    # XP bar
-    by = y + 92
-    parts.append(f'<rect x="{PAD}" y="{by}" width="{bar_w}" height="10" rx="5" fill="#2f3350"/>')
-    parts.append(f'<rect x="{PAD}" y="{by}" width="{fill_w}" height="10" rx="5" fill="{GREEN}"/>')
-    parts.append(f'<text x="{W-PAD}" y="{by-4}" text-anchor="end" font-size="11" fill="{MUTED}">'
-                 f'{xp_disp}/{xp_max_disp} XP</text>')
-    y += buddy_h
+    def ball_item(emoji, count, label):
+        if count == 0:
+            return ''
+        return (f'<div class="ball-item">'
+                f'<span class="ball-emoji">{emoji}</span>'
+                f'<span class="ball-count">×{count}</span>'
+                f'<span class="ball-label">{label}</span>'
+                f'</div>')
 
-    # ---- Achievements row ----
-    ach_h = 72
-    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{ach_h}" fill="{BG1}"/>')
-    cells = [
-        ('🏅', str(len(badge_entries)), 'Badges'),
-        ('📖', f'{n_caught}/{n_total}', 'Dex'),
-        ('🔥', f'{streak}d', f'Best {longest}d'),
-        ('⚡', str(total_xp), 'Total XP'),
-    ]
-    cw = W / len(cells)
-    for i, (em, val, lbl) in enumerate(cells):
-        cx = int(i * cw + cw / 2)
-        parts.append(f'<text x="{cx}" y="{y+26}" text-anchor="middle" font-size="16">{em}</text>')
-        parts.append(f'<text x="{cx}" y="{y+48}" text-anchor="middle" font-size="16" font-weight="700" fill="{FG}">{_svg_escape(val)}</text>')
-        parts.append(f'<text x="{cx}" y="{y+63}" text-anchor="middle" font-size="10" fill="{MUTED}">{_svg_escape(lbl)}</text>')
-    y += ach_h
+    balls_html = (
+        ball_item('🔴', balls_poke,  'Poké') +
+        ball_item('🔵', balls_great, 'Great') +
+        ball_item('🟡', balls_ultra, 'Ultra') +
+        ball_item('🟣', balls_mast,  'Master')
+    ) or '<span class="muted">No balls</span>'
 
-    # ---- Badges ----
-    if badge_entries:
-        row_h = 28
-        per_row = 3
-        rows = (len(badge_entries) + per_row - 1) // per_row
-        sec_h = 36 + rows * row_h + 10
-        parts.append(f'<rect x="0" y="{y}" width="{W}" height="{sec_h}" fill="{BG2}"/>')
-        parts.append(f'<text x="{PAD}" y="{y+24}" font-size="11" letter-spacing="2" fill="{MUTED}">BADGES</text>')
-        bw = (W - PAD * 2) / per_row
-        for i, (em, nm) in enumerate(badge_entries):
-            r, c = divmod(i, per_row)
-            bx = PAD + int(c * bw)
-            byy = y + 36 + r * row_h
-            parts.append(f'<text x="{bx}" y="{byy+14}" font-size="13" fill="{FG}">{em} {_svg_escape(nm)}</text>')
-        y += sec_h
-
-    # ---- Party ----
-    if col['pokemon']:
-        per_row = 3
-        row_h = 26
-        rows = (len(col['pokemon']) + per_row - 1) // per_row
-        sec_h = 36 + rows * row_h + 10
-        parts.append(f'<rect x="0" y="{y}" width="{W}" height="{sec_h}" fill="{BG1}"/>')
-        parts.append(f'<text x="{PAD}" y="{y+24}" font-size="11" letter-spacing="2" fill="{MUTED}">PARTY  ({n_caught})</text>')
-        pw = (W - PAD * 2) / per_row
-        for i, p in enumerate(col['pokemon']):
-            r, c = divmod(i, per_row)
-            bx = PAD + int(c * pw)
-            byy = y + 36 + r * row_h
-            shiny = '✨' if p.get('shiny') else ''
-            active = '★' if p['name'] == col['active'] else ' '
-            entry = f"{active}{shiny}{p['emoji']} {p['name']} Lv.{p['level']}"
-            color = GOLD if p['name'] == col['active'] else FG
-            parts.append(f'<text x="{bx}" y="{byy+14}" font-size="12" fill="{color}">{_svg_escape(entry)}</text>')
-        y += sec_h
-
-    # ---- Footer ----
-    ft_h = 52
-    rarest_str = (f"{p.get('emoji','')} {p['name']} ({p['rarity']})"
-                  if (p := rarest) else 'None yet')
-    parts.append(f'<rect x="0" y="{y}" width="{W}" height="{ft_h}" fill="{BG2}"/>')
-    parts.append(f'<text x="{PAD}" y="{y+22}" font-size="11" fill="{MUTED}">Rarest catch</text>')
-    parts.append(f'<text x="{PAD}" y="{y+42}" font-size="13" fill="{ACCENT}">{_svg_escape(rarest_str)}</text>')
-    parts.append(f'<text x="{W-PAD}" y="{y+42}" text-anchor="end" font-size="10" fill="{MUTED}">pokemon-buddy-claude</text>')
-    y += ft_h
-
-    total_h = y
-    header = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{total_h}" '
-        f'viewBox="0 0 {W} {total_h}" font-family="\'Segoe UI Emoji\',\'Apple Color Emoji\','
-        f'\'Noto Color Emoji\',system-ui,sans-serif">'
-        f'<defs><linearGradient id="hdr" x1="0" y1="0" x2="1" y2="0">'
-        f'<stop offset="0" stop-color="#1f2335"/><stop offset="1" stop-color="#2d3250"/>'
-        f'</linearGradient></defs>'
+    rarest_str = (
+        f'{rarest.get("emoji","")} {rarest["name"]} '
+        f'({rarest["rarity"].upper().replace("-SHINY"," ✨")})'
+        if rarest else 'None yet'
     )
-    return header + ''.join(parts) + '</svg>'
 
-def render_readme_snippet(svg_path='trainer-card.svg'):
+    quest_html = ''
+    if active_quest:
+        done_badge = ('<span class="quest-done">✓ DONE</span>' if quest_done
+                      else '<span class="quest-active">● Active</span>')
+        quest_html = (
+            f'<div class="quest-card">'
+            f'<span class="quest-icon">📋</span>'
+            f'<div class="quest-body">'
+            f'<div class="quest-label">Daily Quest</div>'
+            f'<div class="quest-desc">{_he(active_quest["desc"])}</div>'
+            f'</div>'
+            f'{done_badge}'
+            f'</div>'
+        )
+
+    html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trainer Card — {_he(trainer)}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@400;700;900&display=swap');
+  :root {{
+    --red:   #CC0000; --red2:  #ff1a1a;
+    --yel:   #FFDE00; --yel2:  #ffe94d;
+    --blue:  #3B4CCA; --blue2: #5b6fea;
+    --dark:  #0d0e1a; --card:  #181929;
+    --card2: #1f2136; --card3: #252641;
+    --text:  #e8ecff; --muted: #7a82a8;
+    --gold:  #FFD700;
+    --glow-red: 0 0 20px rgba(204,0,0,.4);
+    --glow-yel: 0 0 20px rgba(255,222,0,.4);
+  }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    background: var(--dark);
+    color: var(--text);
+    font-family: 'Nunito', system-ui, sans-serif;
+    min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse at 20% 10%, rgba(59,76,202,.15) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 90%, rgba(204,0,0,.12) 0%, transparent 60%);
+  }}
+  .page {{ max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }}
+
+  /* ── Header ── */
+  .header {{
+    background: linear-gradient(135deg, #1a0000 0%, #3d0000 40%, #1a0012 100%);
+    border: 2px solid var(--red);
+    border-radius: 20px;
+    padding: 28px 32px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: var(--glow-red), inset 0 1px 0 rgba(255,255,255,.08);
+  }}
+  .header::before {{
+    content: '';
+    position: absolute; right: -60px; top: -60px;
+    width: 220px; height: 220px;
+    border-radius: 50%;
+    border: 40px solid rgba(204,0,0,.18);
+  }}
+  .header::after {{
+    content: '';
+    position: absolute; right: -10px; top: -10px;
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    border: 16px solid rgba(255,255,255,.06);
+  }}
+  .header-top {{ display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }}
+  .pokeball-icon {{
+    width: 52px; height: 52px; border-radius: 50%;
+    background: linear-gradient(180deg, var(--red) 50%, #fff 50%);
+    border: 3px solid #fff;
+    position: relative; flex-shrink: 0;
+    box-shadow: 0 0 0 3px var(--red);
+    animation: spin-slow 8s linear infinite;
+  }}
+  .pokeball-icon::after {{
+    content: '';
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #fff; border: 3px solid #333;
+  }}
+  @keyframes spin-slow {{ to {{ transform: rotate(360deg); }} }}
+  .header-trainer {{ font-size: 28px; font-weight: 900; color: var(--yel); text-shadow: 0 0 12px rgba(255,222,0,.6); }}
+  .header-title {{ font-size: 13px; color: var(--muted); margin-top: 2px; letter-spacing: 1px; }}
+  .header-badge {{
+    display: inline-block; margin-top: 10px;
+    background: rgba(255,222,0,.1); border: 1px solid rgba(255,222,0,.3);
+    color: var(--yel); border-radius: 20px; padding: 3px 14px; font-size: 12px; font-weight: 700;
+  }}
+
+  /* ── Grid layout ── */
+  .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }}
+  @media(max-width:600px) {{ .grid-2 {{ grid-template-columns: 1fr; }} }}
+
+  /* ── Cards ── */
+  .card {{
+    background: var(--card); border: 1px solid rgba(255,255,255,.07);
+    border-radius: 16px; padding: 20px;
+    transition: transform .15s, box-shadow .15s;
+  }}
+  .card:hover {{ transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }}
+  .card-title {{
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }}
+  .card-title::after {{
+    content: ''; flex: 1; height: 1px;
+    background: linear-gradient(90deg, rgba(255,255,255,.1), transparent);
+  }}
+
+  /* ── Buddy card ── */
+  .buddy-name {{ font-size: 30px; font-weight: 900; margin-bottom: 2px; }}
+  .buddy-level {{ color: var(--blue2); font-size: 16px; font-weight: 700; }}
+  .buddy-spec {{ color: var(--muted); font-size: 13px; margin: 6px 0 16px; }}
+  .xp-label {{
+    display: flex; justify-content: space-between;
+    font-size: 12px; color: var(--muted); margin-bottom: 6px;
+  }}
+  .xp-track {{
+    height: 12px; border-radius: 6px;
+    background: rgba(255,255,255,.08); overflow: hidden;
+  }}
+  .xp-fill {{
+    height: 100%; border-radius: 6px;
+    background: linear-gradient(90deg, #4ade80, #22c55e);
+    box-shadow: 0 0 8px rgba(74,222,128,.5);
+    transition: width 1s cubic-bezier(.4,0,.2,1);
+  }}
+
+  /* ── Stats grid ── */
+  .stats-grid {{ display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }}
+  .stat-item {{ background: var(--card2); border-radius: 12px; padding: 12px 14px; }}
+  .stat-val {{ font-size: 22px; font-weight: 900; }}
+  .stat-lbl {{ font-size: 11px; color: var(--muted); margin-top: 2px; }}
+  .stat-val.gold {{ color: var(--gold); }}
+  .stat-val.blue {{ color: var(--blue2); }}
+  .stat-val.red  {{ color: #f87171; }}
+
+  /* ── Party table ── */
+  .party-wrap {{ margin-bottom: 16px; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  thead th {{
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); padding: 0 12px 10px; text-align: left;
+  }}
+  tbody tr {{
+    border-top: 1px solid rgba(255,255,255,.05);
+    transition: background .15s;
+  }}
+  tbody tr:hover {{ background: rgba(255,255,255,.04); }}
+  tbody tr.active-row {{ background: rgba(255,222,0,.06); }}
+  tbody td {{ padding: 10px 12px; font-size: 14px; }}
+  tbody td.center {{ text-align: center; color: var(--blue2); font-weight: 700; }}
+  .rarity-badge {{
+    display: inline-block; padding: 2px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; letter-spacing: .5px;
+  }}
+
+  /* ── Balls ── */
+  .balls-row {{ display: flex; gap: 12px; flex-wrap: wrap; }}
+  .ball-item {{ display: flex; flex-direction: column; align-items: center; gap: 4px; }}
+  .ball-emoji {{ font-size: 28px; }}
+  .ball-count {{ font-size: 16px; font-weight: 900; }}
+  .ball-label {{ font-size: 10px; color: var(--muted); }}
+
+  /* ── Badges ── */
+  .badge-chip {{
+    display: inline-block; background: var(--card2);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 20px; padding: 5px 14px;
+    font-size: 13px; margin: 4px;
+    transition: background .15s;
+  }}
+  .badge-chip:hover {{ background: var(--card3); }}
+
+  /* ── Quest card ── */
+  .quest-card {{
+    display: flex; align-items: center; gap: 14px;
+    background: linear-gradient(135deg, rgba(59,76,202,.15), rgba(59,76,202,.05));
+    border: 1px solid rgba(59,76,202,.3);
+    border-radius: 14px; padding: 14px 18px; margin-bottom: 16px;
+  }}
+  .quest-icon {{ font-size: 24px; }}
+  .quest-body {{ flex: 1; }}
+  .quest-label {{ font-size: 10px; letter-spacing: 2px; color: var(--blue2); margin-bottom: 3px; }}
+  .quest-desc {{ font-size: 15px; font-weight: 700; }}
+  .quest-done  {{
+    background: rgba(74,222,128,.15); color: #4ade80;
+    border: 1px solid rgba(74,222,128,.3);
+    border-radius: 20px; padding: 3px 12px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  }}
+  .quest-active {{
+    background: rgba(251,191,36,.12); color: #fbbf24;
+    border: 1px solid rgba(251,191,36,.3);
+    border-radius: 20px; padding: 3px 12px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  }}
+
+  /* ── Rarest ── */
+  .rarest-str {{ font-size: 18px; font-weight: 700; color: var(--gold); }}
+
+  /* ── Footer ── */
+  .footer {{ text-align: center; color: var(--muted); font-size: 12px; margin-top: 32px; }}
+  .footer a {{ color: var(--blue2); text-decoration: none; }}
+  .muted {{ color: var(--muted); font-size: 13px; }}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <div class="pokeball-icon"></div>
+      <div>
+        <div class="header-trainer">{_he(trainer)}</div>
+        <div class="header-title">TRAINER CARD</div>
+      </div>
+    </div>
+    <span class="header-badge">· {_he(title)} ·</span>
+  </div>
+
+  <!-- Quest -->
+  {quest_html}
+
+  <!-- Top grid: Buddy + Stats -->
+  <div class="grid-2">
+    <!-- Active Buddy -->
+    <div class="card">
+      <div class="card-title">Active Buddy</div>
+      <div class="buddy-name">{_he(stage)}</div>
+      <div class="buddy-level">Level {level}</div>
+      <div class="buddy-spec">{_he(specialty)}</div>
+      <div class="xp-label">
+        <span>XP</span>
+        <span>{xp_disp} / {xp_max_disp}</span>
+      </div>
+      <div class="xp-track">
+        <div class="xp-fill" style="width:{pct}%"></div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="card">
+      <div class="card-title">Stats</div>
+      <div class="stats-grid">
+        <div class="stat-item"><div class="stat-val gold">{streak}</div><div class="stat-lbl">🔥 Day Streak</div></div>
+        <div class="stat-item"><div class="stat-val blue">{n_caught}<span style="font-size:14px;color:var(--muted)">/{n_total}</span></div><div class="stat-lbl">📖 Pokédex</div></div>
+        <div class="stat-item"><div class="stat-val">{total_xp}</div><div class="stat-lbl">⚡ Total XP</div></div>
+        <div class="stat-item"><div class="stat-val red">{_he(rarest_str)}</div><div class="stat-lbl">💎 Rarest</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Balls inventory -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">Ball Inventory</div>
+    <div class="balls-row">{balls_html}</div>
+  </div>
+
+  <!-- Party table -->
+  <div class="card party-wrap">
+    <div class="card-title">Party ({n_caught} Pokémon)</div>
+    <table>
+      <thead><tr><th>Pokémon</th><th style="text-align:center">Lv.</th><th>Rarity</th></tr></thead>
+      <tbody>{''.join(party_rows_html) or '<tr><td colspan="3" class="muted">No Pokémon yet</td></tr>'}</tbody>
+    </table>
+  </div>
+
+  <!-- Badges -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">Badges ({len(badge_entries)})</div>
+    <div>{badge_chips}</div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    pokemon-buddy-claude · powered by
+    <a href="https://github.com/anthropics/claude-code">Claude Code</a>
+  </div>
+
+</div>
+<script>
+  // Animate XP bar on load
+  document.querySelectorAll('.xp-fill').forEach(el => {{
+    const w = el.style.width;
+    el.style.width = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => {{ el.style.width = w; }}));
+  }});
+</script>
+</body>
+</html>'''
+    return html
+
+
+def render_readme_snippet(html_path='trainer-card.html'):
     """Markdown snippet for pasting into a GitHub profile README."""
     col = read_collection()
     text = BUDDY_FILE.read_text(encoding='utf-8')
@@ -1232,7 +1532,8 @@ def render_readme_snippet(svg_path='trainer-card.svg'):
     return (
         f'<!-- Pokemon Buddy for Claude — trainer card -->\n'
         f'<p align="center">\n'
-        f'  <img src="./{svg_path}" alt="{trainer} — {stage} Lv.{level}" width="620"/>\n'
+        f'  <a href="./{html_path}">'
+        f'<img src="./{html_path}" alt="{trainer} — {stage} Lv.{level}"/></a>\n'
         f'</p>\n'
         f'<p align="center">\n'
         f'  <sub>Powered by '
@@ -1241,6 +1542,54 @@ def render_readme_snippet(svg_path='trainer-card.svg'):
         f'</p>\n'
     )
 
+
+def render_dex():
+    """Render Pokédex — all caught Pokémon grouped by rarity."""
+    col = read_collection()
+    if not col['pokemon']:
+        return ' No Pokémon caught yet. Earn XP to encounter wild Pokémon!'
+
+    n_total  = sum(len(v) for v in POKEMON_POOL.values())
+    n_caught = len(col['pokemon'])
+    grouped  = _group_by_tier(col['pokemon'])
+
+    W = 54
+    SEP = f' ╠{"═" * (W + 3)}╣'
+
+    def row(content=''):
+        pad = W - 1 - visual_len(content)
+        return f' ║  {content}{" " * max(0, pad)}  ║'
+
+    out = [
+        f' ╔{"═" * (W + 3)}╗',
+        row(f'📖  POKÉDEX  ·  {n_caught} / {n_total} caught'),
+        SEP,
+    ]
+
+    for tier in RARITY_TIER_ORDER:
+        members = grouped.get(tier)
+        if not members:
+            continue
+        out.append(row(RARITY_LABELS_ASCII.get(tier, tier.upper())))
+        row_buf = []
+        for p in members:
+            mark  = '✨' if p.get('shiny') else ''
+            entry = f'{mark}{p["emoji"]} {p["name"]}{"*" if p["name"] == col["active"] else ""} Lv.{p["level"]}'
+            row_buf.append(entry)
+            if len(row_buf) == 3:
+                out.append(row(f'{row_buf[0]:<20}{row_buf[1]:<20}{row_buf[2]}'))
+                row_buf = []
+        if row_buf:
+            out.append(row(''.join(f'{e:<20}' for e in row_buf).rstrip()))
+        out.append(row())
+
+    out[-1] = SEP  # replace trailing blank row with separator
+    out += [
+        row(f'Use /poke:switch <name> to change your active buddy'),
+        f' ╚{"═" * (W + 3)}╝',
+    ]
+    return '\n'.join(out)
+
 def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         new_stage, stat_boost, new_moves_data, evolved,
                         catch_result=None, b_emoji='', b_name='', b_desc='',
@@ -1248,7 +1597,7 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         buddy_rarity=None, buddy_name='',
                         inventory_msg='', combo=1, combo_mult=1.0,
                         quest_msg='', lv_reward_msg='',
-                        encounter_info=None):
+                        encounter_info=None, active_quest=None, quest_done=False):
     xp_floor    = xp_for_level(new_level)
     xp_disp     = new_xp - xp_floor
     xp_max_disp = new_max - xp_floor
@@ -1286,6 +1635,9 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
         lines.append(f' New move: {name} [{mtype}] — {desc}')
     if quest_msg:
         lines.append(f' {quest_msg}')
+    elif active_quest:
+        status = '✓ DONE' if quest_done else '…'
+        lines.append(f' 📋 Quest: {active_quest["desc"]}  [{status}]')
 
     # Auto-milestone badges announcement
     if new_badges:
@@ -1483,14 +1835,12 @@ def do_switch(target_name):
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: buddy-update.py status|statusline|card|svg|readme|backup|import|xp|badge|switch|catch")
+        print("Usage: buddy-update.py status|statusline|card|html|readme|dex|backup|import|xp|badge|switch|catch")
         sys.exit(1)
 
     mode = args[0]
 
-    # Modes that read/render the buddy file need it to exist. statusline has
-    # its own empty-state fallback; import/backup/catch handle absence themselves.
-    if mode in ('status', 'card', 'svg', 'readme', 'switch', 'xp', 'badge') and not BUDDY_FILE.exists():
+    if mode in ('status', 'card', 'html', 'svg', 'readme', 'dex', 'switch', 'xp', 'badge') and not BUDDY_FILE.exists():
         print(f' ❌ No buddy found at {BUDDY_FILE}')
         print(f'    Run /poke:choose to pick a starter first.')
         sys.exit(1)
@@ -1508,16 +1858,20 @@ def main():
         print(render_card())
         sys.exit(0)
 
-    if mode == 'svg':
-        out_path = Path(args[1]) if len(args) > 1 else Path.cwd() / 'trainer-card.svg'
-        out_path.write_text(render_svg_card(), encoding='utf-8')
+    if mode == 'dex':
+        print(render_dex())
+        sys.exit(0)
+
+    if mode in ('html', 'svg'):
+        out_path = Path(args[1]) if len(args) > 1 else Path.cwd() / 'trainer-card.html'
+        out_path.write_text(render_html_card(), encoding='utf-8')
         print(f' ✅ Trainer card saved: {out_path}')
-        print(f'    Share it on GitHub, Discord, Twitter — or paste into your README.')
+        print(f'    Open in a browser — full-page interactive Pokemon-themed card.')
         sys.exit(0)
 
     if mode == 'readme':
-        svg_rel = args[1] if len(args) > 1 else 'trainer-card.svg'
-        print(render_readme_snippet(svg_rel))
+        html_rel = args[1] if len(args) > 1 else 'trainer-card.html'
+        print(render_readme_snippet(html_rel))
         sys.exit(0)
 
     if mode == 'backup':
@@ -1616,9 +1970,6 @@ def main():
         # Earn balls & berries
         inventory_msg = earn_inventory(base_xp, False, tr_stats)
 
-        # Initialize daily quest for today (resets if new day)
-        get_daily_quest(tr_stats)
-
     elif mode == 'badge':
         add_xp  = 50
         b_emoji = args[1] if len(args) > 1 else '🏅'
@@ -1690,7 +2041,9 @@ def main():
 
     # Daily quest check
     did_catch = catch_result is not None
-    quest_msg = check_daily_quest(tr_stats, desc if mode == 'xp' else '', did_catch)
+    quest_msg    = check_daily_quest(tr_stats, desc if mode == 'xp' else '', did_catch)
+    active_quest = get_daily_quest(tr_stats)
+    quest_done   = tr_stats.get('daily_quest_done', False)
 
     # Write ENCOUNTER_FILE for contextual statusline
     if encounter_info.get('encountered'):
@@ -1730,7 +2083,7 @@ def main():
         buddy_rarity, buddy_name,
         inventory_msg, combo, combo_mult,
         quest_msg, lv_reward_msg,
-        encounter_info,
+        encounter_info, active_quest, quest_done,
     ))
 
 if __name__ == '__main__':

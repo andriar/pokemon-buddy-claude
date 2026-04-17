@@ -1,7 +1,7 @@
 {
   "name": "poke",
-  "description": "Train a Pokémon with every Claude Code session. EXP, evolution chains, wild catches, shiny hunts, trainer titles, and a live ASCII status bar.",
-  "version": "2.3.0",
+  "description": "Train a Pok\u00e9mon with every Claude Code session. EXP, evolution chains, wild catches, shiny hunts, trainer titles, and a live ASCII status bar.",
+  "version": "2.4.0",
   "author": {
     "name": "andriar",
     "url": "https://github.com/andriar"
@@ -9,7 +9,14 @@
   "homepage": "https://github.com/andriar/pokemon-buddy-claude",
   "repository": "https://github.com/andriar/pokemon-buddy-claude",
   "license": "MIT",
-  "keywords": ["claude-code", "plugin", "pokemon", "gamification", "companion", "statusline"],
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "pokemon",
+    "gamification",
+    "companion",
+    "statusline"
+  ],
   "hooks": "./hooks.json",
   "statusLine": {
     "type": "command",

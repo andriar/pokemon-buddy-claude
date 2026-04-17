@@ -5,6 +5,20 @@ Format: [version] — date — description
 
 ---
 
+## [2.4.0] — 2026-04-17
+
+### Added
+- **HTML trainer card** — `/poke:export` now generates a full-page interactive Pokemon-themed HTML card (replaces SVG); includes animated XP bar, rarity-coloured party table, ball inventory, and daily quest widget
+- **`/poke:dex`** — new Pokédex command shows all caught Pokémon grouped by rarity in a 3-per-row ASCII table
+- **Ball inventory on trainer card** — `/poke:card` achievements section now shows current Poké/Great/Ultra/Master Ball counts
+- **Daily quest always visible** — XP output always shows the active quest and its status (`[…]` or `✓ DONE`), not only on completion
+- **`RARITY_TIER_ORDER`, `RARITY_LABELS_ASCII`, `_pokemon_tier()`, `_group_by_tier()`** — module-level rarity constants and helpers; 7 new unit tests cover them
+
+### Changed
+- **Party section moved out of trainer card** — party now renders as a separate table below the main card, with columns for Pokémon, Level, and Rarity, grouped by tier with dividers
+
+---
+
 ## [2.3.0] — 2026-04-17
 
 ### Added

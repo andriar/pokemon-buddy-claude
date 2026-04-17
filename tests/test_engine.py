@@ -1070,5 +1070,50 @@ class TestRunEncounter(_TmpDir, unittest.TestCase):
                     self.assertLess(max(ultra_idx), min(great_idx))
 
 
+# ── Rarity helpers ───────────────────────────────────────────────────────────
+
+class TestRarityHelpers(unittest.TestCase):
+    def test_pokemon_tier_by_rarity_field(self):
+        self.assertEqual(engine._pokemon_tier({'rarity': 'rare'}), 'rare')
+        self.assertEqual(engine._pokemon_tier({'rarity': 'legendary'}), 'legendary')
+        self.assertEqual(engine._pokemon_tier({'rarity': 'mythical'}), 'mythical')
+        self.assertEqual(engine._pokemon_tier({'rarity': 'uncommon'}), 'uncommon')
+        self.assertEqual(engine._pokemon_tier({'rarity': 'starter'}), 'starter')
+
+    def test_pokemon_tier_shiny_suffix(self):
+        self.assertEqual(engine._pokemon_tier({'rarity': 'rare-shiny'}), 'rare')
+        self.assertEqual(engine._pokemon_tier({'rarity': 'legendary-shiny'}), 'legendary')
+
+    def test_pokemon_tier_unknown_falls_back_to_common(self):
+        self.assertEqual(engine._pokemon_tier({'rarity': 'caught'}), 'common')
+        self.assertEqual(engine._pokemon_tier({}), 'common')
+
+    def test_group_by_tier_basic(self):
+        pokemon = [
+            {'name': 'Dratini',    'rarity': 'rare'},
+            {'name': 'Pidgey',     'rarity': 'common'},
+            {'name': 'Charmander', 'rarity': 'starter'},
+            {'name': 'Lugia',      'rarity': 'legendary'},
+        ]
+        grouped = engine._group_by_tier(pokemon)
+        self.assertIn('rare', grouped)
+        self.assertIn('common', grouped)
+        self.assertIn('starter', grouped)
+        self.assertIn('legendary', grouped)
+        self.assertEqual(grouped['rare'][0]['name'], 'Dratini')
+        self.assertEqual(grouped['common'][0]['name'], 'Pidgey')
+
+    def test_group_by_tier_empty(self):
+        self.assertEqual(engine._group_by_tier([]), {})
+
+    def test_rarity_tier_order_is_complete(self):
+        expected = ['mythical', 'legendary', 'rare', 'uncommon', 'common', 'starter']
+        self.assertEqual(engine.RARITY_TIER_ORDER, expected)
+
+    def test_rarity_labels_ascii_covers_all_tiers(self):
+        for tier in engine.RARITY_TIER_ORDER:
+            self.assertIn(tier, engine.RARITY_LABELS_ASCII)
+
+
 if __name__ == '__main__':
     unittest.main()
