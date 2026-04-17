@@ -5,6 +5,19 @@ Format: [version] — date — description
 
 ---
 
+## [2.5.0] — 2026-04-17
+
+### Added
+- **Pokémon sprites in party table** — each party row now shows the actual PokéAPI sprite image instead of an emoji; shiny Pokémon use the shiny sprite variant
+- **Pokéball image assets** — ball inventory uses real Pokéball sprites (Poké/Great/Ultra/Master) with a count badge, replacing the coloured circle emojis
+- **RPG stat bars** — stats section replaced with 6 horizontal progress bars (Streak, Pokédex, Total XP, Bug Fixes, Features, Ships), each with its own accent colour and shimmer animation
+- **Trainer card visual revamp** — new dark indigo theme (BRIX-inspired), Inter + Press Start 2P typography, dot-grid background, glassmorphism cards, `sprite_url` helper, `_BALL_SPRITES` constant, and `POKEDEX_IDS` national dex map in `lib/data.py`
+
+### Fixed
+- **Motion CDN `stagger` export error** — pinned to `motion@10.18.0/+esm` which correctly exports `stagger`, `spring`, and `animate`
+
+---
+
 ## [2.4.0] — 2026-04-17
 
 ### Added

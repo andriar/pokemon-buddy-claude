@@ -1115,5 +1115,25 @@ class TestRarityHelpers(unittest.TestCase):
             self.assertIn(tier, engine.RARITY_LABELS_ASCII)
 
 
+class TestSpriteUrl(unittest.TestCase):
+    def test_known_pokemon_returns_url(self):
+        url = engine.sprite_url('Charmander')
+        self.assertIn('4.png', url)
+        self.assertIn('PokeAPI', url)
+
+    def test_shiny_returns_shiny_url(self):
+        url = engine.sprite_url('Charmander', shiny=True)
+        self.assertIn('/shiny/', url)
+        self.assertIn('4.png', url)
+
+    def test_unknown_pokemon_returns_empty(self):
+        self.assertEqual(engine.sprite_url('FakeMon'), '')
+
+    def test_ball_sprites_dict_has_all_types(self):
+        for key in ('Poké', 'Great', 'Ultra', 'Master'):
+            self.assertIn(key, engine._BALL_SPRITES)
+            self.assertTrue(engine._BALL_SPRITES[key].startswith('https://'))
+
+
 if __name__ == '__main__':
     unittest.main()

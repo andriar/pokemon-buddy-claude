@@ -433,6 +433,70 @@ POKEMON_POOL = {
     ],
 }
 
+# ── National Dex IDs (for PokéAPI sprites) ────────────────────────────────────
+POKEDEX_IDS = {
+    # Starters & evolutions
+    'Bulbasaur': 1, 'Ivysaur': 2, 'Venusaur': 3,
+    'Charmander': 4, 'Charmeleon': 5, 'Charizard': 6,
+    'Squirtle': 7, 'Wartortle': 8, 'Blastoise': 9,
+    # Common
+    'Weedle': 13, 'Pidgey': 16, 'Rattata': 19, 'Zubat': 41,
+    'Geodude': 74, 'Magikarp': 129,
+    'Sentret': 161, 'Hoothoot': 163, 'Spinarak': 167,
+    'Wurmple': 265, 'Zigzagoon': 263,
+    'Bidoof': 399, 'Starly': 396,
+    'Patrat': 504, 'Pidove': 519,
+    'Fletchling': 661, 'Scatterbug': 664,
+    'Pikipek': 731, 'Yungoos': 734,
+    'Wooloo': 831, 'Skwovet': 819,
+    'Lechonk': 924, 'Tarountula': 917,
+    # Uncommon
+    'Pikachu': 25, 'Vulpix': 37, 'Abra': 63, 'Machop': 66,
+    'Gastly': 92, 'Psyduck': 54, 'Eevee': 133,
+    'Togepi': 175, 'Espeon': 196, 'Umbreon': 197, 'Heracross': 214,
+    'Ralts': 280, 'Bagon': 371, 'Beldum': 374,
+    'Gible': 443, 'Riolu': 447, 'Rotom': 479,
+    'Zorua': 570, 'Deino': 633, 'Larvesta': 636,
+    'Espurr': 677, 'Noibat': 714,
+    'Comfey': 764, 'Mimikyu': 778, 'Jangmo-o': 782,
+    'Falinks': 870, 'Dreepy': 885,
+    'Pawmi': 921, 'Frigibax': 999,
+    # Rare
+    'Scyther': 123, 'Lapras': 131, 'Porygon': 137, 'Snorlax': 143,
+    'Dratini': 147, 'Dragonite': 149, 'Jolteon': 135,
+    'Blissey': 242, 'Tyranitar': 248,
+    'Flygon': 330, 'Salamence': 373, 'Metagross': 376,
+    'Garchomp': 445, 'Lucario': 448, 'Togekiss': 468,
+    'Haxorus': 612, 'Hydreigon': 635, 'Volcarona': 637,
+    'Aegislash': 681, 'Sylveon': 700, 'Goodra': 706,
+    'Toxapex': 748, 'Golisopod': 768, 'Kommo-o': 784,
+    'Corviknight': 823, 'Grimmsnarl': 861, 'Dragapult': 887,
+    'Kingambit': 983, 'Baxcalibur': 998, 'Gholdengo': 1000,
+    # Legendary
+    'Articuno': 144, 'Zapdos': 145, 'Moltres': 146, 'Mewtwo': 150,
+    'Raikou': 243, 'Entei': 244, 'Suicune': 245, 'Lugia': 249, 'Ho-Oh': 250,
+    'Latias': 380, 'Latios': 381, 'Kyogre': 382, 'Groudon': 383, 'Rayquaza': 384,
+    'Dialga': 483, 'Palkia': 484, 'Heatran': 485, 'Giratina': 487, 'Cresselia': 488,
+    'Cobalion': 638, 'Terrakion': 639, 'Virizion': 640, 'Reshiram': 643,
+    'Zekrom': 644, 'Kyurem': 646,
+    'Xerneas': 716, 'Yveltal': 717, 'Zygarde': 718,
+    'Tapu Koko': 785, 'Tapu Lele': 786, 'Tapu Bulu': 787, 'Tapu Fini': 788,
+    'Solgaleo': 791, 'Lunala': 792, 'Necrozma': 800,
+    'Zacian': 888, 'Zamazenta': 889, 'Eternatus': 890,
+    'Glastrier': 896, 'Spectrier': 897, 'Calyrex': 898,
+    'Wo-Chien': 1001, 'Ting-Lu': 1002, 'Chien-Pao': 1003, 'Chi-Yu': 1004,
+    'Koraidon': 1007, 'Miraidon': 1008,
+    # Mythical
+    'Mew': 151, 'Celebi': 251,
+    'Jirachi': 385, 'Deoxys': 386,
+    'Darkrai': 491, 'Shaymin': 492, 'Arceus': 493,
+    'Victini': 494, 'Keldeo': 647, 'Meloetta': 648, 'Genesect': 649,
+    'Diancie': 719, 'Hoopa': 720, 'Volcanion': 721,
+    'Magearna': 801, 'Marshadow': 802, 'Zeraora': 807, 'Meltan': 808, 'Melmetal': 809,
+    'Zarude': 893,
+    'Terapagos': 1024, 'Pecharunt': 1025,
+}
+
 # ── XP detection ──────────────────────────────────────────────────────────────
 # Each entry: (xp_value, [english_keywords], [bahasa_indonesia_keywords])
 # First matching rule wins (highest XP first).

@@ -21,7 +21,7 @@ from lib.data import (
     STARTER_DATA, MOVE_UNLOCKS, RARITY_START_LEVEL, BUDDY_RARITY_BOOST,
     ENCOUNTER_RATES, POKEMON_POOL, XP_RULES, MILESTONES, TITLE_RULES, BUDDY_TEMPLATE,
     POKEBALL_TYPES, BALL_BY_RARITY, BALL_EARN_BY_XP,
-    BERRY_TYPES, BERRY_DROP_RATES,
+    BERRY_TYPES, BERRY_DROP_RATES, POKEDEX_IDS,
     WILD_LEVELS, BASE_CATCH_RATES, TYPE_ADVANTAGE,
     COMBO_MULTIPLIERS, COMBO_WINDOW_SECS, LEVEL_UP_MILESTONE_REWARDS,
     DAILY_QUESTS,
@@ -1113,6 +1113,21 @@ def _he(s):
     return (str(s).replace('&', '&amp;').replace('<', '&lt;')
                   .replace('>', '&gt;').replace('"', '&quot;'))
 
+_SPRITE_BASE = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon'
+_ITEM_BASE   = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items'
+_BALL_SPRITES = {
+    'Poké':   f'{_ITEM_BASE}/poke-ball.png',
+    'Great':  f'{_ITEM_BASE}/great-ball.png',
+    'Ultra':  f'{_ITEM_BASE}/ultra-ball.png',
+    'Master': f'{_ITEM_BASE}/master-ball.png',
+}
+
+def sprite_url(name, shiny=False):
+    dex_id = POKEDEX_IDS.get(name)
+    if not dex_id:
+        return ''
+    return f'{_SPRITE_BASE}/shiny/{dex_id}.png' if shiny else f'{_SPRITE_BASE}/{dex_id}.png'
+
 def render_html_card():
     """Render a full-page interactive Pokemon-themed HTML trainer card."""
     text     = BUDDY_FILE.read_text(encoding='utf-8')
@@ -1156,12 +1171,38 @@ def render_html_card():
     grouped = _group_by_tier(col['pokemon'])
     rarest  = next((grouped[t][0] for t in RARITY_TIER_ORDER if grouped.get(t)), None)
 
-    n_caught = len(col['pokemon'])
-    n_total  = sum(len(v) for v in POKEMON_POOL.values())
-    streak   = tr_stats.get('streak', 0)
-    longest  = tr_stats.get('longest_streak', 0)
-    total_xp = tr_stats.get('total_xp_ever', 0)
+    n_caught   = len(col['pokemon'])
+    n_total    = sum(len(v) for v in POKEMON_POOL.values())
+    streak     = tr_stats.get('streak', 0)
+    longest    = tr_stats.get('longest_streak', 0)
+    total_xp   = tr_stats.get('total_xp_ever', 0)
+    bug_fixes  = tr_stats.get('bug_fixes', 0)
+    features   = tr_stats.get('features', 0)
+    ships      = tr_stats.get('ships', 0)
     pct = min(100, int(xp_disp / xp_max_disp * 100)) if xp_max_disp else 0
+
+    def _pct(val, cap): return min(100, round(val / cap * 100)) if cap else 0
+    _xp_cap   = max(1000, (total_xp // 1000 + 1) * 1000)
+    stat_bars = [
+        ('🔥', 'Streak',    f'{streak}d',    f'best {longest}d', _pct(streak,    max(longest, 30)),  '#f97316'),
+        ('📖', 'Pokédex',   f'{n_caught}',   f'/ {n_total}',     _pct(n_caught,  n_total),           '#22d3ee'),
+        ('⚡', 'Total XP',  f'{total_xp:,}', f'/ {_xp_cap:,}',   _pct(total_xp,  _xp_cap),           '#a78bfa'),
+        ('🐛', 'Bug Fixes', f'{bug_fixes}',  f'/ 20 goal',       _pct(bug_fixes, 20),                '#4ade80'),
+        ('✨', 'Features',  f'{features}',   f'/ 10 goal',       _pct(features,  10),                '#fbbf24'),
+        ('🚀', 'Ships',     f'{ships}',      f'/ 5 goal',        _pct(ships,     5),                 '#f472b6'),
+    ]
+    stats_html = ''.join(
+        f'<div class="sbar-row">'
+        f'<div class="sbar-meta">'
+        f'<span class="sbar-lbl">{icon} {lbl}</span>'
+        f'<span class="sbar-val">{val} <span class="sbar-sub">{sub}</span></span>'
+        f'</div>'
+        f'<div class="sbar-track">'
+        f'<div class="sbar-fill" style="width:{pct}%;background:{col}"></div>'
+        f'</div>'
+        f'</div>'
+        for icon, lbl, val, sub, pct, col in stat_bars
+    )
 
     balls_poke  = tr_stats.get('balls_poke', 0)
     balls_great = tr_stats.get('balls_great', 0)
@@ -1171,6 +1212,10 @@ def render_html_card():
     active_quest = get_daily_quest(tr_stats)
     quest_done   = tr_stats.get('daily_quest_done', False)
 
+    buddy_spr_url  = sprite_url(stage)
+    buddy_img_html = (f'<img src="{buddy_spr_url}" class="buddy-sprite" alt="{_he(stage)}">'
+                      if buddy_spr_url else '')
+
     party_rows_html = []
     for tier in RARITY_TIER_ORDER:
         members = grouped.get(tier)
@@ -1179,12 +1224,16 @@ def render_html_card():
         label, color, bg = rarity_labels_html.get(tier, ('?', '#fff', '#222'))
         for p in members:
             is_active = p['name'] == col['active']
-            shiny     = '✨ ' if p.get('shiny') else ''
+            is_shiny  = bool(p.get('shiny'))
             mark      = ' ★' if is_active else ''
             row_cls   = 'active-row' if is_active else ''
+            spr       = sprite_url(p['name'], shiny=is_shiny)
+            shiny_sfx = ' ✨' if is_shiny else ''
+            icon      = (f'<img src="{spr}" class="poke-sprite" alt="{_he(p["name"])}">'
+                         if spr else _he(p.get('emoji', '?')))
             party_rows_html.append(
                 f'<tr class="{row_cls}">'
-                f'<td>{_he(shiny)}{_he(p["emoji"])} {_he(p["name"])}{_he(mark)}</td>'
+                f'<td>{icon} {_he(p["name"])}{_he(shiny_sfx)}{_he(mark)}</td>'
                 f'<td class="center">{p["level"]}</td>'
                 f'<td><span class="rarity-badge" style="color:{color};background:{bg}">'
                 f'{_he(label)}</span></td>'
@@ -1196,27 +1245,22 @@ def render_html_card():
         for em, nm in badge_entries
     ) or '<span class="muted">No badges yet</span>'
 
-    def ball_item(emoji, count, label):
+    def ball_item(label, count):
         if count == 0:
             return ''
+        img = f'<img src="{_BALL_SPRITES[label]}" class="ball-sprite" alt="{label} Ball">'
         return (f'<div class="ball-item">'
-                f'<span class="ball-emoji">{emoji}</span>'
-                f'<span class="ball-count">×{count}</span>'
+                f'<div class="ball-img-wrap">{img}'
+                f'<span class="ball-count-badge">{count}</span></div>'
                 f'<span class="ball-label">{label}</span>'
                 f'</div>')
 
     balls_html = (
-        ball_item('🔴', balls_poke,  'Poké') +
-        ball_item('🔵', balls_great, 'Great') +
-        ball_item('🟡', balls_ultra, 'Ultra') +
-        ball_item('🟣', balls_mast,  'Master')
+        ball_item('Poké',   balls_poke) +
+        ball_item('Great',  balls_great) +
+        ball_item('Ultra',  balls_ultra) +
+        ball_item('Master', balls_mast)
     ) or '<span class="muted">No balls</span>'
-
-    rarest_str = (
-        f'{rarest.get("emoji","")} {rarest["name"]} '
-        f'({rarest["rarity"].upper().replace("-SHINY"," ✨")})'
-        if rarest else 'None yet'
-    )
 
     quest_html = ''
     if active_quest:
@@ -1240,195 +1284,231 @@ def render_html_card():
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Trainer Card — {_he(trainer)}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Nunito:wght@400;700;900&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap');
   :root {{
-    --red:   #CC0000; --red2:  #ff1a1a;
-    --yel:   #FFDE00; --yel2:  #ffe94d;
-    --blue:  #3B4CCA; --blue2: #5b6fea;
-    --dark:  #0d0e1a; --card:  #181929;
-    --card2: #1f2136; --card3: #252641;
-    --text:  #e8ecff; --muted: #7a82a8;
-    --gold:  #FFD700;
-    --glow-red: 0 0 20px rgba(204,0,0,.4);
-    --glow-yel: 0 0 20px rgba(255,222,0,.4);
+    --bg:    #06070f;
+    --s1:    #0b0d1a;
+    --s2:    #101220;
+    --s3:    #161928;
+    --bdr:   rgba(255,255,255,.07);
+    --bdrhi: rgba(255,255,255,.14);
+    --text:  #dde1f5;
+    --muted: #4e5580;
+    --acc:   #6366f1;
+    --viol:  #a78bfa;
+    --red:   #ef4444;
+    --gold:  #f59e0b;
+    --green: #22c55e;
+    --cyan:  #22d3ee;
+    --pink:  #f472b6;
   }}
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
-    background: var(--dark);
-    color: var(--text);
-    font-family: 'Nunito', system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
     min-height: 100vh;
     background-image:
-      radial-gradient(ellipse at 20% 10%, rgba(59,76,202,.15) 0%, transparent 60%),
-      radial-gradient(ellipse at 80% 90%, rgba(204,0,0,.12) 0%, transparent 60%);
+      radial-gradient(circle, rgba(99,102,241,.035) 1px, transparent 1px),
+      radial-gradient(ellipse at 12% 20%, rgba(99,102,241,.09) 0%, transparent 50%),
+      radial-gradient(ellipse at 88% 80%, rgba(167,139,250,.06) 0%, transparent 50%);
+    background-size: 28px 28px, 100% 100%, 100% 100%;
   }}
-  .page {{ max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }}
+  .page {{ max-width: 860px; margin: 0 auto; padding: 32px 20px 72px; }}
 
   /* ── Header ── */
   .header {{
-    background: linear-gradient(135deg, #1a0000 0%, #3d0000 40%, #1a0012 100%);
-    border: 2px solid var(--red);
-    border-radius: 20px;
-    padding: 28px 32px;
-    position: relative;
-    overflow: hidden;
-    margin-bottom: 20px;
-    box-shadow: var(--glow-red), inset 0 1px 0 rgba(255,255,255,.08);
+    position: relative; overflow: hidden;
+    border-radius: 24px; margin-bottom: 20px; padding: 36px 40px 32px;
+    background: linear-gradient(135deg, #0c0a22 0%, #180a2e 60%, #0c1022 100%);
+    border: 1px solid rgba(99,102,241,.22);
+    box-shadow: 0 0 48px rgba(99,102,241,.1), inset 0 1px 0 rgba(255,255,255,.07);
   }}
   .header::before {{
-    content: '';
-    position: absolute; right: -60px; top: -60px;
-    width: 220px; height: 220px;
-    border-radius: 50%;
-    border: 40px solid rgba(204,0,0,.18);
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(99,102,241,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(99,102,241,.05) 1px, transparent 1px);
+    background-size: 36px 36px;
+    -webkit-mask-image: radial-gradient(ellipse at 100% 50%, black 20%, transparent 68%);
+    mask-image: radial-gradient(ellipse at 100% 50%, black 20%, transparent 68%);
   }}
-  .header::after {{
-    content: '';
-    position: absolute; right: -10px; top: -10px;
-    width: 100px; height: 100px;
-    border-radius: 50%;
-    border: 16px solid rgba(255,255,255,.06);
-  }}
-  .header-top {{ display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }}
-  .pokeball-icon {{
-    width: 52px; height: 52px; border-radius: 50%;
-    background: linear-gradient(180deg, var(--red) 50%, #fff 50%);
-    border: 3px solid #fff;
-    position: relative; flex-shrink: 0;
-    box-shadow: 0 0 0 3px var(--red);
-    animation: spin-slow 8s linear infinite;
-  }}
-  .pokeball-icon::after {{
-    content: '';
-    position: absolute; top: 50%; left: 50%;
-    transform: translate(-50%,-50%);
-    width: 14px; height: 14px; border-radius: 50%;
-    background: #fff; border: 3px solid #333;
+  .header-inner {{ position: relative; z-index: 1; display: flex; align-items: center; gap: 24px; }}
+  .pokeball-svg {{
+    width: 56px; height: 56px; flex-shrink: 0;
+    animation: spin-slow 10s linear infinite;
+    filter: drop-shadow(0 0 10px rgba(239,68,68,.5));
   }}
   @keyframes spin-slow {{ to {{ transform: rotate(360deg); }} }}
-  .header-trainer {{ font-size: 28px; font-weight: 900; color: var(--yel); text-shadow: 0 0 12px rgba(255,222,0,.6); }}
-  .header-title {{ font-size: 13px; color: var(--muted); margin-top: 2px; letter-spacing: 1px; }}
-  .header-badge {{
-    display: inline-block; margin-top: 10px;
-    background: rgba(255,222,0,.1); border: 1px solid rgba(255,222,0,.3);
-    color: var(--yel); border-radius: 20px; padding: 3px 14px; font-size: 12px; font-weight: 700;
+  .header-eyebrow {{
+    font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--viol); margin-bottom: 8px; font-weight: 600;
   }}
+  .header-trainer {{
+    font-family: 'Press Start 2P', monospace;
+    font-size: 20px; line-height: 1.45; color: #fff;
+    text-shadow: 0 0 24px rgba(99,102,241,.55);
+    margin-bottom: 14px;
+  }}
+  .header-meta {{ display: flex; gap: 8px; flex-wrap: wrap; }}
+  .chip {{
+    display: inline-flex; align-items: center;
+    background: rgba(255,255,255,.06); border: 1px solid var(--bdr);
+    border-radius: 6px; padding: 3px 10px;
+    font-size: 10px; font-weight: 600; letter-spacing: .5px; color: var(--muted);
+  }}
+  .chip.hi {{ background: rgba(99,102,241,.12); border-color: rgba(99,102,241,.28); color: var(--viol); }}
 
-  /* ── Grid layout ── */
+  /* ── Grid ── */
   .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }}
   @media(max-width:600px) {{ .grid-2 {{ grid-template-columns: 1fr; }} }}
 
   /* ── Cards ── */
   .card {{
-    background: var(--card); border: 1px solid rgba(255,255,255,.07);
-    border-radius: 16px; padding: 20px;
-    transition: transform .15s, box-shadow .15s;
+    background: var(--s1); border: 1px solid var(--bdr);
+    border-radius: 20px; padding: 24px; will-change: transform;
   }}
-  .card:hover {{ transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.4); }}
-  .card-title {{
-    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
-    color: var(--muted); margin-bottom: 14px;
-    display: flex; align-items: center; gap: 8px;
+  .sec-lbl {{
+    font-size: 9px; letter-spacing: 3px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 16px; font-weight: 600;
+    display: flex; align-items: center; gap: 10px;
   }}
-  .card-title::after {{
+  .sec-lbl::after {{
     content: ''; flex: 1; height: 1px;
-    background: linear-gradient(90deg, rgba(255,255,255,.1), transparent);
+    background: linear-gradient(90deg, var(--bdr), transparent);
   }}
 
-  /* ── Buddy card ── */
-  .buddy-name {{ font-size: 30px; font-weight: 900; margin-bottom: 2px; }}
-  .buddy-level {{ color: var(--blue2); font-size: 16px; font-weight: 700; }}
-  .buddy-spec {{ color: var(--muted); font-size: 13px; margin: 6px 0 16px; }}
-  .xp-label {{
-    display: flex; justify-content: space-between;
-    font-size: 12px; color: var(--muted); margin-bottom: 6px;
+  /* ── Buddy ── */
+  .buddy-sprite-bg {{
+    display: flex; justify-content: center; align-items: center;
+    background: radial-gradient(circle at 50% 55%, rgba(99,102,241,.1) 0%, transparent 68%);
+    border-radius: 14px; padding: 12px; margin-bottom: 16px; min-height: 108px;
   }}
-  .xp-track {{
-    height: 12px; border-radius: 6px;
-    background: rgba(255,255,255,.08); overflow: hidden;
+  .buddy-sprite {{
+    display: block; width: 96px; height: 96px; image-rendering: pixelated;
+    animation: buddy-float 3s ease-in-out infinite;
   }}
+  @keyframes buddy-float {{ 0%,100% {{ transform: translateY(0); }} 50% {{ transform: translateY(-7px); }} }}
+  .buddy-name {{ font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 6px; }}
+  .buddy-lv-row {{ display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }}
+  .lv-chip {{
+    background: rgba(99,102,241,.14); border: 1px solid rgba(99,102,241,.28);
+    color: var(--viol); border-radius: 5px; padding: 2px 8px;
+    font-size: 10px; font-weight: 700;
+  }}
+  .buddy-spec {{ color: var(--muted); font-size: 12px; margin-bottom: 16px; }}
+  .xp-lbl {{ display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 5px; }}
+  .xp-track {{ height: 5px; border-radius: 3px; background: rgba(255,255,255,.06); overflow: hidden; }}
   .xp-fill {{
-    height: 100%; border-radius: 6px;
-    background: linear-gradient(90deg, #4ade80, #22c55e);
-    box-shadow: 0 0 8px rgba(74,222,128,.5);
-    transition: width 1s cubic-bezier(.4,0,.2,1);
+    height: 100%; border-radius: 3px; position: relative; overflow: hidden;
+    background: linear-gradient(90deg, var(--acc), var(--viol));
+    box-shadow: 0 0 10px rgba(99,102,241,.4);
+  }}
+  .xp-fill::after {{
+    content: ''; position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent);
+    animation: shimmer 2s ease-in-out infinite;
+  }}
+  @keyframes shimmer {{ to {{ left: 130%; }} }}
+
+  /* ── Stats bars ── */
+  .sbar-row {{ margin-bottom: 11px; }}
+  .sbar-row:last-child {{ margin-bottom: 0; }}
+  .sbar-meta {{ display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }}
+  .sbar-lbl {{ font-size: 11px; font-weight: 600; }}
+  .sbar-val {{ font-size: 11px; font-weight: 700; color: #fff; }}
+  .sbar-sub {{ font-size: 10px; color: var(--muted); font-weight: 400; margin-left: 2px; }}
+  .sbar-track {{ height: 5px; border-radius: 3px; background: rgba(255,255,255,.06); overflow: hidden; }}
+  .sbar-fill {{ height: 100%; border-radius: 3px; position: relative; overflow: hidden; }}
+  .sbar-fill::after {{
+    content: ''; position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent);
+    animation: shimmer 2.4s ease-in-out infinite;
   }}
 
-  /* ── Stats grid ── */
-  .stats-grid {{ display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }}
-  .stat-item {{ background: var(--card2); border-radius: 12px; padding: 12px 14px; }}
-  .stat-val {{ font-size: 22px; font-weight: 900; }}
-  .stat-lbl {{ font-size: 11px; color: var(--muted); margin-top: 2px; }}
-  .stat-val.gold {{ color: var(--gold); }}
-  .stat-val.blue {{ color: var(--blue2); }}
-  .stat-val.red  {{ color: #f87171; }}
-
-  /* ── Party table ── */
-  .party-wrap {{ margin-bottom: 16px; }}
-  table {{ width: 100%; border-collapse: collapse; }}
-  thead th {{
-    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
-    color: var(--muted); padding: 0 12px 10px; text-align: left;
+  /* ── Ball inventory ── */
+  .balls-row {{ display: flex; gap: 16px; flex-wrap: wrap; }}
+  .ball-item {{ display: flex; flex-direction: column; align-items: center; gap: 6px; }}
+  .ball-img-wrap {{
+    position: relative; width: 52px; height: 52px;
+    background: rgba(255,255,255,.04); border: 1px solid var(--bdr);
+    border-radius: 12px; display: flex; align-items: center; justify-content: center;
   }}
-  tbody tr {{
-    border-top: 1px solid rgba(255,255,255,.05);
-    transition: background .15s;
+  .ball-sprite {{ width: 32px; height: 32px; image-rendering: pixelated; }}
+  .ball-count-badge {{
+    position: absolute; top: -7px; right: -7px;
+    background: var(--acc); color: #fff; border: 2px solid var(--bg);
+    border-radius: 99px; font-size: 9px; font-weight: 700;
+    padding: 1px 5px; min-width: 20px; text-align: center;
   }}
-  tbody tr:hover {{ background: rgba(255,255,255,.04); }}
-  tbody tr.active-row {{ background: rgba(255,222,0,.06); }}
-  tbody td {{ padding: 10px 12px; font-size: 14px; }}
-  tbody td.center {{ text-align: center; color: var(--blue2); font-weight: 700; }}
-  .rarity-badge {{
-    display: inline-block; padding: 2px 10px; border-radius: 20px;
-    font-size: 11px; font-weight: 700; letter-spacing: .5px;
-  }}
-
-  /* ── Balls ── */
-  .balls-row {{ display: flex; gap: 12px; flex-wrap: wrap; }}
-  .ball-item {{ display: flex; flex-direction: column; align-items: center; gap: 4px; }}
-  .ball-emoji {{ font-size: 28px; }}
-  .ball-count {{ font-size: 16px; font-weight: 900; }}
   .ball-label {{ font-size: 10px; color: var(--muted); }}
 
-  /* ── Badges ── */
-  .badge-chip {{
-    display: inline-block; background: var(--card2);
-    border: 1px solid rgba(255,255,255,.1);
-    border-radius: 20px; padding: 5px 14px;
-    font-size: 13px; margin: 4px;
-    transition: background .15s;
+  /* ── Party table ── */
+  .party-wrap {{ margin-bottom: 16px; overflow-x: auto; }}
+  table {{ width: 100%; border-collapse: collapse; min-width: 340px; }}
+  thead th {{
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); padding: 0 14px 12px; text-align: left; font-weight: 600;
   }}
-  .badge-chip:hover {{ background: var(--card3); }}
+  tbody tr {{ border-top: 1px solid var(--bdr); transition: background .15s; }}
+  tbody tr:hover {{ background: rgba(255,255,255,.03); }}
+  tbody tr.active-row {{ background: rgba(99,102,241,.07); }}
+  tbody td {{ padding: 10px 14px; font-size: 13px; }}
+  tbody td.center {{ text-align: center; color: var(--viol); font-weight: 700; }}
+  .poke-sprite {{ width: 36px; height: 36px; image-rendering: pixelated; vertical-align: middle; margin-right: 6px; }}
+  .rarity-badge {{
+    display: inline-block; padding: 2px 9px; border-radius: 5px;
+    font-size: 10px; font-weight: 700; letter-spacing: .3px;
+  }}
 
-  /* ── Quest card ── */
-  .quest-card {{
-    display: flex; align-items: center; gap: 14px;
-    background: linear-gradient(135deg, rgba(59,76,202,.15), rgba(59,76,202,.05));
-    border: 1px solid rgba(59,76,202,.3);
-    border-radius: 14px; padding: 14px 18px; margin-bottom: 16px;
+  /* ── Badges ── */
+  .badges-wrap {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+  .badge-chip {{
+    display: inline-flex; align-items: center;
+    background: rgba(255,255,255,.04); border: 1px solid var(--bdr);
+    border-radius: 8px; padding: 6px 14px; font-size: 12px;
+    font-weight: 500; cursor: default; will-change: transform;
   }}
-  .quest-icon {{ font-size: 24px; }}
+
+  /* ── Quest ── */
+  .quest-card {{
+    display: flex; align-items: center; gap: 16px;
+    background: linear-gradient(135deg, rgba(99,102,241,.08), rgba(99,102,241,.02));
+    border: 1px solid rgba(99,102,241,.18); border-radius: 16px;
+    padding: 16px 20px; margin-bottom: 16px;
+  }}
+  .quest-icon {{ font-size: 22px; flex-shrink: 0; }}
   .quest-body {{ flex: 1; }}
-  .quest-label {{ font-size: 10px; letter-spacing: 2px; color: var(--blue2); margin-bottom: 3px; }}
-  .quest-desc {{ font-size: 15px; font-weight: 700; }}
-  .quest-done  {{
-    background: rgba(74,222,128,.15); color: #4ade80;
-    border: 1px solid rgba(74,222,128,.3);
-    border-radius: 20px; padding: 3px 12px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  .quest-label {{ font-size: 9px; letter-spacing: 2px; color: var(--viol); margin-bottom: 4px; font-weight: 600; }}
+  .quest-desc {{ font-size: 14px; font-weight: 600; }}
+  .quest-done {{
+    background: rgba(34,197,94,.1); color: #4ade80;
+    border: 1px solid rgba(34,197,94,.2);
+    border-radius: 6px; padding: 4px 12px; font-size: 11px; font-weight: 700; white-space: nowrap;
   }}
   .quest-active {{
-    background: rgba(251,191,36,.12); color: #fbbf24;
-    border: 1px solid rgba(251,191,36,.3);
-    border-radius: 20px; padding: 3px 12px; font-size: 12px; font-weight: 700; white-space: nowrap;
+    background: rgba(245,158,11,.1); color: #fbbf24;
+    border: 1px solid rgba(245,158,11,.2);
+    border-radius: 6px; padding: 4px 12px; font-size: 11px; font-weight: 700; white-space: nowrap;
   }}
 
-  /* ── Rarest ── */
-  .rarest-str {{ font-size: 18px; font-weight: 700; color: var(--gold); }}
-
-  /* ── Footer ── */
-  .footer {{ text-align: center; color: var(--muted); font-size: 12px; margin-top: 32px; }}
-  .footer a {{ color: var(--blue2); text-decoration: none; }}
+  /* ── Misc ── */
+  .rarest-sprite {{ width: 22px; height: 22px; image-rendering: pixelated; vertical-align: middle; margin-right: 4px; }}
   .muted {{ color: var(--muted); font-size: 13px; }}
+  .footer {{ text-align: center; color: var(--muted); font-size: 11px; margin-top: 40px; letter-spacing: .5px; }}
+  .footer a {{ color: var(--acc); text-decoration: none; }}
+
+  /* ── Motion initial states ── */
+  .header, .quest-card, .grid-2 .card,
+  .card.balls-card, .card.party-card, .card.badges-card,
+  .footer, .sbar-row, tbody tr, .badge-chip {{ opacity: 0; }}
+  @media (prefers-reduced-motion: reduce) {{
+    .header, .quest-card, .grid-2 .card,
+    .card.balls-card, .card.party-card, .card.badges-card,
+    .footer, .sbar-row, tbody tr, .badge-chip {{ opacity: 1 !important; transform: none !important; }}
+    .buddy-sprite {{ animation: none; }}
+    .pokeball-svg {{ animation: none; }}
+    .xp-fill::after {{ animation: none; }}
+  }}
 </style>
 </head>
 <body>
@@ -1436,14 +1516,31 @@ def render_html_card():
 
   <!-- Header -->
   <div class="header">
-    <div class="header-top">
-      <div class="pokeball-icon"></div>
+    <div class="header-inner">
+      <svg class="pokeball-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <clipPath id="top-clip"><rect x="0" y="0" width="100" height="50"/></clipPath>
+          <clipPath id="bot-clip"><rect x="0" y="50" width="100" height="50"/></clipPath>
+        </defs>
+        <circle cx="50" cy="50" r="45" fill="#CC0000" clip-path="url(#top-clip)"/>
+        <ellipse cx="35" cy="28" rx="14" ry="8" fill="rgba(255,255,255,.18)" clip-path="url(#top-clip)"/>
+        <circle cx="50" cy="50" r="45" fill="#f0f0f0" clip-path="url(#bot-clip)"/>
+        <path d="M 12 58 Q 50 72 88 58" fill="none" stroke="rgba(0,0,0,.08)" stroke-width="2"/>
+        <circle cx="50" cy="50" r="45" fill="none" stroke="#1a1a1a" stroke-width="4.5"/>
+        <rect x="5" y="46.5" width="90" height="7" fill="#1a1a1a"/>
+        <circle cx="50" cy="50" r="13" fill="#1a1a1a"/>
+        <circle cx="50" cy="50" r="9" fill="#ffffff"/>
+        <circle cx="47" cy="47" r="2.5" fill="rgba(255,255,255,.6)"/>
+      </svg>
       <div>
+        <div class="header-eyebrow">Pokémon Trainer</div>
         <div class="header-trainer">{_he(trainer)}</div>
-        <div class="header-title">TRAINER CARD</div>
+        <div class="header-meta">
+          <span class="chip hi">· {_he(title)} ·</span>
+          <span class="chip">Trainer Card</span>
+        </div>
       </div>
     </div>
-    <span class="header-badge">· {_he(title)} ·</span>
   </div>
 
   <!-- Quest -->
@@ -1451,42 +1548,30 @@ def render_html_card():
 
   <!-- Top grid: Buddy + Stats -->
   <div class="grid-2">
-    <!-- Active Buddy -->
     <div class="card">
-      <div class="card-title">Active Buddy</div>
+      <div class="sec-lbl">Active Buddy</div>
+      <div class="buddy-sprite-bg">{buddy_img_html}</div>
       <div class="buddy-name">{_he(stage)}</div>
-      <div class="buddy-level">Level {level}</div>
+      <div class="buddy-lv-row"><span class="lv-chip">Lv. {level}</span></div>
       <div class="buddy-spec">{_he(specialty)}</div>
-      <div class="xp-label">
-        <span>XP</span>
-        <span>{xp_disp} / {xp_max_disp}</span>
-      </div>
-      <div class="xp-track">
-        <div class="xp-fill" style="width:{pct}%"></div>
-      </div>
+      <div class="xp-lbl"><span>XP Progress</span><span>{xp_disp} / {xp_max_disp}</span></div>
+      <div class="xp-track"><div class="xp-fill" data-xp="{pct}" style="width:0%"></div></div>
     </div>
-
-    <!-- Stats -->
     <div class="card">
-      <div class="card-title">Stats</div>
-      <div class="stats-grid">
-        <div class="stat-item"><div class="stat-val gold">{streak}</div><div class="stat-lbl">🔥 Day Streak</div></div>
-        <div class="stat-item"><div class="stat-val blue">{n_caught}<span style="font-size:14px;color:var(--muted)">/{n_total}</span></div><div class="stat-lbl">📖 Pokédex</div></div>
-        <div class="stat-item"><div class="stat-val">{total_xp}</div><div class="stat-lbl">⚡ Total XP</div></div>
-        <div class="stat-item"><div class="stat-val red">{_he(rarest_str)}</div><div class="stat-lbl">💎 Rarest</div></div>
-      </div>
+      <div class="sec-lbl">Trainer Stats</div>
+      {stats_html}
     </div>
   </div>
 
   <!-- Balls inventory -->
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-title">Ball Inventory</div>
+  <div class="card balls-card" style="margin-bottom:16px">
+    <div class="sec-lbl">Ball Inventory</div>
     <div class="balls-row">{balls_html}</div>
   </div>
 
   <!-- Party table -->
-  <div class="card party-wrap">
-    <div class="card-title">Party ({n_caught} Pokémon)</div>
+  <div class="card party-card party-wrap">
+    <div class="sec-lbl">Party · {n_caught} Pokémon</div>
     <table>
       <thead><tr><th>Pokémon</th><th style="text-align:center">Lv.</th><th>Rarity</th></tr></thead>
       <tbody>{''.join(party_rows_html) or '<tr><td colspan="3" class="muted">No Pokémon yet</td></tr>'}</tbody>
@@ -1494,9 +1579,9 @@ def render_html_card():
   </div>
 
   <!-- Badges -->
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-title">Badges ({len(badge_entries)})</div>
-    <div>{badge_chips}</div>
+  <div class="card badges-card" style="margin-bottom:16px">
+    <div class="sec-lbl">Badges · {len(badge_entries)}</div>
+    <div class="badges-wrap">{badge_chips}</div>
   </div>
 
   <!-- Footer -->
@@ -1506,13 +1591,31 @@ def render_html_card():
   </div>
 
 </div>
-<script>
-  // Animate XP bar on load
-  document.querySelectorAll('.xp-fill').forEach(el => {{
-    const w = el.style.width;
-    el.style.width = '0';
-    requestAnimationFrame(() => requestAnimationFrame(() => {{ el.style.width = w; }}));
-  }});
+<script type="module">
+  import {{ animate, stagger, spring }} from 'https://cdn.jsdelivr.net/npm/motion@10.18.0/+esm';
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {{
+    document.querySelectorAll('.xp-fill').forEach(el => {{ el.style.width = el.dataset.xp + '%'; }});
+  }} else {{
+    const ease = [0.22, 1, 0.36, 1];
+    animate('.header',   {{ opacity: [0,1], y: [-24,0] }}, {{ easing: spring({{ stiffness:180, damping:22 }}), duration:0.7 }});
+    animate('.quest-card', {{ opacity: [0,1], x: [-20,0] }}, {{ easing: ease, duration:0.45, delay:0.18 }});
+    animate('.grid-2 .card', {{ opacity: [0,1], y: [20,0] }}, {{ easing: ease, duration:0.4, delay: stagger(0.1, {{ start:0.28 }}) }});
+    animate('.sbar-row', {{ opacity: [0,1], x: [-10,0] }}, {{ easing: ease, duration:0.3, delay: stagger(0.06, {{ start:0.42 }}) }});
+    const xpFill = document.querySelector('.xp-fill');
+    if (xpFill) animate(xpFill, {{ width: ['0%', xpFill.dataset.xp + '%'] }}, {{ easing: spring({{ stiffness:80, damping:18 }}), duration:1.4, delay:0.55 }});
+    animate('.card.balls-card, .card.party-card, .card.badges-card', {{ opacity: [0,1], y: [16,0] }}, {{ easing: ease, duration:0.4, delay: stagger(0.1, {{ start:0.5 }}) }});
+    animate('tbody tr', {{ opacity: [0,1], x: [-10,0] }}, {{ easing: ease, duration:0.3, delay: stagger(0.035, {{ start:0.65 }}) }});
+    animate('.badge-chip', {{ opacity: [0,1], scale: [0.9,1] }}, {{ easing: spring({{ stiffness:300, damping:18 }}), delay: stagger(0.08, {{ start:0.85 }}) }});
+    animate('.footer', {{ opacity: [0,1], y: [8,0] }}, {{ easing: ease, duration:0.4, delay:1.1 }});
+    document.querySelectorAll('.card').forEach(card => {{
+      card.addEventListener('mouseenter', () => animate(card, {{ y:-3, boxShadow:'0 8px 32px rgba(0,0,0,.45)' }}, {{ duration:0.2, easing:ease }}));
+      card.addEventListener('mouseleave', () => animate(card, {{ y:0, boxShadow:'none' }}, {{ duration:0.25, easing:ease }}));
+    }});
+    document.querySelectorAll('.badge-chip').forEach(chip => {{
+      chip.addEventListener('mouseenter', () => animate(chip, {{ scale:1.05 }}, {{ duration:0.15, easing:ease }}));
+      chip.addEventListener('mouseleave', () => animate(chip, {{ scale:1 }}, {{ duration:0.2,  easing:ease }}));
+    }});
+  }}
 </script>
 </body>
 </html>'''
