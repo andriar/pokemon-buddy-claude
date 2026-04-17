@@ -4,14 +4,9 @@ Run this before every commit. Follow every step in order. Do not skip steps.
 
 ## Step 1 — Simplify changed code
 
-Review every file that was modified in this session:
-- Remove any dead code, unused variables, or imports
-- Collapse any logic that does the same thing in multiple places
-- Remove comments that just restate what the code does
-- Ensure no speculative abstractions were added (code should solve today's problem, not hypothetical future ones)
-- Ensure no debug prints, TODO stubs, or half-finished code was left in
+Run `/simplify` — it works from `git diff HEAD` only, no full file reads.
 
-If you find anything to fix, fix it now before moving on.
+The skill will fix issues and report a one-line summary. Wait for it to complete before continuing.
 
 ## Step 2 — Syntax check all Python files
 
