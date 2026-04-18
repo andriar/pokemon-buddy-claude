@@ -5,6 +5,13 @@ Format: [version] — date — description
 
 ---
 
+## [2.6.3] — 2026-04-18
+
+### Fixed
+- **Plugin update detection** — `.claude-plugin/marketplace.json` version fields were stuck at `2.0.0`, so Claude Code never surfaced updates via `/plugin`. Both `metadata.version` and `plugins[0].version` now track the plugin version and will be bumped with every release.
+
+---
+
 ## [2.6.2] — 2026-04-18
 
 ### Fixed
