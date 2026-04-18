@@ -238,13 +238,16 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
 
 ## Uninstalling
 
-Inside Claude Code:
+Run `/poke:uninstall` inside Claude Code and pick a mode:
+
+- `/poke:uninstall keep` — preserves buddy state (`buddy-pokemon.md`, `pokemon-collection.md`, `buddy-stats.md`). Reinstalling later resumes exactly where you left off.
+- `/poke:uninstall clean` — purges all state files for a fresh start.
+
+Then remove the plugin:
 
 ```
 /plugin uninstall poke
 ```
-
-Your buddy data (`buddy-pokemon.md`, `pokemon-collection.md`, `buddy-stats.md`) is **kept** in `~/.claude/` by default. To remove everything including state files, delete those three files manually after uninstalling.
 
 ## Requirements
 

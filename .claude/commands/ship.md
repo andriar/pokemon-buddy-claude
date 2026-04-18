@@ -12,7 +12,7 @@ The skill will fix issues and report a one-line summary. Wait for it to complete
 
 Run:
 ```
-python3 -m py_compile buddy-update.py lib/data.py hooks/session-start.py install.py update.py uninstall.py scripts/check-legendaries.py
+python3 -m py_compile buddy-update.py lib/data.py hooks/session-start.py scripts/check-legendaries.py scripts/migrate_from_legacy.py
 ```
 
 Fix any compile errors before continuing.

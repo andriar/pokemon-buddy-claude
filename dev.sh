@@ -26,7 +26,7 @@ case "$cmd" in
 deploy)
     if [ ! -d "$CACHE_DIR" ]; then
         echo "❌ Cache not found: $CACHE_DIR"
-        echo "   Run bash install.sh first to set up the plugin."
+        echo "   Install the plugin first: /plugin install poke"
         exit 1
     fi
 
@@ -54,11 +54,12 @@ deploy)
 
 # ── restore ────────────────────────────────────────────────────────────────
 restore)
-    echo "🔄 RESTORE — reinstalling from repo to reset cache..."
+    echo "🔄 RESTORE — reinstalling the plugin to reset cache..."
     echo ""
-    bash "$REPO_DIR/install.sh"
+    echo "   Run inside Claude Code:"
+    echo "     /plugin uninstall poke"
+    echo "     /plugin install poke"
     echo ""
-    echo "✅ Restored. Cache is back in sync with install.sh."
     ;;
 
 # ── status ─────────────────────────────────────────────────────────────────
@@ -68,7 +69,7 @@ status)
     echo "   Cache: $CACHE_DIR"
     echo ""
     if [ ! -d "$CACHE_DIR" ]; then
-        echo "❌ Cache not installed. Run: bash install.sh"
+        echo "❌ Cache not installed. Run: /plugin install poke"
         exit 0
     fi
     echo "File sync status:"
@@ -89,7 +90,7 @@ status)
     echo "Usage: bash dev.sh [deploy|restore|status]"
     echo ""
     echo "  deploy   Sync local repo → plugin cache (default)"
-    echo "  restore  Reinstall from install.sh to reset cache"
+    echo "  restore  Print plugin reinstall instructions"
     echo "  status   Show sync status of engine files"
     exit 1
     ;;

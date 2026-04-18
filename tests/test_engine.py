@@ -8,6 +8,7 @@ Covers:
 """
 
 import importlib.util
+import json
 import sys
 import tempfile
 import unittest
@@ -1133,6 +1134,157 @@ class TestSpriteUrl(unittest.TestCase):
         for key in ('Poké', 'Great', 'Ultra', 'Master'):
             self.assertIn(key, engine._BALL_SPRITES)
             self.assertTrue(engine._BALL_SPRITES[key].startswith('https://'))
+
+
+class TestPurgeMode(_TmpDir, unittest.TestCase):
+    """Coverage for the 'purge' CLI mode — removes all state files."""
+
+    def test_purge_removes_existing_state_files(self):
+        engine.BUDDY_FILE.write_text('x', encoding='utf-8')
+        engine.COLLECTION_FILE.write_text('x', encoding='utf-8')
+        engine.STATS_FILE.write_text('x', encoding='utf-8')
+        with patch.object(sys, 'argv', ['buddy-update.py', 'purge']):
+            with self.assertRaises(SystemExit) as ctx:
+                engine.main()
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertFalse(engine.BUDDY_FILE.exists())
+        self.assertFalse(engine.COLLECTION_FILE.exists())
+        self.assertFalse(engine.STATS_FILE.exists())
+
+    def test_purge_with_no_files_is_noop(self):
+        with patch.object(sys, 'argv', ['buddy-update.py', 'purge']):
+            with self.assertRaises(SystemExit) as ctx:
+                engine.main()
+        self.assertEqual(ctx.exception.code, 0)
+
+    def test_purge_keep_preserves_data_files(self):
+        engine.BUDDY_FILE.write_text('x', encoding='utf-8')
+        engine.COLLECTION_FILE.write_text('x', encoding='utf-8')
+        engine.STATS_FILE.write_text('x', encoding='utf-8')
+        with patch.object(sys, 'argv', ['buddy-update.py', 'purge', 'keep']):
+            with self.assertRaises(SystemExit) as ctx:
+                engine.main()
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertTrue(engine.BUDDY_FILE.exists())
+        self.assertTrue(engine.COLLECTION_FILE.exists())
+        self.assertTrue(engine.STATS_FILE.exists())
+
+    def test_purge_keep_removes_plugin_state_files(self):
+        claude_dir = engine.BUDDY_FILE.parent
+        plugin_state = claude_dir / 'pokemon-buddy-plugin.json'
+        encounter    = claude_dir / 'buddy-encounter.json'
+        plugin_state.write_text('{}', encoding='utf-8')
+        encounter.write_text('{}', encoding='utf-8')
+        with patch.object(sys, 'argv', ['buddy-update.py', 'purge', 'keep']):
+            with self.assertRaises(SystemExit):
+                engine.main()
+        self.assertFalse(plugin_state.exists())
+        self.assertFalse(encounter.exists())
+
+    def test_purge_unwires_statusline_and_restores_backup(self):
+        claude_dir = engine.BUDDY_FILE.parent
+        settings_file = claude_dir / 'settings.json'
+        settings_file.write_text(json.dumps({
+            'statusLine': {'type': 'command', 'command': 'python3 buddy-update.py statusline'},
+            '_statusLineBackup': {'type': 'command', 'command': 'echo hello'},
+            'extraKnownMarketplaces': {'pokemon-buddy-claude': {'x': 1}, 'other': {'y': 2}},
+        }), encoding='utf-8')
+        with patch.object(sys, 'argv', ['buddy-update.py', 'purge', 'keep']):
+            with self.assertRaises(SystemExit):
+                engine.main()
+        result = json.loads(settings_file.read_text(encoding='utf-8'))
+        self.assertEqual(result['statusLine']['command'], 'echo hello')
+        self.assertNotIn('_statusLineBackup', result)
+        self.assertNotIn('pokemon-buddy-claude', result['extraKnownMarketplaces'])
+        self.assertIn('other', result['extraKnownMarketplaces'])
+
+
+class TestRenderDexFilter(_TmpDir, unittest.TestCase):
+    """Coverage for render_dex filter argument (tier/type/shiny)."""
+
+    def _seed(self):
+        engine.add_to_collection('Charmander', 'Fire',    '🔥', 'starter',   False)
+        engine.add_to_collection('Pidgey',     'Normal',  '🐦', 'common',    False)
+        engine.add_to_collection('Mewtwo',     'Psychic', '🧬', 'legendary', False)
+        engine.add_to_collection('Mew',        'Psychic', '✨', 'mythical',  True)
+
+    def test_unfiltered_shows_all_tiers(self):
+        self._seed()
+        out = engine.render_dex()
+        for name in ('Charmander', 'Pidgey', 'Mewtwo', 'Mew'):
+            self.assertIn(name, out)
+
+    def test_tier_filter_keeps_only_matching(self):
+        self._seed()
+        out = engine.render_dex('legendary')
+        self.assertIn('Mewtwo', out)
+        self.assertNotIn('Pidgey', out)
+        self.assertNotIn('Charmander', out)
+
+    def test_tier_filter_case_insensitive(self):
+        self._seed()
+        self.assertIn('Mewtwo', engine.render_dex('LEGENDARY'))
+
+    def test_shiny_filter_keeps_only_shinies(self):
+        self._seed()
+        out = engine.render_dex('shiny')
+        self.assertIn('Mew', out)
+        self.assertNotIn('Mewtwo', out)
+        self.assertNotIn('Charmander', out)
+
+    def test_type_filter_keeps_only_matching_type(self):
+        self._seed()
+        out = engine.render_dex('psychic')
+        self.assertIn('Mewtwo', out)
+        self.assertIn('Mew', out)
+        self.assertNotIn('Pidgey', out)
+
+    def test_unknown_filter_returns_empty_with_hint(self):
+        self._seed()
+        out = engine.render_dex('banana')
+        self.assertIn('No Pokémon match', out)
+        self.assertIn('banana', out)
+
+
+class TestRenderOgSvg(_TmpDir, unittest.TestCase):
+    """Coverage for render_og_svg — social-share OpenGraph image."""
+
+    def setUp(self):
+        super().setUp()
+        engine.BUDDY_FILE.write_text(
+            '**Name**: Charmander\n'
+            '**Trainer**: Ash\n'
+            '**Specialty**: Frontend / JavaScript\n'
+            '**Level**: 7\n'
+            '**XP**: 620 / 700\n'
+            '**Stage**: Charmander\n',
+            encoding='utf-8',
+        )
+
+    def test_produces_valid_svg_root(self):
+        svg = engine.render_og_svg()
+        self.assertTrue(svg.startswith('<svg'))
+        self.assertIn('viewBox="0 0 1200 630"', svg)
+        self.assertIn('</svg>', svg)
+
+    def test_includes_trainer_and_stage(self):
+        svg = engine.render_og_svg()
+        self.assertIn('Ash', svg)
+        self.assertIn('Charmander', svg)
+        self.assertIn('Lv. 7', svg)
+
+    def test_escapes_html_special_chars_in_trainer_name(self):
+        engine.BUDDY_FILE.write_text(
+            '**Name**: Charmander\n'
+            '**Trainer**: <Ash & Misty>\n'
+            '**Specialty**: x\n'
+            '**Level**: 1\n**XP**: 0 / 100\n**Stage**: Charmander\n',
+            encoding='utf-8',
+        )
+        svg = engine.render_og_svg()
+        self.assertNotIn('<Ash', svg)
+        self.assertIn('&lt;Ash', svg)
+        self.assertIn('&amp;', svg)
 
 
 if __name__ == '__main__':

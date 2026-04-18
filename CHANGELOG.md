@@ -5,6 +5,32 @@ Format: [version] — date — description
 
 ---
 
+## [2.6.1] — 2026-04-18
+
+### Fixed
+- **`/poke:uninstall` now fully reverses the install** — previously only wiped buddy state files and left behind the statusLine entry in `settings.json`, the `pokemon-buddy-claude` marketplace entry, and plugin-side files (`pokemon-buddy-plugin.json`, `buddy-encounter.json`, `buddy-version`, `buddy-v1-backup/`). `keep` mode now wipes all plugin traces while preserving buddy data; `clean` mode wipes everything. StatusLine backup (`_statusLineBackup`) is restored when present.
+- **SessionStart greets returning trainers** — reinstalling with preserved buddy data now prints a "welcome back" message instead of silently resuming.
+
+### Changed
+- **`buddy-update.py purge`** — accepts `keep` or `all` scope argument (defaults to `all` for backward compatibility).
+
+---
+
+## [2.6.0] — 2026-04-18
+
+### Added
+- **`/poke:dex` filters** — browse the Pokédex by rarity (`/poke:dex legendary`, `/poke:dex shiny`, etc.) or by Pokémon type (`/poke:dex fire`, `/poke:dex psychic`, etc.); unfiltered view unchanged
+- **Social-share image** — `/poke:export` now also writes `trainer-card-og.svg` (1200×630 OpenGraph image) alongside the HTML, with `og:*` + `twitter:*` meta tags wired into `<head>` so link previews on Discord/Slack/Mastodon auto-populate when the card is hosted
+- **`buddy-update.py og`** — standalone mode to regenerate just the social-share SVG
+- **`/poke:uninstall`** — interactive uninstall with two modes: `keep` (default — preserves buddy state, lets reinstall pick up where you left off) or `clean` (purges all state files for a fresh start). Backed by a new `buddy-update.py purge` mode that removes `buddy-pokemon.md`, `pokemon-collection.md`, `buddy-stats.md`, and log archives.
+
+### Changed
+- **Legacy shell installers removed** — `install.{sh,py,bat}`, `uninstall.{sh,py,bat}`, `update.{sh,py}` deleted from `main`; they referenced stale command filenames and were broken. Users pinned to v1.x still have the [v1.3.2](https://github.com/andriar/pokemon-buddy-claude/releases/tag/v1.3.2) release. v2.x install path is unchanged: `/plugin install poke`
+- **`trainer-card.html` gitignored** — generated output from `/poke:export`, no longer tracked
+- **CI + `/ship` syntax check** — dropped references to deleted installers; now also compiles `scripts/check-legendaries.py` and `lib/data.py`
+
+---
+
 ## [2.5.0] — 2026-04-17
 
 ### Added

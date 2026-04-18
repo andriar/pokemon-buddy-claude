@@ -18,11 +18,10 @@ jobs:
       - name: Compile all Python files
         run: |
           python3 -m py_compile buddy-update.py
-          python3 -m py_compile install.py
-          python3 -m py_compile update.py
-          python3 -m py_compile uninstall.py
           python3 -m py_compile hooks/session-start.py
           python3 -m py_compile scripts/migrate_from_legacy.py
+          python3 -m py_compile scripts/check-legendaries.py
+          python3 -m py_compile lib/data.py
 
   test:
     name: Unit tests

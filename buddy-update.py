@@ -1283,6 +1283,15 @@ def render_html_card():
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Trainer Card — {_he(trainer)}</title>
+<meta name="description" content="{_he(trainer)} — {_he(title)} · {_he(stage)} Lv.{level} · {n_caught}/{n_total} Pokédex · {streak}d streak">
+<meta property="og:type" content="profile">
+<meta property="og:title" content="{_he(trainer)} — Pokémon Trainer Card">
+<meta property="og:description" content="{_he(title)} · {_he(stage)} Lv.{level} · {n_caught}/{n_total} Pokédex · {streak}d streak · {total_xp:,} XP">
+<meta property="og:image" content="trainer-card-og.svg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{_he(trainer)} — Pokémon Trainer Card">
+<meta name="twitter:description" content="{_he(title)} · {_he(stage)} Lv.{level} · {n_caught}/{n_total} Pokédex · {streak}d streak">
+<meta name="twitter:image" content="trainer-card-og.svg">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap');
   :root {{
@@ -1622,6 +1631,61 @@ def render_html_card():
     return html
 
 
+def render_og_svg():
+    """Render a 1200x630 OpenGraph social-share SVG of the trainer card.
+
+    SVG is dependency-free and accepted as og:image by most platforms
+    (Discord, Slack, GitHub, Mastodon). Twitter/X require PNG — users can
+    convert with any SVG→PNG tool if they need Twitter previews.
+    """
+    text     = BUDDY_FILE.read_text(encoding='utf-8')
+    col      = read_collection()
+    tr_stats = read_stats()
+
+    def g(pat, default='?'):
+        m = re.search(pat, text)
+        return m.group(1).strip() if m else default
+
+    trainer   = g(r'\*\*Trainer\*\*:\s*(.+)')
+    stage     = g(r'\*\*Stage\*\*:\s*(\w+)')
+    level     = int(g(r'\*\*Level\*\*:\s*(\d+)', '1'))
+    specialty = g(r'\*\*Specialty\*\*:\s*(.+)')
+    title     = get_trainer_title(tr_stats, col)
+    streak    = tr_stats.get('streak', 0)
+    total_xp  = tr_stats.get('total_xp_ever', 0)
+    n_caught  = len(col['pokemon'])
+    n_total   = sum(len(v) for v in POKEMON_POOL.values())
+    spr       = sprite_url(stage) or ''
+
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0d1a"/>
+      <stop offset="1" stop-color="#1a1033"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="40" y="40" width="1120" height="550" rx="24" fill="#101220" stroke="#a78bfa" stroke-width="2" opacity="0.9"/>
+  <text x="90" y="130" fill="#a78bfa" font-family="monospace" font-size="24" font-weight="700">POKÉMON TRAINER CARD</text>
+  <text x="90" y="210" fill="#dde1f5" font-family="sans-serif" font-size="72" font-weight="800">{_he(trainer)}</text>
+  <text x="90" y="260" fill="#f59e0b" font-family="sans-serif" font-size="30" font-weight="600">{_he(title)}</text>
+  <text x="90" y="300" fill="#4e5580" font-family="sans-serif" font-size="24">{_he(specialty)}</text>
+  <image href="{spr}" x="820" y="140" width="300" height="300"/>
+  <text x="820" y="470" fill="#dde1f5" font-family="sans-serif" font-size="42" font-weight="700">{_he(stage)}</text>
+  <text x="820" y="510" fill="#a78bfa" font-family="monospace" font-size="28">Lv. {level}</text>
+  <g font-family="sans-serif" fill="#dde1f5">
+    <text x="90" y="440" font-size="22" fill="#4e5580">POKÉDEX</text>
+    <text x="90" y="480" font-size="40" font-weight="700">{n_caught}<tspan fill="#4e5580" font-size="24"> / {n_total}</tspan></text>
+    <text x="340" y="440" font-size="22" fill="#4e5580">STREAK</text>
+    <text x="340" y="480" font-size="40" font-weight="700" fill="#f97316">{streak}<tspan fill="#4e5580" font-size="24">d</tspan></text>
+    <text x="570" y="440" font-size="22" fill="#4e5580">TOTAL XP</text>
+    <text x="570" y="480" font-size="40" font-weight="700" fill="#a78bfa">{total_xp:,}</text>
+  </g>
+  <text x="90" y="560" fill="#4e5580" font-family="monospace" font-size="18">/poke — a Pokémon companion for Claude Code</text>
+</svg>
+'''
+
+
 def render_readme_snippet(html_path='trainer-card.html'):
     """Markdown snippet for pasting into a GitHub profile README."""
     col = read_collection()
@@ -1646,15 +1710,40 @@ def render_readme_snippet(html_path='trainer-card.html'):
     )
 
 
-def render_dex():
-    """Render Pokédex — all caught Pokémon grouped by rarity."""
+def render_dex(filter_arg=None):
+    """Render Pokédex — all caught Pokémon grouped by rarity.
+
+    filter_arg: optional — a rarity tier name (common/uncommon/rare/legendary/
+    mythical/starter/shiny) or a Pokémon type (fire/water/grass/etc.) to
+    narrow the view. Case-insensitive.
+    """
     col = read_collection()
     if not col['pokemon']:
         return ' No Pokémon caught yet. Earn XP to encounter wild Pokémon!'
 
     n_total  = sum(len(v) for v in POKEMON_POOL.values())
     n_caught = len(col['pokemon'])
-    grouped  = _group_by_tier(col['pokemon'])
+
+    filter_mode = None  # 'tier' | 'type' | 'shiny' | None
+    filter_key  = None
+    if filter_arg:
+        key = filter_arg.strip().lower()
+        if key == 'shiny':
+            filter_mode, filter_key = 'shiny', None
+        elif key in RARITY_TIER_ORDER:
+            filter_mode, filter_key = 'tier', key
+        else:
+            filter_mode, filter_key = 'type', key
+
+    pool = col['pokemon']
+    if filter_mode == 'shiny':
+        pool = [p for p in pool if p.get('shiny')]
+    elif filter_mode == 'tier':
+        pool = [p for p in pool if p.get('rarity') == filter_key]
+    elif filter_mode == 'type':
+        pool = [p for p in pool if p.get('type', '').lower() == filter_key]
+
+    grouped = _group_by_tier(pool)
 
     W = 54
     SEP = f' ╠{"═" * (W + 3)}╣'
@@ -1663,11 +1752,27 @@ def render_dex():
         pad = W - 1 - visual_len(content)
         return f' ║  {content}{" " * max(0, pad)}  ║'
 
+    if filter_mode == 'shiny':
+        header = f'📖  POKÉDEX · SHINY  ·  {len(pool)} / {n_caught} caught'
+    elif filter_mode:
+        header = f'📖  POKÉDEX · {filter_key.upper()}  ·  {len(pool)} / {n_caught} caught'
+    else:
+        header = f'📖  POKÉDEX  ·  {n_caught} / {n_total} caught'
+
     out = [
         f' ╔{"═" * (W + 3)}╗',
-        row(f'📖  POKÉDEX  ·  {n_caught} / {n_total} caught'),
+        row(header),
         SEP,
     ]
+
+    if not pool:
+        out += [
+            row(f'No Pokémon match "{filter_arg}".'),
+            row('Try: common, uncommon, rare, legendary, mythical,'),
+            row('     starter, shiny, or a type (fire, water, ...).'),
+            f' ╚{"═" * (W + 3)}╝',
+        ]
+        return '\n'.join(out)
 
     for tier in RARITY_TIER_ORDER:
         members = grouped.get(tier)
@@ -1938,12 +2043,12 @@ def do_switch(target_name):
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: buddy-update.py status|statusline|card|html|readme|dex|backup|import|xp|badge|switch|catch")
+        print("Usage: buddy-update.py status|statusline|card|html|og|readme|dex|backup|import|xp|badge|switch|catch|purge")
         sys.exit(1)
 
     mode = args[0]
 
-    if mode in ('status', 'card', 'html', 'svg', 'readme', 'dex', 'switch', 'xp', 'badge') and not BUDDY_FILE.exists():
+    if mode in ('status', 'card', 'html', 'svg', 'og', 'readme', 'dex', 'switch', 'xp', 'badge') and not BUDDY_FILE.exists():
         print(f' ❌ No buddy found at {BUDDY_FILE}')
         print(f'    Run /poke:choose to pick a starter first.')
         sys.exit(1)
@@ -1962,14 +2067,94 @@ def main():
         sys.exit(0)
 
     if mode == 'dex':
-        print(render_dex())
+        filter_arg = args[1] if len(args) > 1 else None
+        print(render_dex(filter_arg))
         sys.exit(0)
 
     if mode in ('html', 'svg'):
         out_path = Path(args[1]) if len(args) > 1 else Path.cwd() / 'trainer-card.html'
         out_path.write_text(render_html_card(), encoding='utf-8')
+        og_path = out_path.with_name('trainer-card-og.svg')
+        og_path.write_text(render_og_svg(), encoding='utf-8')
         print(f' ✅ Trainer card saved: {out_path}')
+        print(f' ✅ Social share image: {og_path}')
         print(f'    Open in a browser — full-page interactive Pokemon-themed card.')
+        sys.exit(0)
+
+    if mode == 'purge':
+        import shutil
+        scope = args[1].lower() if len(args) > 1 else 'all'
+        claude_dir = BUDDY_FILE.parent
+
+        plugin_targets = [
+            claude_dir / 'pokemon-buddy-plugin.json',
+            claude_dir / 'buddy-encounter.json',
+            claude_dir / 'buddy-version',
+        ]
+        plugin_dirs = [claude_dir / 'buddy-v1-backup']
+        data_targets = [BUDDY_FILE, COLLECTION_FILE, STATS_FILE, STATE_FILE, ARCHIVE_FILE]
+
+        removed = []
+
+        # Always: unwire statusLine (restore backup if present)
+        settings_file = claude_dir / 'settings.json'
+        if settings_file.exists():
+            try:
+                settings = json.loads(settings_file.read_text(encoding='utf-8'))
+            except Exception:
+                settings = None
+            if isinstance(settings, dict):
+                current = settings.get('statusLine')
+                cur_cmd = current.get('command') if isinstance(current, dict) else ''
+                if 'buddy-update.py' in (cur_cmd or ''):
+                    if '_statusLineBackup' in settings:
+                        settings['statusLine'] = settings.pop('_statusLineBackup')
+                        removed.append('settings.json:statusLine (restored backup)')
+                    else:
+                        settings.pop('statusLine', None)
+                        removed.append('settings.json:statusLine')
+                # remove marketplace entry
+                mps = settings.get('extraKnownMarketplaces')
+                if isinstance(mps, dict) and 'pokemon-buddy-claude' in mps:
+                    mps.pop('pokemon-buddy-claude')
+                    if not mps:
+                        settings.pop('extraKnownMarketplaces', None)
+                    removed.append('settings.json:extraKnownMarketplaces.pokemon-buddy-claude')
+                settings_file.write_text(json.dumps(settings, indent=2), encoding='utf-8')
+
+        targets = list(plugin_targets)
+        if scope == 'all':
+            targets += data_targets
+
+        for p in targets:
+            if p.exists():
+                p.unlink()
+                removed.append(p.name)
+        for d in plugin_dirs:
+            if d.exists():
+                shutil.rmtree(d)
+                removed.append(d.name + '/')
+
+        if removed:
+            label = 'clean uninstall' if scope == 'all' else 'plugin uninstall (data preserved)'
+            print(f' ✅ Purge complete — {label}:')
+            for name in removed:
+                print(f'    • {name}')
+        else:
+            print(' ℹ️  Nothing to purge.')
+
+        if scope != 'all':
+            kept = [p.name for p in data_targets if p.exists()]
+            if kept:
+                print('\n 💾 Preserved (will auto-restore on reinstall):')
+                for name in kept:
+                    print(f'    • {name}')
+        sys.exit(0)
+
+    if mode == 'og':
+        out_path = Path(args[1]) if len(args) > 1 else Path.cwd() / 'trainer-card-og.svg'
+        out_path.write_text(render_og_svg(), encoding='utf-8')
+        print(f' ✅ Social share image saved: {out_path}')
         sys.exit(0)
 
     if mode == 'readme':

@@ -80,6 +80,13 @@ def main():
         lines.append('')
         state['migration_nudged'] = True
 
+    elif first_run and has_buddy():
+        lines.append('')
+        lines.append('⚡ Pokémon Buddy reinstalled — welcome back, Trainer!')
+        lines.append('   Your buddy, collection, and streak were restored.')
+        lines.append('   Run /poke:status to see them.')
+        lines.append('')
+
     elif first_run and not has_buddy():
         lines.append('')
         lines.append('╔══════════════════════════════════════════════════════════╗')
