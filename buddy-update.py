@@ -12,7 +12,7 @@ Commands:
   catch "<name>"               Manually add a Pokemon to collection
 """
 
-import sys, re, random, unicodedata, json
+import os, sys, re, random, unicodedata, json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -1961,41 +1961,44 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
 
 # BUDDY_TEMPLATE — see lib/data.py
 
-def do_switch(target_name):
-    col = read_collection()
-    match = next((p for p in col['pokemon'] if p['name'].lower() == target_name.lower()), None)
-    if not match:
-        print(f"❌ {target_name} not found in your party.")
-        print(f"   Party: {', '.join(p['name'] for p in col['pokemon'])}")
-        sys.exit(1)
+STARTER_CHOICES = [
+    ('Charmander', 'Fire',     '🔥'),
+    ('Bulbasaur',  'Grass',    '🌿'),
+    ('Squirtle',   'Water',    '💧'),
+    ('Pikachu',    'Electric', '⚡'),
+    ('Gastly',     'Ghost',    '👻'),
+    ('Dratini',    'Dragon',   '🐉'),
+    ('Geodude',    'Rock',     '🪨'),
+    ('Abra',       'Psychic',  '🧠'),
+    ('Machop',     'Fighting', '🥊'),
+    ('Umbreon',    'Dark',     '🌑'),
+]
 
-    lines, _, cur_level, cur_xp, _, cur_name = read_buddy()
-    sync_active_to_collection(cur_name, cur_level, cur_xp)
+def _resolve_starter(arg):
+    a = (arg or '').strip()
+    if a.isdigit():
+        idx = int(a) - 1
+        if 0 <= idx < len(STARTER_CHOICES):
+            return STARTER_CHOICES[idx]
+    for entry in STARTER_CHOICES:
+        if entry[0].lower() == a.lower():
+            return entry
+    return None
 
-    name    = match['name']
-    ptype   = match['type']
-    emoji   = match['emoji']
-    level   = match['level']
-    xp      = match['xp']
-    xp_max  = xp_for_level(level + 1)
-
-    starter = STARTER_DATA.get(name)
-    trainer = re.search(r'\*\*Trainer\*\*:\s*(.+)', BUDDY_FILE.read_text(encoding='utf-8'))
-    trainer = trainer.group(1).strip() if trainer else 'Trainer'
-
+def _build_buddy_content(name, ptype, emoji, trainer, level, xp):
+    xp_max = xp_for_level(level + 1)
     # Stat boosts accumulate at every level divisible by 5 (+5 each time)
     total_stat_boost = sum(5 for lv in range(1, level + 1) if lv % 5 == 0)
+    starter = STARTER_DATA.get(name)
 
     if starter:
         base_stats = starter['stats']
-        stats = {k: v + total_stat_boost for k, v in base_stats.items()}
-        evos      = starter['evolutions']
+        specialty  = starter['specialty']
+        evos       = starter['evolutions']
         evo_parts = [f'{name} Lv.1-{evos[0][1]-1}'] + \
                     [f'{e[0]} Lv.{evos[i][1]}-{evos[i+1][1]-1 if i+1 < len(evos) else "∞"}'
                      for i, e in enumerate(evos)]
-        evo_line  = ' → '.join(evo_parts)
-        specialty = starter['specialty']
-        # Unlock moves already reached at the pokemon's current level
+        evo_line = ' → '.join(evo_parts)
         move_defs = MOVE_UNLOCKS.get(name, {})
         moves = []
         for m in starter['moves']:
@@ -2011,15 +2014,15 @@ def do_switch(target_name):
     else:
         base_stats = {'HP': 40, 'Attack': 50, 'Defense': 50,
                       'Special Atk': 50, 'Special Def': 50, 'Speed': 50}
-        stats    = {k: v + total_stat_boost for k, v in base_stats.items()}
-        evo_line = f'{name} Lv.1+ → ???'
-        moves    = [('Tackle', 'Normal', 'Lv.1', 'Basic attack'),
-                    ('???',    '???',    'Lv.5',  'Learn more to unlock!')]
-        specialty = ptype + ' specialist'
+        specialty = f'{ptype} specialist'
+        evo_line  = f'{name} Lv.1+ → ???'
+        moves = [('Tackle', 'Normal', 'Lv.1', 'Basic attack'),
+                 ('???',    '???',    'Lv.5',  'Learn more to unlock!')]
 
+    stats = {k: v + total_stat_boost for k, v in base_stats.items()}
     moves_rows = '\n'.join(f'| {m[0]} | {m[1]} | {m[2]} | {m[3]} |' for m in moves)
 
-    content = BUDDY_TEMPLATE.format(
+    return BUDDY_TEMPLATE.format(
         name=name, emoji=emoji, ptype=ptype, trainer=trainer,
         specialty=specialty, level=level, xp=xp, xp_max=xp_max,
         evo_line=evo_line,
@@ -2027,6 +2030,66 @@ def do_switch(target_name):
         spa=stats['Special Atk'], spd=stats['Special Def'], spe=stats['Speed'],
         moves_rows=moves_rows, today=TODAY,
     )
+
+def do_choose(target_name, trainer=None):
+    pick = _resolve_starter(target_name)
+    if not pick:
+        names = ', '.join(n for n, _, _ in STARTER_CHOICES)
+        print(f' ❌ Unknown starter: {target_name!r}')
+        print(f'    Pick one of: {names}')
+        sys.exit(1)
+    name, default_type, default_emoji = pick
+
+    if BUDDY_FILE.exists():
+        col = read_collection()
+        if not any(p['name'].lower() == name.lower() for p in col['pokemon']):
+            starter = STARTER_DATA.get(name, {})
+            add_to_collection(name, starter.get('type', default_type),
+                              starter.get('emoji', default_emoji), 'starter')
+        do_switch(name)
+        return
+
+    if trainer is None:
+        trainer = os.environ.get('USER') or 'Trainer'
+
+    starter = STARTER_DATA.get(name)
+    ptype = starter['type']  if starter else default_type
+    emoji = starter['emoji'] if starter else default_emoji
+    level, xp = 1, 0
+
+    content = _build_buddy_content(name, ptype, emoji, trainer, level, xp)
+    BUDDY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    BUDDY_FILE.write_text(content, encoding='utf-8')
+
+    write_collection(name, [{
+        'name': name, 'type': ptype, 'emoji': emoji,
+        'level': level, 'xp': xp, 'caught': TODAY, 'rarity': 'starter',
+    }])
+
+    STATE_FILE.write_text(f'Starter chosen: {name}! 🎉\n', encoding='utf-8')
+
+    print(f' 🎉 Welcome, Trainer {trainer}!')
+    print(f'    {emoji} {name} is now your active buddy (Lv.{level}, {xp} XP).')
+    print(f'    Earn XP with /poke:xp <task> — your journey begins now!')
+
+def do_switch(target_name):
+    col = read_collection()
+    match = next((p for p in col['pokemon'] if p['name'].lower() == target_name.lower()), None)
+    if not match:
+        print(f"❌ {target_name} not found in your party.")
+        print(f"   Party: {', '.join(p['name'] for p in col['pokemon'])}")
+        sys.exit(1)
+
+    lines, _, cur_level, cur_xp, _, cur_name = read_buddy()
+    sync_active_to_collection(cur_name, cur_level, cur_xp)
+
+    trainer = re.search(r'\*\*Trainer\*\*:\s*(.+)', BUDDY_FILE.read_text(encoding='utf-8'))
+    trainer = trainer.group(1).strip() if trainer else 'Trainer'
+
+    name, ptype, emoji = match['name'], match['type'], match['emoji']
+    level, xp = match['level'], match['xp']
+
+    content = _build_buddy_content(name, ptype, emoji, trainer, level, xp)
     BUDDY_FILE.write_text(content, encoding='utf-8')
 
     col['active'] = name
@@ -2034,8 +2097,7 @@ def do_switch(target_name):
 
     STATE_FILE.write_text(f'Switched to {name}! 🔄\n', encoding='utf-8')
 
-    prev = cur_name
-    print(f' 🔄 Switched buddy: {prev} → {emoji} {name}')
+    print(f' 🔄 Switched buddy: {cur_name} → {emoji} {name}')
     print(f'    {name} is now your active buddy! (Lv.{level}, {xp} XP)')
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -2043,7 +2105,7 @@ def do_switch(target_name):
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: buddy-update.py status|statusline|card|html|og|readme|dex|backup|import|xp|badge|switch|catch|purge")
+        print("Usage: buddy-update.py status|statusline|card|html|og|readme|dex|backup|import|xp|badge|choose|switch|catch|purge")
         sys.exit(1)
 
     mode = args[0]
@@ -2052,6 +2114,10 @@ def main():
         print(f' ❌ No buddy found at {BUDDY_FILE}')
         print(f'    Run /poke:choose to pick a starter first.')
         sys.exit(1)
+
+    if mode == 'choose':
+        do_choose(args[1] if len(args) > 1 else '')
+        sys.exit(0)
 
     if mode == 'status':
         print(render_status(BUDDY_FILE.read_text(encoding='utf-8')))

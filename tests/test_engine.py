@@ -1287,5 +1287,47 @@ class TestRenderOgSvg(_TmpDir, unittest.TestCase):
         self.assertIn('&amp;', svg)
 
 
+class TestChooseMode(_TmpDir, unittest.TestCase):
+    """Coverage for /poke:choose first-run bootstrap."""
+
+    def _run(self, arg):
+        with patch.object(sys, 'argv', ['buddy-update.py', 'choose', arg]):
+            with self.assertRaises(SystemExit) as ctx:
+                engine.main()
+        return ctx.exception.code
+
+    def test_choose_by_number_creates_buddy(self):
+        self.assertFalse(engine.BUDDY_FILE.exists())
+        self.assertEqual(self._run('1'), 0)
+        self.assertTrue(engine.BUDDY_FILE.exists())
+        self.assertIn('Charmander', engine.BUDDY_FILE.read_text(encoding='utf-8'))
+
+    def test_choose_by_name_creates_buddy(self):
+        self.assertEqual(self._run('Pikachu'), 0)
+        text = engine.BUDDY_FILE.read_text(encoding='utf-8')
+        self.assertIn('Pikachu', text)
+        self.assertIn('Electric', text)
+
+    def test_choose_initializes_collection(self):
+        self._run('Squirtle')
+        col = engine.read_collection()
+        self.assertEqual(col['active'], 'Squirtle')
+        self.assertEqual(len(col['pokemon']), 1)
+        self.assertEqual(col['pokemon'][0]['name'], 'Squirtle')
+
+    def test_choose_unknown_name_exits_nonzero(self):
+        self.assertEqual(self._run('Mewtwo'), 1)
+        self.assertFalse(engine.BUDDY_FILE.exists())
+
+    def test_choose_when_buddy_exists_switches_instead(self):
+        self._run('Charmander')
+        self.assertEqual(self._run('Bulbasaur'), 0)
+        text = engine.BUDDY_FILE.read_text(encoding='utf-8')
+        self.assertIn('Bulbasaur', text)
+        col = engine.read_collection()
+        self.assertEqual(col['active'], 'Bulbasaur')
+        self.assertEqual({p['name'] for p in col['pokemon']}, {'Charmander', 'Bulbasaur'})
+
+
 if __name__ == '__main__':
     unittest.main()

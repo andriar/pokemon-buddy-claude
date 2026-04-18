@@ -5,6 +5,13 @@ Format: [version] — date — description
 
 ---
 
+## [2.6.2] — 2026-04-18
+
+### Fixed
+- **`/poke:choose` now works on first run** — previously it shelled into `buddy-update.py switch`, which gated on an existing buddy file and dead-ended with "run /poke:choose", leaving new trainers stuck in a circular error. Added a dedicated `choose` mode that bootstraps `buddy-pokemon.md` + `buddy-collection.json` from scratch, accepts both a number (1–10) and the Pokémon name, and delegates to `switch` when the trainer already has a party.
+
+---
+
 ## [2.6.1] — 2026-04-18
 
 ### Fixed

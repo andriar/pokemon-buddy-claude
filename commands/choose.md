@@ -24,7 +24,7 @@ The user is picking their starter. Present this menu exactly:
 Ask the user to reply with a **number** (or the Pokémon name). Once they respond, run:
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/buddy-update.py" switch "<chosen name>"
+python3 "${CLAUDE_PLUGIN_ROOT}/buddy-update.py" choose "<chosen name>"
 ```
 
 Then print the output verbatim and welcome them as their new trainer.
