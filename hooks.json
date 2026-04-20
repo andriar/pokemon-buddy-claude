@@ -11,6 +11,18 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/stop-xp.py\"",
+            "timeout": 10000
+          }
+        ]
+      }
     ]
   }
 }

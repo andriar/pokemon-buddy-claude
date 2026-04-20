@@ -2105,12 +2105,12 @@ def do_switch(target_name):
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: buddy-update.py status|statusline|card|html|og|readme|dex|backup|import|xp|badge|choose|switch|catch|purge")
+        print("Usage: buddy-update.py status|statusline|card|html|og|readme|dex|backup|import|xp|xp-auto|badge|choose|switch|catch|purge")
         sys.exit(1)
 
     mode = args[0]
 
-    if mode in ('status', 'card', 'html', 'svg', 'og', 'readme', 'dex', 'switch', 'xp', 'badge') and not BUDDY_FILE.exists():
+    if mode in ('status', 'card', 'html', 'svg', 'og', 'readme', 'dex', 'switch', 'xp', 'xp-auto', 'badge') and not BUDDY_FILE.exists():
         print(f' ❌ No buddy found at {BUDDY_FILE}')
         print(f'    Run /poke:choose to pick a starter first.')
         sys.exit(1)
@@ -2294,13 +2294,26 @@ def main():
     # Load stats early — needed for streak and milestone tracking
     tr_stats = read_stats()
 
-    if mode == 'xp':
-        desc    = args[1] if len(args) > 1 else ''
-        base_xp = detect_xp(desc)
-        log_desc = desc or 'XP awarded'
+    if mode in ('xp', 'xp-auto'):
+        is_auto = (mode == 'xp-auto')
+        if is_auto:
+            try:    base_xp = max(0, int(args[1])) if len(args) > 1 else 0
+            except ValueError: base_xp = 0
+            if base_xp <= 0:
+                sys.exit(0)  # no-op: don't trigger encounters or state changes
+            tok_summary = args[2] if len(args) > 2 else ''
+            desc     = f'Auto XP from tokens{" (" + tok_summary + ")" if tok_summary else ""}'
+            log_desc = desc
+        else:
+            desc    = args[1] if len(args) > 1 else ''
+            base_xp = detect_xp(desc)
+            log_desc = desc or 'XP awarded'
 
-        # Combo multiplier
-        combo, combo_mult = update_combo(tr_stats)
+        # Combo multiplier — skipped for auto (every turn shouldn't bump combo)
+        if is_auto:
+            combo, combo_mult = 1, 1.0
+        else:
+            combo, combo_mult = update_combo(tr_stats)
 
         # Streak: bonus XP for first award of the day
         bonus, streak_count, is_new_day = update_streak(tr_stats)
@@ -2309,15 +2322,16 @@ def main():
 
         add_xp = int(base_xp * combo_mult) + streak_bonus
 
-        # Track achievement counters + daily task count
-        dl = desc.lower()
-        if any(k in dl for k in ['ship','deploy','production','prod','release']):
-            tr_stats['ships'] = tr_stats.get('ships', 0) + 1
-        if any(k in dl for k in ['feature','complete','implement','finish']):
-            tr_stats['features'] = tr_stats.get('features', 0) + 1
-        if any(k in dl for k in ['bug','fix','error','issue','patch']):
-            tr_stats['bug_fixes'] = tr_stats.get('bug_fixes', 0) + 1
-        tr_stats['tasks_today'] = tr_stats.get('tasks_today', 0) + 1
+        # Track achievement counters + daily task count (keyword-driven → auto mode skips)
+        if not is_auto:
+            dl = desc.lower()
+            if any(k in dl for k in ['ship','deploy','production','prod','release']):
+                tr_stats['ships'] = tr_stats.get('ships', 0) + 1
+            if any(k in dl for k in ['feature','complete','implement','finish']):
+                tr_stats['features'] = tr_stats.get('features', 0) + 1
+            if any(k in dl for k in ['bug','fix','error','issue','patch']):
+                tr_stats['bug_fixes'] = tr_stats.get('bug_fixes', 0) + 1
+            tr_stats['tasks_today'] = tr_stats.get('tasks_today', 0) + 1
 
         tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + add_xp
 
@@ -2370,14 +2384,21 @@ def main():
     sync_active_to_collection(buddy_name, new_level, new_xp)
 
     # Run wild encounter (battle + ball throw)
-    base_xp_for_enc = detect_xp(args[1] if len(args) > 1 and mode == 'xp' else '') if mode == 'xp' else add_xp
+    if mode == 'xp':
+        base_xp_for_enc = detect_xp(args[1] if len(args) > 1 else '')
+    elif mode == 'xp-auto':
+        base_xp_for_enc = base_xp
+    else:
+        base_xp_for_enc = add_xp
     col          = read_collection()
     owned        = {p['name'] for p in col['pokemon']}
     buddy_rarity = get_buddy_rarity()
     buddy_type   = STARTER_DATA.get(buddy_name, {}).get('type', 'Normal')
+    # role_type biases which wild Pokémon appear — suppressed in auto mode
+    enc_role = None if mode == 'xp-auto' else get_role_type()
 
     catch_result, encounter_info = run_encounter(
-        base_xp_for_enc, owned, get_role_type(), buddy_rarity,
+        base_xp_for_enc, owned, enc_role, buddy_rarity,
         new_level, buddy_type, tr_stats,
     )
 
@@ -2395,7 +2416,7 @@ def main():
 
     # Daily quest check
     did_catch = catch_result is not None
-    quest_msg    = check_daily_quest(tr_stats, desc if mode == 'xp' else '', did_catch)
+    quest_msg    = check_daily_quest(tr_stats, desc if mode in ('xp', 'xp-auto') else '', did_catch)
     active_quest = get_daily_quest(tr_stats)
     quest_done   = tr_stats.get('daily_quest_done', False)
 
@@ -2414,7 +2435,7 @@ def main():
     write_stats(tr_stats)
 
     # Write chatter message for statusline (expires after 5 min)
-    if mode == 'xp':
+    if mode in ('xp', 'xp-auto'):
         if evolved:
             chatter_msg = f'Evolved to {new_stage}! 🎉'
         elif new_level > old_level:
