@@ -12,7 +12,7 @@ Commands:
   catch "<name>"               Manually add a Pokemon to collection
 """
 
-import os, sys, re, random, unicodedata, json
+import os, sys, re, random, time, unicodedata, json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -77,6 +77,18 @@ def _pokemon_tier(p):
         if t in r:
             return t
     return 'common'
+
+def displayed_form(p):
+    """Return (display_name, display_emoji) for a collection entry, respecting
+    evolutions of starter species. Non-starters pass through."""
+    starter = STARTER_DATA.get(p['name'])
+    if not starter:
+        return p['name'], p.get('emoji', '?')
+    stage, emj = p['name'], p.get('emoji', '?')
+    for evo_name, threshold, evo_emj in starter.get('evolutions', []):
+        if p.get('level', 1) >= threshold:
+            stage, emj = evo_name, evo_emj
+    return stage, emj
 
 def _group_by_tier(pokemon):
     grouped = {}
@@ -638,6 +650,8 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
         'is_shiny':     is_shiny,
         'battle_won':   battle_won,
         'win_pct':      win_pct,
+        'base_ts':      time.time(),
+        'throw_secs':   3.0,
         'throws':       [],
         'caught':       False,
         'no_balls':     False,
@@ -865,10 +879,12 @@ def render_status(text):
     ]
 
     if col['pokemon']:
-        party_str = '  '.join(
-            f"{'✨' if p.get('shiny') else ''}{p['emoji']}{p['name']}{'*' if p['name'] == col['active'] else ''} Lv.{p['level']}"
-            for p in col['pokemon']
-        )
+        def _party_entry(p):
+            dn, de = displayed_form(p)
+            mark = '*' if p['name'] == col['active'] else ''
+            shiny = '✨' if p.get('shiny') else ''
+            return f"{shiny}{de}{dn}{mark} Lv.{p['level']}"
+        party_str = '  '.join(_party_entry(p) for p in col['pokemon'])
         out += ['', f' PARTY: {party_str}']
 
     return '\n'.join(out)
@@ -880,20 +896,67 @@ def get_plugin_version():
     except Exception:
         return '2.x'
 
+def render_encounter_state(enc):
+    """Timestamp-driven throw wobble. Frame = f(elapsed since base_ts)."""
+    wname  = enc["wild_name"]
+    wemoji = enc["wild_emoji"]
+    throws = enc.get("throws", [])
+
+    if not enc.get('battle_won'):
+        return f'⚔️  {wemoji} {wname} fled'
+    if enc.get('no_balls'):
+        return f'⚔️  WIN  ·  no balls!  {wemoji} {wname} escaped'
+    if not throws:
+        return f'⚔️  WIN  ·  {wemoji} {wname}'
+
+    base_ts    = enc.get('base_ts', 0)
+    throw_secs = enc.get('throw_secs', 3.0)
+    elapsed    = max(0.0, time.time() - base_ts) if base_ts else throw_secs * len(throws)
+    idx        = int(elapsed // throw_secs)
+
+    if idx < len(throws):
+        ball_emj  = throws[idx].get('ball_emoji', '🔴')
+        sub       = elapsed - idx * throw_secs
+        if   sub < 0.75:        wobble = '·'
+        elif sub < 1.5:         wobble = '· ·'
+        elif sub < 2.25:        wobble = '· · ·'
+        else:                   wobble = '💫'
+        prefix = f'{idx+1}/{len(throws)} ' if len(throws) > 1 else ''
+        return f'{prefix}{ball_emj} {wemoji} {wname}  {wobble}'
+
+    last_ball = throws[-1]["ball_emoji"]
+    if enc.get('caught'):
+        return f'⚔️  WIN  ·  {last_ball} caught {wemoji} {wname}!'
+    return f'⚔️  WIN  ·  {last_ball} {wemoji} {wname} broke free!'
+
+def is_persona_on():
+    """True if Pokémon Master Coach persona block present in ~/.claude/CLAUDE.md."""
+    claude_md = Path.home() / '.claude' / 'CLAUDE.md'
+    if not claude_md.exists():
+        return False
+    try:
+        return 'Active Persona — Pokémon Master Coach' in claude_md.read_text(encoding='utf-8')
+    except Exception:
+        return False
+
 def render_statusline(plugin_mode=False):
     col = read_collection()
     prefix = f'⚡v{get_plugin_version()}  ' if plugin_mode else ''
+    persona_suffix = '  🎭' if is_persona_on() else ''
     if not col['pokemon']:
-        return f'{prefix}🎮 No buddy yet'
+        return f'{prefix}🎮 No buddy yet{persona_suffix}'
 
     # ── Section 1: Active buddy ──────────────────────────────────────────────
     active     = next((p for p in col['pokemon'] if p['name'] == col['active']), col['pokemon'][0])
     shiny_mark = '✨' if active.get('shiny') else ''
-    buddy_str  = f"{shiny_mark}{active['emoji']} {active['name']} Lv.{active['level']}"
+    disp_name, disp_emj = displayed_form(active)
+    buddy_str  = f"{shiny_mark}{disp_emj} {disp_name} Lv.{active['level']}"
+
+    sep = '  ┃  ' if plugin_mode else '  │  '
 
     # ── Section 2: Colored XP bar ────────────────────────────────────────────
     if not BUDDY_FILE.exists():
-        return f'{prefix}{buddy_str}'
+        return f'{prefix}{buddy_str}{persona_suffix}'
     lines    = BUDDY_FILE.read_text(encoding='utf-8').splitlines()
     xp_line  = next((l for l in lines if l.startswith('**XP**:')), '')
     xp_cur   = parse_int(xp_line)
@@ -905,19 +968,7 @@ def render_statusline(plugin_mode=False):
     pct      = int(xp_disp * 100 / xp_max_disp) if xp_max_disp else 0
     xp_str   = f'{colored_bar(xp_disp, xp_max_disp, 10)} {xp_disp}/{xp_max_disp}'
 
-    # ── Section 3: Stats (streak · badges · party) ───────────────────────────
-    buddy_text  = BUDDY_FILE.read_text(encoding='utf-8')
-    badges_sec  = re.search(r'## Badges Earned\n(.*?)(?=\n##|\Z)', buddy_text, re.DOTALL)
-    badges_raw  = re.findall(r'^- (.+)$', badges_sec.group(1), re.MULTILINE) if badges_sec else []
-    badge_count = sum(1 for b in badges_raw if 'No badges yet' not in b)
-    tr_stats    = read_stats()
-    streak      = tr_stats.get('streak', 0)
-    party_count = len(col['pokemon'])
-    stats_str   = f'🔥 ×{streak}   🏅 {badge_count}   👥 {party_count}'
-
-    # ── Section 4: Contextual display or chatter ────────────────────────────
-    sep = '  ┃  ' if plugin_mode else '  │  '
-
+    # ── Section 3: State (encounter or chatter) ─────────────────────────────
     enc = None
     if ENCOUNTER_FILE.exists():
         try:
@@ -928,29 +979,11 @@ def render_statusline(plugin_mode=False):
             enc = None
 
     if enc and enc.get('encountered'):
-        pb = enc.get("balls_poke", 0)
-        gb = enc.get("balls_great", 0)
-        ub = enc.get("balls_ultra", 0)
-        mb = enc.get("balls_master", 0)
-        balls_str = f'🔴 {pb}  🔵 {gb}  🟡 {ub}  🟣 {mb}'
-        combo     = enc.get('combo', 1)
-        combo_str = f'{sep}🔥 ×{combo}' if combo >= 2 else ''
-        wname     = enc["wild_name"]
-        wemoji    = enc["wild_emoji"]
-        throws    = enc.get("throws", [])
-        last_ball = throws[-1]["ball_emoji"] if throws else "🔴"
-        if not enc.get('battle_won'):
-            result = f'⚔️  {wemoji} {wname} fled'
-        elif enc.get('no_balls'):
-            result = f'⚔️  WIN  ·  no balls!  {wemoji} {wname} escaped'
-        elif enc.get('caught'):
-            result = f'⚔️  WIN  ·  {last_ball} caught {wemoji} {wname}!'
-        else:
-            result = f'⚔️  WIN  ·  {last_ball} {wemoji} {wname} broke free!'
-        return f'{prefix}{buddy_str}{sep}{result}{sep}{balls_str}{combo_str}'
+        state_str = render_encounter_state(enc)
+    else:
+        state_str = f'💭 {get_chatter(pct)}'
 
-    chatter_str = f'💭 {get_chatter(pct)}'
-    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{stats_str}{sep}{chatter_str}'
+    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{persona_suffix}'
 
 def render_card():
     """Render a shareable ASCII trainer card."""
@@ -1100,7 +1133,8 @@ def render_card():
             first_tier = False
             for p in members:
                 mark = '✨' if p.get('shiny') else ''
-                name = f'  {mark}{p["emoji"]} {p["name"]}{"*" if p["name"] == col["active"] else ""}'
+                dn, de = displayed_form(p)
+                name = f'  {mark}{de} {dn}{"*" if p["name"] == col["active"] else ""}'
                 party_lines.append(trow(name, f'  {p["level"]}', f' {RARITY_LABELS_ASCII.get(tier, tier.upper())}'))
         party_lines.append(tbot)
         out += party_lines
@@ -1227,13 +1261,14 @@ def render_html_card():
             is_shiny  = bool(p.get('shiny'))
             mark      = ' ★' if is_active else ''
             row_cls   = 'active-row' if is_active else ''
-            spr       = sprite_url(p['name'], shiny=is_shiny)
+            dn, de    = displayed_form(p)
+            spr       = sprite_url(dn, shiny=is_shiny)
             shiny_sfx = ' ✨' if is_shiny else ''
-            icon      = (f'<img src="{spr}" class="poke-sprite" alt="{_he(p["name"])}">'
-                         if spr else _he(p.get('emoji', '?')))
+            icon      = (f'<img src="{spr}" class="poke-sprite" alt="{_he(dn)}">'
+                         if spr else _he(de))
             party_rows_html.append(
                 f'<tr class="{row_cls}">'
-                f'<td>{icon} {_he(p["name"])}{_he(shiny_sfx)}{_he(mark)}</td>'
+                f'<td>{icon} {_he(dn)}{_he(shiny_sfx)}{_he(mark)}</td>'
                 f'<td class="center">{p["level"]}</td>'
                 f'<td><span class="rarity-badge" style="color:{color};background:{bg}">'
                 f'{_he(label)}</span></td>'
@@ -1782,7 +1817,8 @@ def render_dex(filter_arg=None):
         row_buf = []
         for p in members:
             mark  = '✨' if p.get('shiny') else ''
-            entry = f'{mark}{p["emoji"]} {p["name"]}{"*" if p["name"] == col["active"] else ""} Lv.{p["level"]}'
+            dn, de = displayed_form(p)
+            entry = f'{mark}{de} {dn}{"*" if p["name"] == col["active"] else ""} Lv.{p["level"]}'
             row_buf.append(entry)
             if len(row_buf) == 3:
                 out.append(row(f'{row_buf[0]:<20}{row_buf[1]:<20}{row_buf[2]}'))
@@ -2106,10 +2142,11 @@ def do_switch(target_name):
     col['active'] = name
     write_collection(col['active'], col['pokemon'])
 
-    STATE_FILE.write_text(f'Switched to {name}! 🔄\n', encoding='utf-8')
+    disp_name, disp_emj = displayed_form(match)
+    STATE_FILE.write_text(f'Switched to {disp_name}! 🔄\n', encoding='utf-8')
 
-    print(f' 🔄 Switched buddy: {cur_name} → {emoji} {name}')
-    print(f'    {name} is now your active buddy! (Lv.{level}, {xp} XP)')
+    print(f' 🔄 Switched buddy: {cur_name} → {disp_emj} {disp_name}')
+    print(f'    {disp_name} is now your active buddy! (Lv.{level}, {xp} XP)')
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 

@@ -5,6 +5,20 @@ Format: [version] — date — description
 
 ---
 
+## [2.7.0] — 2026-04-21
+
+### Added
+- **Encounter throw wobble animation** — statusline now renders Pokémon Go–style wobble frames (`·` → `· ·` → `· · ·` → `💫`) per throw, timestamp-driven from `base_ts` + `throw_secs`. Multi-throw encounters show `1/N`, `2/N` counters before the final reveal.
+- **Persona flag in statusline** — appends `🎭` suffix when the Pokémon Master Coach persona is active (detected from `~/.claude/CLAUDE.md`). Absent when persona is off.
+
+### Changed
+- **Compact statusline** — dropped the stats section (streak · badges · party count). New layout: `version · buddy · XP bar · state · persona`. State slot rotates between chatter (idle) and live encounter animation.
+
+### Fixed
+- **Evolved form now displays correctly everywhere** — statusline, status card PARTY, ASCII trainer card party, HTML trainer card, Pokédex, and switch messages all showed starter form (e.g. `🔥 Charmander Lv.39`) instead of evolved stage (`🐉 Charizard Lv.39`). New `displayed_form()` helper computes display name + emoji from starter evolution thresholds by level; non-starters pass through unchanged. No schema or migration.
+
+---
+
 ## [2.6.4] — 2026-04-21
 
 ### Added
