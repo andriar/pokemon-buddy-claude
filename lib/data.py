@@ -602,7 +602,7 @@ TITLE_RULES = [
 ]
 
 BUDDY_TEMPLATE = """\
-# Buddy Pokemon: {name} {emoji}
+# Buddy Pokemon: {stage} {stage_emoji}
 
 **Name**: {name}
 **Type**: {ptype}
@@ -610,11 +610,11 @@ BUDDY_TEMPLATE = """\
 **Specialty**: {specialty}
 **Level**: {level}
 **XP**: {xp} / {xp_max}
-**Stage**: {name} {emoji}
+**Stage**: {stage} {stage_emoji}
 
 ## Evolution Path
 
-**Current Stage**: {name} {emoji}
+**Current Stage**: {stage} {stage_emoji}
 
 ```
 {evo_line}

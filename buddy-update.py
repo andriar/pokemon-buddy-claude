@@ -698,7 +698,7 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
     start_level = RARITY_START_LEVEL.get(rarity, 1)
     col['pokemon'].append({
         'name': name, 'type': ptype, 'emoji': emoji,
-        'level': start_level, 'xp': 0, 'caught': TODAY,
+        'level': start_level, 'xp': xp_for_level(start_level), 'caught': TODAY,
         'rarity': stored_rarity, 'shiny': is_shiny,
     })
     write_collection(col['active'], col['pokemon'])
@@ -1991,6 +1991,13 @@ def _build_buddy_content(name, ptype, emoji, trainer, level, xp):
     total_stat_boost = sum(5 for lv in range(1, level + 1) if lv % 5 == 0)
     starter = STARTER_DATA.get(name)
 
+    # Derive current evolution stage from level so switching back to an evolved
+    # starter preserves its form (e.g. Lv.16 Charmander → Charmeleon).
+    stage, stage_emoji = name, emoji
+    for evo_name, threshold, evo_emoji in (starter or {}).get('evolutions', []):
+        if level >= threshold:
+            stage, stage_emoji = evo_name, evo_emoji
+
     if starter:
         base_stats = starter['stats']
         specialty  = starter['specialty']
@@ -2023,7 +2030,8 @@ def _build_buddy_content(name, ptype, emoji, trainer, level, xp):
     moves_rows = '\n'.join(f'| {m[0]} | {m[1]} | {m[2]} | {m[3]} |' for m in moves)
 
     return BUDDY_TEMPLATE.format(
-        name=name, emoji=emoji, ptype=ptype, trainer=trainer,
+        name=name, emoji=emoji, stage=stage, stage_emoji=stage_emoji,
+        ptype=ptype, trainer=trainer,
         specialty=specialty, level=level, xp=xp, xp_max=xp_max,
         evo_line=evo_line,
         hp=stats['HP'], atk=stats['Attack'], def_=stats['Defense'],
@@ -2088,6 +2096,9 @@ def do_switch(target_name):
 
     name, ptype, emoji = match['name'], match['type'], match['emoji']
     level, xp = match['level'], match['xp']
+    # Heal legacy collection rows where xp was stored as 0 for high-level catches
+    # (caused negative XP bar like -2900/150 on switch).
+    xp = max(xp, xp_for_level(level))
 
     content = _build_buddy_content(name, ptype, emoji, trainer, level, xp)
     BUDDY_FILE.write_text(content, encoding='utf-8')
