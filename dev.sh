@@ -17,6 +17,9 @@ ENGINE_FILES=(
     "buddy-update.py"
     "lib/data.py"
     "lib/__init__.py"
+    "hooks/session-start.py"
+    "hooks/stop-xp.py"
+    "hooks.json"
 )
 
 cmd="${1:-deploy}"

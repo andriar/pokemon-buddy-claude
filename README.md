@@ -5,6 +5,7 @@ A Pokemon companion system for [Claude Code](https://claude.ai/code) — your AI
 ## Features
 
 - **Choose your starter** — Charmander 🔥, Bulbasaur 🌿, or Squirtle 💧, each with unique stats and move unlocks
+- **Auto XP from token usage** — every completed turn awards XP via a tiered formula (no persona required, runs in a local Stop hook)
 - **Earn XP automatically** — Claude awards XP after bug fixes, features, deployments, and more
 - **Daily streak bonus** — first XP award of the day gives +20 bonus XP; streak shown in status bar
 - **Level up & evolve** — Lv.16 → Charmeleon/Ivysaur/Wartortle · Lv.36 → Charizard/Venusaur/Blastoise
@@ -96,9 +97,28 @@ All slash commands are namespaced under `/poke:*` in the plugin version.
 
 **The default plugin install is free** — status bar runs locally, slash commands only cost tokens when you invoke them. The Pokémon Master Coach persona is **opt-in** because it adds ~150–250 tokens per conversation turn (always-on). Enable it if you love the flavor and can afford it; skip it for a silent buddy that still animates the status bar.
 
-## XP auto-award (only active if persona is enabled)
+## XP auto-award
 
-When the Coach persona is enabled, Claude detects completed tasks and auto-runs `/poke:xp`:
+Two independent systems run side-by-side:
+
+### Per-turn from token usage (always on)
+
+After every Claude Code turn, a Stop hook reads the transcript, extracts the turn's token counts, and awards XP via a tiered divisor formula. No persona, no keywords, no Claude tokens spent — the hook is a local Python subprocess.
+
+| Token type | Rate |
+|---|---|
+| Output tokens | 1 XP / 100 |
+| Input tokens | 1 XP / 1,000 |
+| Cache write | 1 XP / 500 |
+| Cache read | 1 XP / 5,000 |
+
+The hook is idempotent per `session_id` (stored in `~/.claude/pokemon-buddy-plugin.json`) and never back-awards on a resumed/compacted session. In auto-mode XP awards, the encounter roll is unbiased (role type does not weight wild picks) and daily-quest `tasks_today` is not incremented — those remain driven by manual `/poke:xp` descriptions.
+
+To tune, edit the `TIERS` dict in `hooks/stop-xp.py` and run `bash dev.sh` (see [Development / Testing](#development--testing)).
+
+### Task-keyword detection (requires Coach persona)
+
+When the Coach persona is enabled, Claude detects completed tasks and auto-runs `/poke:xp <description>`:
 
 | Achievement | XP |
 |---|---|
@@ -152,7 +172,8 @@ The plugin lives in your Claude Code plugin directory. Your buddy data stays in 
 ├── buddy-update.py         ← Core engine (XP, evolution, catches)
 ├── statusline-buddy.sh     ← Status bar script
 ├── hooks/
-│   └── session-start.py    ← Session hook (welcome, migration nudge)
+│   ├── session-start.py    ← Session hook (welcome, migration nudge)
+│   └── stop-xp.py          ← Stop hook (per-turn token-based XP)
 ├── skills/
 │   └── pokemon-coach/
 │       └── SKILL.md        ← Coach persona (opt-in)
@@ -192,6 +213,7 @@ The v2.x plugin is **free by default**:
 | Status bar | **0 tokens** — runs as a shell command outside Claude context |
 | Slash commands | **~200 tokens** — only when you invoke one |
 | Session hook | **~50 tokens** — one-time on session start, skipped if no buddy |
+| Stop hook (per-turn XP) | **0 tokens** — local Python subprocess, output is shown but not re-ingested |
 | Pokémon Coach persona | **opt-in** — ~150–250 tokens/turn when enabled |
 
 There is no always-on CLAUDE.md import in v2.x. The coach persona that previously loaded into every conversation (~380 tokens/session always) is now fully opt-in via `/poke:persona on`.
@@ -235,6 +257,90 @@ Inside Claude Code:
 Your state files (`buddy-pokemon.md`, `pokemon-collection.md`, `buddy-stats.md`) are never touched — they live in `~/.claude/` outside the plugin directory.
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed between versions.
+
+## Development / Testing
+
+If you're hacking on the plugin itself (not just using it), this section is for you.
+
+### Local dev workflow — edit the repo, test in Claude Code
+
+The plugin you run inside Claude Code lives in a cache directory, *not* this repo. Use `dev.sh` to sync your local edits into the cache without reinstalling:
+
+```bash
+bash dev.sh           # sync repo → plugin cache (default: deploy)
+bash dev.sh status    # show which engine files are in sync
+bash dev.sh restore   # print plugin reinstall instructions
+```
+
+Files covered: `buddy-update.py`, `lib/*.py`, `hooks/*.py`, `hooks.json`. After syncing `hooks.json` or hook files, **restart your Claude Code session** so hooks are re-registered.
+
+### Run the unit test suite
+
+152 tests cover XP math, streak, evolution, milestones, file round-trips, and catch system:
+
+```bash
+python3 -m unittest discover tests/
+# or, if you have pytest:
+pytest tests/ -v
+```
+
+Tests use temp dirs via `tempfile` — they never touch your real `~/.claude/` buddy state.
+
+### Test the Stop hook manually
+
+The hook expects the Claude Code Stop payload on stdin. Simulate it with a real transcript:
+
+```bash
+# 1. Find a transcript for this project
+TRANSCRIPT=$(ls -t ~/.claude/projects/-Users-<you>-*/*.jsonl | head -1)
+
+# 2. Fire the hook end-to-end (awards XP if anchor is stale)
+echo "{\"transcript_path\":\"$TRANSCRIPT\",\"session_id\":\"TEST\",\"hook_event_name\":\"Stop\"}" \
+  | python3 hooks/stop-xp.py
+```
+
+The hook is idempotent per `session_id`, so re-running with the same `session_id` gives no output until new turns appear in the transcript. To reset: delete the entry under `xp_sessions.TEST` in `~/.claude/pokemon-buddy-plugin.json`.
+
+Edge cases that should exit silently with code 0:
+
+```bash
+echo ''                                           | python3 hooks/stop-xp.py  # empty stdin
+echo '{"transcript_path":"/nope","session_id":"x"}' | python3 hooks/stop-xp.py  # missing file
+echo 'not json'                                   | python3 hooks/stop-xp.py  # malformed
+```
+
+All failures are logged to `~/.claude/pokemon-buddy-error.log` and never crash the hook.
+
+### Test `xp-auto` directly
+
+The subcommand invoked by the Stop hook:
+
+```bash
+python3 buddy-update.py xp-auto 25 "250o+100i"   # award 25 XP with a token summary tag
+python3 buddy-update.py xp-auto 0                # silent no-op
+python3 buddy-update.py xp-auto not_a_number     # silent no-op (parses to 0)
+```
+
+Manual XP path (unchanged) still works the same way:
+
+```bash
+python3 buddy-update.py xp "fixed a bug"
+```
+
+### Tuning the XP formula
+
+Edit `TIERS` in `hooks/stop-xp.py`:
+
+```python
+TIERS = {
+    'output':       100,    # ← lower = more generous
+    'input':        1000,
+    'cache_write':  500,
+    'cache_read':   5000,
+}
+```
+
+Then `bash dev.sh` to push to the plugin cache, and restart your Claude Code session.
 
 ## Uninstalling
 
