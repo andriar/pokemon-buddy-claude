@@ -295,6 +295,111 @@ class TestEvolution(unittest.TestCase):
         self.assertTrue(evolved)
 
 
+class TestDisplayedForm(unittest.TestCase):
+    """displayed_form returns evolved stage+emoji for starters by level, pass-through for non-starters."""
+
+    def test_starter_pre_evolution(self):
+        p = {'name': 'Charmander', 'emoji': '🔥', 'level': 15}
+        name, emj = engine.displayed_form(p)
+        self.assertEqual(name, 'Charmander')
+        self.assertEqual(emj, '🔥')
+
+    def test_starter_first_evolution(self):
+        p = {'name': 'Charmander', 'emoji': '🔥', 'level': 16}
+        name, emj = engine.displayed_form(p)
+        self.assertEqual(name, 'Charmeleon')
+        self.assertEqual(emj, '🔥')
+
+    def test_starter_final_evolution(self):
+        p = {'name': 'Charmander', 'emoji': '🔥', 'level': 50}
+        name, emj = engine.displayed_form(p)
+        self.assertEqual(name, 'Charizard')
+        self.assertEqual(emj, '🐉')
+
+    def test_bulbasaur_final_form(self):
+        p = {'name': 'Bulbasaur', 'emoji': '🌿', 'level': 40}
+        name, emj = engine.displayed_form(p)
+        self.assertEqual(name, 'Venusaur')
+        self.assertEqual(emj, '🌺')
+
+    def test_non_starter_pass_through(self):
+        p = {'name': 'Gengar', 'emoji': '👻', 'level': 50}
+        name, emj = engine.displayed_form(p)
+        self.assertEqual(name, 'Gengar')
+        self.assertEqual(emj, '👻')
+
+    def test_missing_emoji_fallback(self):
+        p = {'name': 'Unknown', 'level': 20}
+        name, emj = engine.displayed_form(p)
+        self.assertEqual(name, 'Unknown')
+        self.assertEqual(emj, '?')
+
+
+class TestRenderEncounterState(unittest.TestCase):
+    """Timestamp-driven throw wobble frames."""
+
+    def _enc(self, **overrides):
+        import time
+        base = {
+            'encountered':  True,
+            'wild_name':    'Gengar',
+            'wild_emoji':   '👻',
+            'battle_won':   True,
+            'base_ts':      time.time(),
+            'throw_secs':   3.0,
+            'throws':       [{'ball_emoji': '🔴', 'caught': False},
+                             {'ball_emoji': '🔵', 'caught': True}],
+            'caught':       True,
+            'no_balls':     False,
+        }
+        base.update(overrides)
+        return base
+
+    def test_fled_when_battle_lost(self):
+        out = engine.render_encounter_state(self._enc(battle_won=False))
+        self.assertIn('fled', out)
+
+    def test_no_balls_message(self):
+        out = engine.render_encounter_state(self._enc(no_balls=True, throws=[]))
+        self.assertIn('no balls', out)
+
+    def test_wobble_frame_first_throw_early(self):
+        import time
+        enc = self._enc(base_ts=time.time() - 0.1)
+        out = engine.render_encounter_state(enc)
+        self.assertIn('🔴', out)
+        self.assertIn('1/2', out)
+        self.assertTrue(out.endswith('·'))
+
+    def test_wobble_frame_second_throw(self):
+        import time
+        enc = self._enc(base_ts=time.time() - 3.5)
+        out = engine.render_encounter_state(enc)
+        self.assertIn('🔵', out)
+        self.assertIn('2/2', out)
+
+    def test_final_reveal_caught(self):
+        import time
+        enc = self._enc(base_ts=time.time() - 10)
+        out = engine.render_encounter_state(enc)
+        self.assertIn('caught', out)
+        self.assertIn('🔵', out)
+
+    def test_final_reveal_escaped(self):
+        import time
+        enc = self._enc(base_ts=time.time() - 10, caught=False,
+                        throws=[{'ball_emoji': '🔴', 'caught': False}])
+        out = engine.render_encounter_state(enc)
+        self.assertIn('broke free', out)
+
+    def test_single_throw_no_prefix(self):
+        import time
+        enc = self._enc(base_ts=time.time() - 0.1,
+                        throws=[{'ball_emoji': '🔴', 'caught': False}])
+        out = engine.render_encounter_state(enc)
+        self.assertNotIn('1/1', out)
+
+
 # ── Milestone checks ──────────────────────────────────────────────────────────
 
 class TestCheckMilestones(unittest.TestCase):
