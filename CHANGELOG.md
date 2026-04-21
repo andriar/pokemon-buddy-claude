@@ -5,6 +5,17 @@ Format: [version] — date — description
 
 ---
 
+## [2.6.4] — 2026-04-21
+
+### Added
+- **Token-based auto XP** — Stop hook (`stop-xp.py`) awards XP every turn based on token usage. No more manual `/poke:xp` calls for routine work.
+
+### Fixed
+- **Negative XP bar on buddy switch** — switching to a high-level Pokémon showed values like `-2900/150` due to legacy/inconsistent XP totals. Healed on load + clamped on render.
+- **Lost evolution state on switch** — evolved forms reverted to base when swapping buddies. Evolution state now persists per Pokémon in the collection.
+
+---
+
 ## [2.6.3] — 2026-04-18
 
 ### Fixed

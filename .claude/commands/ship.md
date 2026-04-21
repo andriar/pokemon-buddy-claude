@@ -65,7 +65,9 @@ When in doubt, use patch.
 1. Edit `VERSION` — replace the version string with the new version
 2. Edit `.claude-plugin/plugin.json` — update the `"version"` field to match
 
-## Step 8 — Update CHANGELOG.md
+## Step 8 — Update CHANGELOG.md (MANDATORY — do not skip)
+
+**Gate:** `head CHANGELOG.md` must show the new version before you commit or tag. If a PR / tag goes out without this entry, the release is broken.
 
 Add a new section at the top (below the `---` separator after the header) in this exact format:
 
