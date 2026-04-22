@@ -5,6 +5,17 @@ Format: [version] — date — description
 
 ---
 
+## [2.8.0] — 2026-04-22
+
+### Added
+- **Exp Share** — once your active buddy reaches Lv.100, excess XP splits evenly across non-maxed party members. Level-ups (and Lv.100 caps) propagate automatically. Announcement shows a 🔀 block listing each recipient; statusline chatter surfaces `Lv.100! Exp Share → N party 🔀`.
+- **`LEVEL_CAP` + `CAP_XP` constants and `clamp_to_cap()` helper** — unified level-cap math removes magic `100`/`xp_for_level(101) - 1` duplication across the XP pipeline.
+
+### Changed
+- **XP pipeline** — cap-clamp logic now flows through `clamp_to_cap()`, returning `(level, stored_xp, overflow)`. Buddy reach cap → overflow drives Exp Share; below cap → identical behavior to v2.7.0.
+
+---
+
 ## [2.7.0] — 2026-04-21
 
 ### Added
