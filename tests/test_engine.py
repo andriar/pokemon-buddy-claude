@@ -1434,5 +1434,72 @@ class TestChooseMode(_TmpDir, unittest.TestCase):
         self.assertEqual({p['name'] for p in col['pokemon']}, {'Charmander', 'Bulbasaur'})
 
 
+class TestClampToCap(unittest.TestCase):
+    def test_below_cap_is_passthrough(self):
+        lv, xp, over = engine.clamp_to_cap(500)
+        self.assertLess(lv, engine.LEVEL_CAP)
+        self.assertEqual(xp, 500)
+        self.assertEqual(over, 0)
+
+    def test_at_cap_no_overflow(self):
+        lv, xp, over = engine.clamp_to_cap(engine.CAP_XP)
+        self.assertEqual(lv, engine.LEVEL_CAP)
+        self.assertEqual(xp, engine.CAP_XP)
+        self.assertEqual(over, 0)
+
+    def test_past_cap_reports_overflow(self):
+        lv, xp, over = engine.clamp_to_cap(engine.CAP_XP + 1234)
+        self.assertEqual(lv, engine.LEVEL_CAP)
+        self.assertEqual(xp, engine.CAP_XP)
+        self.assertEqual(over, 1234)
+
+
+class TestDistributeOverflowXp(_TmpDir, unittest.TestCase):
+    """Exp Share: XP beyond Lv.cap on active buddy splits across party."""
+
+    def _seed(self):
+        engine.write_collection('Charizard', [
+            {'name': 'Charizard', 'type': 'Fire', 'emoji': 'fire',
+             'level': engine.LEVEL_CAP, 'xp': engine.CAP_XP,
+             'caught': '2026-01-01', 'rarity': 'starter'},
+            {'name': 'Pikachu', 'type': 'Electric', 'emoji': 'elec',
+             'level': 50, 'xp': 7400, 'caught': '2026-01-02', 'rarity': 'common'},
+            {'name': 'Squirtle', 'type': 'Water', 'emoji': 'water',
+             'level': 10, 'xp': 900, 'caught': '2026-01-03', 'rarity': 'common'},
+        ])
+
+    def test_even_split_across_eligible(self):
+        self._seed()
+        res = engine.distribute_overflow_xp(1000, 'Charizard')
+        gained = {name: g for name, g, _, _ in res}
+        self.assertEqual(gained, {'Pikachu': 500, 'Squirtle': 500})
+
+    def test_zero_overflow_noop(self):
+        self._seed()
+        self.assertEqual(engine.distribute_overflow_xp(0, 'Charizard'), [])
+
+    def test_share_below_one_noop(self):
+        self._seed()
+        self.assertEqual(engine.distribute_overflow_xp(1, 'Charizard'), [])
+
+    def test_active_excluded(self):
+        self._seed()
+        res = engine.distribute_overflow_xp(500, 'Pikachu')
+        self.assertNotIn('Pikachu', {n for n, *_ in res})
+
+    def test_recipients_capped_at_level_cap(self):
+        self._seed()
+        engine.distribute_overflow_xp(10_000_000, 'Charizard')
+        col = engine.read_collection()
+        for p in col['pokemon']:
+            self.assertLessEqual(p['level'], engine.LEVEL_CAP)
+            self.assertLessEqual(p['xp'], engine.CAP_XP)
+
+    def test_no_eligible_returns_empty(self):
+        self._seed()
+        engine.distribute_overflow_xp(10_000_000, 'Charizard')  # max everyone
+        self.assertEqual(engine.distribute_overflow_xp(500, 'Charizard'), [])
+
+
 if __name__ == '__main__':
     unittest.main()

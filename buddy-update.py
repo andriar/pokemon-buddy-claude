@@ -55,6 +55,7 @@ STATE_FILE      = Path.home() / '.claude' / 'buddy-state.txt'
 ENCOUNTER_FILE  = Path.home() / '.claude' / 'buddy-encounter.json'
 TODAY           = date.today().strftime('%Y-%m-%d')
 LOG_CAP         = 15
+LEVEL_CAP       = 100         # max Pokémon level; XP past cap → Exp Share
 ARCHIVE_FILE    = Path.home() / '.claude' / 'buddy-log-archive.md'
 
 SHINY_RATE        = 1 / 200   # 0.5%
@@ -120,9 +121,19 @@ def xp_for_level(n):
 
 def level_from_xp(xp):
     lv = 1
-    while lv < 100 and xp >= xp_for_level(lv + 1):
+    while lv < LEVEL_CAP and xp >= xp_for_level(lv + 1):
         lv += 1
     return lv
+
+CAP_XP = xp_for_level(LEVEL_CAP + 1) - 1  # highest XP stored at Lv.cap
+
+def clamp_to_cap(xp_raw):
+    """Resolve raw XP to (level, stored_xp, overflow). At cap, stored XP is
+    held just shy of the next-level threshold so XP bars render near-full."""
+    lv = level_from_xp(xp_raw)
+    if lv >= LEVEL_CAP:
+        return LEVEL_CAP, min(xp_raw, CAP_XP), max(0, xp_raw - CAP_XP)
+    return lv, xp_raw, 0
 
 # ── Bars ─────────────────────────────────────────────────────────────────────
 
@@ -427,6 +438,31 @@ def sync_active_to_collection(name, level, xp):
         'rarity': 'starter',
     })
     write_collection(col['active'], col['pokemon'])
+
+def distribute_overflow_xp(overflow, active_name):
+    """Exp Share: split overflow XP evenly across non-active party members
+    under level 100. Returns list of (name, gained, old_lv, new_lv) for
+    announcement. Remainder XP (too small to split) is dropped."""
+    if overflow <= 0:
+        return []
+    col = read_collection()
+    eligible = [p for p in col['pokemon']
+                if p['name'] != active_name and p.get('level', 1) < LEVEL_CAP]
+    if not eligible:
+        return []
+    share = overflow // len(eligible)
+    if share <= 0:
+        return []
+    results = []
+    for p in eligible:
+        old_lv = p['level']
+        raw_xp = p.get('xp', xp_for_level(old_lv)) + share
+        new_lv, new_xp, _ = clamp_to_cap(raw_xp)
+        p['level'] = new_lv
+        p['xp']    = new_xp
+        results.append((p['name'], share, old_lv, new_lv))
+    write_collection(col['active'], col['pokemon'])
+    return results
 
 # ── Catch system ──────────────────────────────────────────────────────────────
 
@@ -1841,7 +1877,8 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         buddy_rarity=None, buddy_name='',
                         inventory_msg='', combo=1, combo_mult=1.0,
                         quest_msg='', lv_reward_msg='',
-                        encounter_info=None, active_quest=None, quest_done=False):
+                        encounter_info=None, active_quest=None, quest_done=False,
+                        exp_share=None):
     xp_floor    = xp_for_level(new_level)
     xp_disp     = new_xp - xp_floor
     xp_max_disp = new_max - xp_floor
@@ -1877,6 +1914,11 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
         lines.append(f' All stats +{stat_boost}!')
     for _, name, mtype, desc in new_moves_data:
         lines.append(f' New move: {name} [{mtype}] — {desc}')
+    if exp_share:
+        lines.append(f' 🔀 Exp Share ({len(exp_share)} party member{"s" if len(exp_share) != 1 else ""}, +{exp_share[0][1]} XP each):')
+        for name, _gained, olv, nlv in exp_share:
+            lu = f'  ★ Lv.{olv}→{nlv}' if nlv > olv else ''
+            lines.append(f'    • {name} Lv.{nlv}{lu}')
     if quest_msg:
         lines.append(f' {quest_msg}')
     elif active_quest:
@@ -2396,13 +2438,8 @@ def main():
         tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + add_xp
         inventory_msg = earn_inventory(add_xp, True, tr_stats)
 
-    new_xp    = old_xp + add_xp
-    new_level = level_from_xp(new_xp)
-    # At level cap, hold XP just shy of the next-level threshold so the bar
-    # displays near-full instead of runaway numbers past the bar max.
-    if new_level >= 100:
-        new_level = 100
-        new_xp = min(new_xp, xp_for_level(101) - 1)
+    # At cap, excess XP flows to party via Exp Share.
+    new_level, new_xp, overflow_xp = clamp_to_cap(old_xp + add_xp)
     new_max   = xp_for_level(new_level + 1)
     stat_boost = sum(5 for lv in range(old_level + 1, new_level + 1) if lv % 5 == 0)
 
@@ -2430,6 +2467,8 @@ def main():
 
     # Sync collection
     sync_active_to_collection(buddy_name, new_level, new_xp)
+
+    exp_share = distribute_overflow_xp(overflow_xp, buddy_name) if overflow_xp else []
 
     # Run wild encounter (battle + ball throw)
     if mode == 'xp':
@@ -2486,6 +2525,8 @@ def main():
     if mode in ('xp', 'xp-auto'):
         if evolved:
             chatter_msg = f'Evolved to {new_stage}! 🎉'
+        elif exp_share:
+            chatter_msg = f'Lv.100! Exp Share → {len(exp_share)} party 🔀'
         elif new_level > old_level:
             chatter_msg = f'Level {new_level}! Growing strong 💪'
         elif catch_result and catch_result[4]:
@@ -2507,6 +2548,7 @@ def main():
         inventory_msg, combo, combo_mult,
         quest_msg, lv_reward_msg,
         encounter_info, active_quest, quest_done,
+        exp_share,
     ))
 
 if __name__ == '__main__':
