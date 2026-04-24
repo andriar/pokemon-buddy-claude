@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Pokémon buddy companion for Claude Code — game-ified coding sessions",
-    "version": "2.25.0"
+    "version": "2.26.0"
   },
   "plugins": [
     {
@@ -16,7 +16,7 @@
         "url": "https://github.com/andriar/pokemon-buddy-claude.git"
       },
       "description": "Pick a starter, earn XP from coding, evolve through canonical chains, catch wild Pokémon, flex your trainer card.",
-      "version": "2.25.0"
+      "version": "2.26.0"
     }
   ]
 }

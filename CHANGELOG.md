@@ -5,6 +5,21 @@ Format: [version] — date — description
 
 ---
 
+## [2.26.0] — 2026-04-24
+
+### Added
+- **F14 PvP lite — Gym leader battles** — new `/poke:battle` command challenges canonical Kanto gym leaders (Brock, Misty, Lt. Surge, Erika, Koga, Sabrina, Blaine, Giovanni). Uses existing `run_battle` with TYPE_CHART effectiveness.
+- **First-time win earns that leader's gym badge** (alt path to milestone-based unlocks). Rematches allowed but no duplicate badge.
+- Compressed 4–6 line battle log: `⚔️ GYM BATTLE`, matchup, win% bar, flavor quote, result + XP.
+- Win = +75 XP, loss = +10 XP participation. Defeated set persisted to `buddy-stats.md` under new `## Leaders Defeated` section.
+- `/poke:battle` no-arg lists 8 leaders with ✓/· defeated status.
+- **6 new tests** — leader table size, badge mapping, unknown-leader error, first-win awards badge, rematch dedup, loss consolation XP (255 total).
+
+### Changed
+- Stats schema: `leaders_defeated: set` added. Backwards-compatible (empty set for existing trainers).
+
+---
+
 ## [2.25.0] — 2026-04-24
 
 ### Added

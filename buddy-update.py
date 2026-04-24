@@ -367,6 +367,7 @@ def read_stats():
         'shiny_count': 0,
         'milestones': set(),
         'gym_badges': set(),
+        'leaders_defeated': set(),
         # Item bag
         **{f'item_{iid}': 0 for iid in ITEM_IDS},
         # Egg
@@ -396,6 +397,8 @@ def read_stats():
         return m.group(1).strip() if m else defaults.get(key, '')
     ms_section = re.search(r'## Milestones Awarded\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
     milestones = set(re.findall(r'^- (\S+)', ms_section.group(1), re.MULTILINE)) if ms_section else set()
+    ld_section = re.search(r'## Leaders Defeated\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
+    leaders_defeated = set(re.findall(r'^- (\S+)', ld_section.group(1), re.MULTILINE)) if ld_section else set()
     gb_section = re.search(r'## Gym Badges Earned\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
     if gb_section:
         gym_badges = set(re.findall(r'^- (\S+)', gb_section.group(1), re.MULTILINE))
@@ -422,6 +425,7 @@ def read_stats():
         'shiny_count':       gi('shiny_count'),
         'milestones':        milestones,
         'gym_badges':        gym_badges,
+        'leaders_defeated':  leaders_defeated,
         **{f'item_{iid}': gi(f'item_{iid}') for iid in ITEM_IDS},
         'egg_species':       gs('egg_species'),
         'egg_type':          gs('egg_type'),
@@ -450,6 +454,7 @@ def write_stats(s):
     b = lambda v: 'true' if v else 'false'
     ms_lines = '\n'.join(f'- {m}' for m in sorted(s['milestones'])) or '*(none yet)*'
     gb_lines = '\n'.join(f'- {bid}' for bid in _BADGE_ORDER if bid in s.get('gym_badges', set())) or '*(none yet)*'
+    ld_lines = '\n'.join(f'- {lid}' for lid in sorted(s.get('leaders_defeated', set()))) or '*(none yet)*'
     STATS_FILE.write_text(
         f'# Trainer Stats\n\n'
         f'**schema_version**: {STATS_SCHEMA_VER}\n'
@@ -489,7 +494,9 @@ def write_stats(s):
         f'## Milestones Awarded\n\n'
         f'{ms_lines}\n\n'
         f'## Gym Badges Earned\n\n'
-        f'{gb_lines}\n'
+        f'{gb_lines}\n\n'
+        f'## Leaders Defeated\n\n'
+        f'{ld_lines}\n'
     )
 
 # ── Streak logic ──────────────────────────────────────────────────────────────
@@ -679,6 +686,62 @@ def write_collection(active, pokemon_list, party=None):
     COLLECTION_FILE.write_text(''.join(lines), encoding='utf-8')
 
 FRIENDSHIP_MAX = 255
+
+# ── Gym leaders (F14 PvP lite) ───────────────────────────────────────────────
+# (id, name, type, level, signature, emoji, badge_id, flavor)
+GYM_LEADERS = [
+    ('brock',    'Brock',     'Rock',     12, 'Onix',     '🗿', 'boulder', 'Rock-hard defense!'),
+    ('misty',    'Misty',     'Water',    20, 'Starmie',  '⭐', 'cascade', 'Tidal strike!'),
+    ('surge',    'Lt. Surge', 'Electric', 24, 'Raichu',   '⚡', 'thunder', 'Lightning reflexes!'),
+    ('erika',    'Erika',     'Grass',    29, 'Vileplume','🌸', 'rainbow', 'Pollen storm!'),
+    ('koga',     'Koga',      'Poison',   40, 'Muk',      '☠️', 'soul',    'Venomous cloud!'),
+    ('sabrina',  'Sabrina',   'Psychic',  43, 'Alakazam', '🔮', 'marsh',   'Psychic assault!'),
+    ('blaine',   'Blaine',    'Fire',     45, 'Arcanine', '🔥', 'volcano', 'Scorching heat!'),
+    ('giovanni', 'Giovanni',  'Ground',   50, 'Rhydon',   '🦏', 'earth',   'Seismic slam!'),
+]
+_LEADER_BY_ID = {L[0]: L for L in GYM_LEADERS}
+
+def battle_leader(leader_id, buddy_level, buddy_type, stats):
+    """Run PvP vs a gym leader. Returns (won, xp_reward, log_lines, badge_awarded)."""
+    leader = _LEADER_BY_ID.get(leader_id)
+    if not leader:
+        return False, 0, [f'Unknown leader: {leader_id}'], None
+    lid, lname, ltype, llv, sig, lemoji, badge_id, flavor = leader
+    won, win_pct, eff = run_battle(buddy_level, buddy_type, llv, ltype)
+    xp_reward = 75 if won else 10
+    eff_tag = ' super effective!' if eff >= 2.0 else ' not very effective...' if eff == 0.5 else ''
+    log = [
+        f' ⚔️  GYM BATTLE — {lname} ({ltype}) Lv.{llv}',
+        f'   {lemoji} {sig}  vs  YOU Lv.{buddy_level} [{buddy_type}]',
+        f'   [{stat_bar(win_pct, 20)}]  {win_pct}% win{eff_tag}',
+        f'   "{flavor}"',
+    ]
+    badge_awarded = None
+    defeated = stats.setdefault('leaders_defeated', set())
+    if won:
+        log.append(f'   ✓  VICTORY! +{xp_reward} XP')
+        if lid not in defeated:
+            defeated.add(lid)
+            gym_badges = stats.setdefault('gym_badges', set())
+            if badge_id not in gym_badges:
+                gym_badges.add(badge_id)
+                badge_awarded = _BADGE_BY_ID.get(badge_id)
+                if badge_awarded:
+                    log.append(f'   🏅 Earned {badge_awarded[1]} {badge_awarded[2]}!')
+    else:
+        log.append(f'   ✗  DEFEAT. +{xp_reward} XP (participation)')
+    return won, xp_reward, log, badge_awarded
+
+def list_leaders(stats):
+    """Return rendered string listing leaders + win status."""
+    defeated = stats.get('leaders_defeated', set())
+    lines = [' 🏛  GYM LEADERS', ' ' + '─' * 48]
+    for lid, lname, ltype, llv, sig, lemoji, badge_id, _ in GYM_LEADERS:
+        mark = '✓' if lid in defeated else '·'
+        lines.append(f'   {mark} {lemoji} {lname:<11} Lv.{llv:<3} [{ltype:<8}] {sig}')
+    lines.append('')
+    lines.append(' /poke:battle <leader> to challenge')
+    return '\n'.join(lines)
 
 # F17b: friendship-gated evolutions. (source, target_name, target_type, target_emoji, min_friendship, hours_range_or_None)
 FRIENDSHIP_EVOLUTIONS = [
@@ -2850,6 +2913,25 @@ def main():
     if mode == 'dex':
         filter_arg = args[1] if len(args) > 1 else None
         print(render_dex(filter_arg))
+        sys.exit(0)
+
+    if mode == 'battle':
+        tr_stats = read_stats()
+        if len(args) < 2:
+            print(list_leaders(tr_stats))
+            sys.exit(0)
+        leader_id = args[1].lower()
+        col = read_collection()
+        active = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), None)
+        if not active:
+            print(' ❌ No active buddy. Pick one with /poke:switch.')
+            sys.exit(1)
+        won, xp_reward, log, badge = battle_leader(leader_id, active['level'], active['type'], tr_stats)
+        print('\n'.join(log))
+        tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + xp_reward
+        write_stats(tr_stats)
+        if badge:
+            append_badge(f'- {badge[1]} **{badge[2]}** — *earned by defeating {_LEADER_BY_ID[leader_id][1]}* `{TODAY}`')
         sys.exit(0)
 
     if mode in ('html', 'svg'):

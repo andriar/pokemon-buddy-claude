@@ -1987,5 +1987,47 @@ class TestFriendshipEvolution(_TmpDir, unittest.TestCase):
         self.assertEqual(out, [])
 
 
+# ── Gym battles (F14 PvP lite) ─────────────────────────────────────────────────
+
+class TestGymBattles(unittest.TestCase):
+    def test_8_leaders_defined(self):
+        self.assertEqual(len(engine.GYM_LEADERS), 8)
+
+    def test_all_leaders_map_to_badge(self):
+        badge_ids = {b[0] for b in engine.GYM_BADGE_DATA}
+        for L in engine.GYM_LEADERS:
+            self.assertIn(L[6], badge_ids)
+
+    def test_unknown_leader_fails(self):
+        stats = {'leaders_defeated': set(), 'gym_badges': set()}
+        won, xp, log, badge = engine.battle_leader('no_such', 50, 'Fire', stats)
+        self.assertFalse(won)
+        self.assertIsNone(badge)
+        self.assertEqual(xp, 0)
+
+    def test_winning_awards_badge(self):
+        stats = {'leaders_defeated': set(), 'gym_badges': set()}
+        with patch('random.randint', return_value=1):  # force win
+            won, xp, log, badge = engine.battle_leader('brock', 80, 'Water', stats)
+        self.assertTrue(won)
+        self.assertIn('brock', stats['leaders_defeated'])
+        self.assertIn('boulder', stats['gym_badges'])
+        self.assertEqual(xp, 75)
+
+    def test_rematch_no_duplicate_badge(self):
+        stats = {'leaders_defeated': {'brock'}, 'gym_badges': {'boulder'}}
+        with patch('random.randint', return_value=1):
+            won, xp, log, badge = engine.battle_leader('brock', 80, 'Water', stats)
+        self.assertTrue(won)
+        self.assertIsNone(badge)  # no new badge on rematch
+
+    def test_losing_gives_consolation_xp(self):
+        stats = {'leaders_defeated': set(), 'gym_badges': set()}
+        with patch('random.randint', return_value=100):  # force loss
+            won, xp, log, badge = engine.battle_leader('giovanni', 5, 'Fire', stats)
+        self.assertFalse(won)
+        self.assertEqual(xp, 10)
+
+
 if __name__ == '__main__':
     unittest.main()
