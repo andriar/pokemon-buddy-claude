@@ -23,6 +23,7 @@ from lib.data import (
     POKEBALL_TYPES, BALL_BY_RARITY, BALL_EARN_BY_XP,
     BERRY_TYPES, BERRY_DROP_RATES, POKEDEX_IDS,
     WILD_LEVELS, BASE_CATCH_RATES, TYPE_ADVANTAGE, TYPE_CHART,
+    REGIONAL_FORMS, REGIONAL_CATCH_CHANCE,
     COMBO_MULTIPLIERS, COMBO_WINDOW_SECS, LEVEL_UP_MILESTONE_REWARDS,
     DAILY_QUESTS,
 )
@@ -138,7 +139,10 @@ def _pokemon_tier(p):
 
 def displayed_form(p):
     """Return (display_name, display_emoji) for a collection entry, respecting
-    evolutions of starter species. Non-starters pass through."""
+    evolutions of starter species and regional form overrides."""
+    # Regional form: name already stored as display name (e.g. "Alolan Vulpix")
+    if p.get('form'):
+        return p['name'], p.get('emoji', '?')
     starter = STARTER_DATA.get(p['name'])
     if not starter:
         return p['name'], p.get('emoji', '?')
@@ -487,6 +491,7 @@ def read_collection():
         if len(cols) < 6 or cols[0] == 'Name': continue
         try:
             rarity = cols[6] if len(cols) > 6 else 'caught'
+            form   = cols[7] if len(cols) > 7 else ''
             pokemon.append({
                 'name':    cols[0],
                 'type':    cols[1],
@@ -496,6 +501,7 @@ def read_collection():
                 'caught':  cols[5],
                 'rarity':  rarity,
                 'shiny':   rarity.endswith('-shiny'),
+                'form':    form,
             })
         except (ValueError, IndexError):
             continue
@@ -509,13 +515,13 @@ def write_collection(active, pokemon_list, party=None):
         '# Pokemon Collection\n\n',
         f'**Active**: {active}\n',
         f'**ActiveParty**: {party_str}\n\n',
-        '| Name | Type | Emoji | Level | XP | Caught | Rarity |\n',
-        '|---|---|---|---|---|---|---|\n',
+        '| Name | Type | Emoji | Level | XP | Caught | Rarity | Form |\n',
+        '|---|---|---|---|---|---|---|---|\n',
     ]
     for p in pokemon_list:
         lines.append(
             f"| {p['name']} | {p['type']} | {p['emoji']} | "
-            f"{p['level']} | {p['xp']} | {p['caught']} | {p['rarity']} |\n"
+            f"{p['level']} | {p['xp']} | {p['caught']} | {p['rarity']} | {p.get('form', '')} |\n"
         )
     COLLECTION_FILE.write_text(''.join(lines), encoding='utf-8')
 
@@ -893,12 +899,24 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
 
 def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
     col = read_collection()
+    owned_names = {p['name'] for p in col['pokemon']}
     stored_rarity = (rarity + '-shiny') if is_shiny else rarity
     start_level = RARITY_START_LEVEL.get(rarity, 1)
+
+    # Regional variant roll: 15% on repeat catch if forms exist
+    form = ''
+    if name in owned_names and name in REGIONAL_FORMS:
+        if random.random() < REGIONAL_CATCH_CHANCE:
+            region, disp_name, r_emoji, r_type = random.choice(REGIONAL_FORMS[name])
+            form  = region
+            emoji = r_emoji
+            ptype = r_type
+            name  = disp_name
+
     col['pokemon'].append({
         'name': name, 'type': ptype, 'emoji': emoji,
         'level': start_level, 'xp': xp_for_level(start_level), 'caught': TODAY,
-        'rarity': stored_rarity, 'shiny': is_shiny,
+        'rarity': stored_rarity, 'shiny': is_shiny, 'form': form,
     })
     write_collection(col['active'], col['pokemon'], col.get('party'))
 

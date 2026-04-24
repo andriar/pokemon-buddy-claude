@@ -5,6 +5,20 @@ Format: [version] — date — description
 
 ---
 
+## [2.14.0] — 2026-04-24
+
+### Added
+- **Regional variants** — repeat catches have a 15% chance to roll a regional form. Seeded forms: Alolan Vulpix (Ice ❄️), Galarian Zigzagoon (Dark 🦡)
+- **`REGIONAL_FORMS` + `REGIONAL_CATCH_CHANCE`** in `lib/data.py` — dict keyed by base name, value list of `(region, display_name, emoji, type)` tuples
+- **`form` column in collection** — stores region name (e.g. `Alolan`); displayed in Pokédex grouped under base
+
+### Changed
+- **`add_to_collection` rolls regional form** on repeat catch if base name is in `REGIONAL_FORMS`; regional entry gets distinct display name + emoji + type stored directly
+- **`displayed_form` respects `form` field** — regional entries bypass the starter evolution chain lookup
+- **Collection file schema** — new `| Form |` column (8th); backward-compatible (empty string for non-regional)
+
+---
+
 ## [2.13.0] — 2026-04-24
 
 ### Added

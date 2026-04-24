@@ -240,6 +240,14 @@ TYPE_CHART = {
                  'Fire': _NVE, 'Poison': _NVE, 'Steel': _NVE},
 }
 
+# ── Regional forms ────────────────────────────────────────────────────────────
+# {base_name: [(region, display_name, emoji, type_override), ...]}
+REGIONAL_FORMS = {
+    'Vulpix':    [('Alolan',   'Alolan Vulpix',    '🦊❄️',  'Ice')],
+    'Zigzagoon': [('Galarian', 'Galarian Zigzagoon','🦡',    'Dark')],
+}
+REGIONAL_CATCH_CHANCE = 0.15   # 15% on repeat catch
+
 # ── Combo & rewards ───────────────────────────────────────────────────────────
 
 # Combo multipliers: (min_tasks_this_hour, xp_multiplier)
