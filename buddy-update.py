@@ -58,9 +58,47 @@ LOG_CAP         = 15
 LEVEL_CAP       = 100         # max Pokémon level; XP past cap → Exp Share
 ARCHIVE_FILE    = Path.home() / '.claude' / 'buddy-log-archive.md'
 
-SHINY_RATE        = 1 / 200   # 0.5%
+SHINY_RATE        = 1 / 200   # 0.5% base (Cascade badge raises to 1/150)
 STREAK_BONUS_XP   = 20        # bonus XP for first award of the day
-STATS_SCHEMA_VER  = 2         # bumped: added inventory, combo, daily quest
+STATS_SCHEMA_VER  = 3         # bumped: added gym_badges
+
+# ── Gym badge registry ────────────────────────────────────────────────────────
+# Each badge: (id, emoji, name, unlock_feature, hint)
+GYM_BADGE_DATA = [
+    ('boulder', '🪨', 'Boulder Badge', 'exp_share',      'catch your first Pokémon'),
+    ('cascade', '💧', 'Cascade Badge', 'shiny_boost',    'catch 10 Pokémon'),
+    ('thunder', '⚡', 'Thunder Badge', 'party_xp',       'reach Level 10'),
+    ('rainbow', '🌈', 'Rainbow Badge', 'held_items',     'implement 5 features'),
+    ('soul',    '💜', 'Soul Badge',    'breeding',       'maintain a 7-day streak'),
+    ('marsh',   '🌿', 'Marsh Badge',   'double_berry',   'catch 20 Pokémon'),
+    ('volcano', '🔥', 'Volcano Badge', 'early_evolution','ship 3 times'),
+    ('earth',   '🌍', 'Earth Badge',   'raid_battles',   'reach Level 30'),
+]
+_BADGE_BY_ID    = {b[0]: b for b in GYM_BADGE_DATA}
+_BADGE_UNLOCK   = {b[3]: b[0] for b in GYM_BADGE_DATA}  # feature → badge_id
+_BADGE_ORDER    = [b[0] for b in GYM_BADGE_DATA]
+_MILESTONE_BADGE = {   # existing milestone key → badge_id it grants
+    'first_catch':  'boulder',
+    'dex_10':       'cascade',
+    'level_10':     'thunder',
+    'streak_7':     'soul',
+    'dex_20':       'marsh',
+    'level_30':     'earth',
+}
+
+def has_unlock(feature, stats):
+    """True if the trainer has earned the badge that unlocks this feature."""
+    badge = _BADGE_UNLOCK.get(feature)
+    return badge is not None and badge in stats.get('gym_badges', set())
+
+def next_badge_hint(stats):
+    """Return hint string for the next unearned badge, or ''."""
+    earned = stats.get('gym_badges', set())
+    for bid in _BADGE_ORDER:
+        if bid not in earned:
+            b = _BADGE_BY_ID[bid]
+            return f'{b[1]} {b[2]}: {b[4]}'
+    return 'All 8 badges earned! 🏆'
 
 RARITY_TIER_ORDER = ['mythical', 'legendary', 'rare', 'uncommon', 'common', 'starter']
 RARITY_LABELS_ASCII = {
@@ -184,6 +222,7 @@ def read_stats():
         'total_xp_ever': 0, 'bug_fixes': 0, 'features': 0, 'ships': 0,
         'caught_legendary': False, 'caught_mythical': False, 'caught_shiny': False,
         'milestones': set(),
+        'gym_badges': set(),
         # Inventory (new trainers start with 5 Poké Balls)
         'balls_poke': 5, 'balls_great': 0, 'balls_ultra': 0, 'balls_master': 0,
         'master_shards': 0,
@@ -208,6 +247,17 @@ def read_stats():
         return m.group(1).strip() if m else defaults.get(key, '')
     ms_section = re.search(r'## Milestones Awarded\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
     milestones = set(re.findall(r'^- (\S+)', ms_section.group(1), re.MULTILINE)) if ms_section else set()
+    gb_section = re.search(r'## Gym Badges Earned\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
+    if gb_section:
+        gym_badges = set(re.findall(r'^- (\S+)', gb_section.group(1), re.MULTILINE))
+    else:
+        # Grandfather existing trainers: auto-award badges for milestones already earned
+        gym_badges = set()
+        for ms_key, badge_id in _MILESTONE_BADGE.items():
+            if ms_key in milestones:
+                gym_badges.add(badge_id)
+        if gi('features') >= 5: gym_badges.add('rainbow')
+        if gi('ships')    >= 3: gym_badges.add('volcano')
     stats = {
         'schema_version':    gi('schema_version') or STATS_SCHEMA_VER,
         'streak':            gi('streak'),
@@ -221,6 +271,7 @@ def read_stats():
         'caught_mythical':   gb('caught_mythical'),
         'caught_shiny':      gb('caught_shiny'),
         'milestones':        milestones,
+        'gym_badges':        gym_badges,
         'balls_poke':        gi('balls_poke') if '**balls_poke**' in text else defaults['balls_poke'],
         'balls_great':       gi('balls_great'),
         'balls_ultra':       gi('balls_ultra'),
@@ -242,6 +293,7 @@ def read_stats():
 def write_stats(s):
     b = lambda v: 'true' if v else 'false'
     ms_lines = '\n'.join(f'- {m}' for m in sorted(s['milestones'])) or '*(none yet)*'
+    gb_lines = '\n'.join(f'- {bid}' for bid in _BADGE_ORDER if bid in s.get('gym_badges', set())) or '*(none yet)*'
     STATS_FILE.write_text(
         f'# Trainer Stats\n\n'
         f'**schema_version**: {STATS_SCHEMA_VER}\n'
@@ -271,7 +323,9 @@ def write_stats(s):
         f'**daily_quest_done**: {b(s.get("daily_quest_done", False))}\n'
         f'**tasks_today**: {s.get("tasks_today", 0)}\n\n'
         f'## Milestones Awarded\n\n'
-        f'{ms_lines}\n'
+        f'{ms_lines}\n\n'
+        f'## Gym Badges Earned\n\n'
+        f'{gb_lines}\n'
     )
 
 # ── Streak logic ──────────────────────────────────────────────────────────────
@@ -356,6 +410,16 @@ def check_milestones(stats, col, old_level, new_level, catch_result, evolved):
     if streak >= 30: new_ms += maybe('streak_30')
 
     stats['milestones'] = awarded
+
+    # Gym badges — award based on milestone triggers + counter conditions
+    gym_badges = stats.get('gym_badges', set())
+    for ms_key, badge_id in _MILESTONE_BADGE.items():
+        if ms_key in awarded and badge_id not in gym_badges:
+            gym_badges.add(badge_id)
+    if stats.get('features', 0) >= 5 and 'rainbow'  not in gym_badges: gym_badges.add('rainbow')
+    if stats.get('ships',    0) >= 3 and 'volcano'  not in gym_badges: gym_badges.add('volcano')
+    stats['gym_badges'] = gym_badges
+
     return new_ms
 
 def append_badge(badge_line):
@@ -443,11 +507,14 @@ def sync_active_to_collection(name, level, xp):
     })
     write_collection(col['active'], col['pokemon'])
 
-def distribute_overflow_xp(overflow, active_name):
+def distribute_overflow_xp(overflow, active_name, stats=None):
     """Exp Share: split overflow XP evenly across non-active party members
     under level 100. Returns list of (name, gained, old_lv, new_lv) for
-    announcement. Remainder XP (too small to split) is dropped."""
+    announcement. Remainder XP (too small to split) is dropped.
+    Requires Boulder Badge (gated by has_unlock)."""
     if overflow <= 0:
+        return []
+    if stats is not None and not has_unlock('exp_share', stats):
         return []
     col = read_collection()
     eligible = [p for p in col['pokemon']
@@ -548,9 +615,10 @@ def earn_inventory(base_xp, is_badge, stats):
         stats[key] = stats.get(key, 0) + qty
         info = POKEBALL_TYPES.get(ball, {})
         earned.append(f'{info.get("emoji","🔴")} {info.get("name","Ball")} ×{qty}')
-    # Roll berries
+    # Roll berries (Marsh badge doubles drop chance)
+    berry_mult = 2.0 if has_unlock('double_berry', stats) else 1.0
     for berry, chance in BERRY_DROP_RATES.get(base_xp, []):
-        if random.random() < chance:
+        if random.random() < chance * berry_mult:
             key = f'berry_{berry}'
             stats[key] = stats.get(key, 0) + 1
             info = BERRY_TYPES.get(berry, {})
@@ -676,7 +744,8 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
     wild_name, wild_type, wild_emoji = _pick_wild(tier, owned_names, role_type)
     lv_min, lv_max = WILD_LEVELS.get(tier, (1, 5))
     wild_level = random.randint(lv_min, lv_max)
-    is_shiny   = random.random() < SHINY_RATE
+    shiny_rate = (1 / 150) if has_unlock('shiny_boost', stats) else SHINY_RATE
+    is_shiny   = random.random() < shiny_rate
 
     battle_won, win_pct = run_battle(buddy_level, buddy_type, wild_level, wild_type)
 
@@ -843,6 +912,21 @@ _TIER_FLAVOR = {
 
 # ── Renderers ─────────────────────────────────────────────────────────────────
 
+def _gym_badges_display(stats):
+    """Compact badge row: earned badges + next target hint."""
+    earned = stats.get('gym_badges', set())
+    n = len(earned)
+    if n == 0:
+        hint = next_badge_hint(stats)
+        return f'0/8 badges  →  {hint}'
+    badges_str = '  '.join(
+        f'{_BADGE_BY_ID[bid][1]} {_BADGE_BY_ID[bid][2]}'
+        for bid in _BADGE_ORDER if bid in earned
+    )
+    hint = next_badge_hint(stats)
+    next_str = f'  →  {hint}' if hint and n < 8 else ''
+    return f'{n}/8  {badges_str}{next_str}'
+
 def render_status(text):
     def g(pat, default='?'):
         m = re.search(pat, text)
@@ -916,6 +1000,7 @@ def render_status(text):
         f' {sep}',
         f' PATH: {stage} ──> (Lv.16) ──> (Lv.36)',
         f' DEX: {n_dex}/{n_total} caught   {streak_icon} Streak: {streak} days (best: {longest})  ×{streak_multiplier(streak):.2f} XP',
+        f' GYM: {_gym_badges_display(trainer_stats)}',
     ]
 
     if col['pokemon']:
@@ -2455,10 +2540,12 @@ def main():
 
     # Evolution: pick the highest-threshold form the new level qualifies for,
     # across whatever evolution chain the buddy's starter defines.
+    # Volcano badge unlocks evolution 1 level earlier.
+    evo_offset = -1 if has_unlock('early_evolution', tr_stats) else 0
     evolutions = STARTER_DATA.get(buddy_name, {}).get('evolutions', [])
     target_stage = buddy_name
     for evo_name, threshold, _ in evolutions:
-        if new_level >= threshold:
+        if new_level >= threshold + evo_offset:
             target_stage = evo_name
     evolved = target_stage if target_stage != old_stage else ''
     new_stage = evolved or old_stage
@@ -2478,7 +2565,7 @@ def main():
     # Sync collection
     sync_active_to_collection(buddy_name, new_level, new_xp)
 
-    exp_share = distribute_overflow_xp(overflow_xp, buddy_name) if overflow_xp else []
+    exp_share = distribute_overflow_xp(overflow_xp, buddy_name, tr_stats) if overflow_xp else []
 
     # Run wild encounter (battle + ball throw)
     if mode == 'xp':
@@ -2538,7 +2625,8 @@ def main():
         elif exp_share:
             chatter_msg = f'Lv.100! Exp Share → {len(exp_share)} party 🔀'
         elif new_level > old_level:
-            chatter_msg = f'Level {new_level}! Growing strong 💪'
+            hint = next_badge_hint(tr_stats)
+            chatter_msg = f'Level {new_level}! Next: {hint}' if hint else f'Level {new_level}! Growing strong 💪'
         elif catch_result and catch_result[4]:
             chatter_msg = f'✨ Shiny {catch_result[1]}! 1 in 200!'
         elif catch_result and catch_result[0] in ('mythical', 'legendary'):

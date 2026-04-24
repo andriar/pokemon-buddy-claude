@@ -5,6 +5,33 @@ Format: [version] — date — description
 
 ---
 
+## [2.10.0] — 2026-04-24
+
+### Added
+- **Gym badge system** — 8 Kanto badges earned through in-game activity, each unlocking a feature:
+  - 🪨 Boulder (first catch) → Exp Share
+  - 💧 Cascade (10 caught) → Shiny rate 1/200 → 1/150
+  - ⚡ Thunder (Level 10) → Party XP slot 2 (F5 dep)
+  - 🌈 Rainbow (5 features) → Held items (F4 dep)
+  - 💜 Soul (7-day streak) → Breeding (F9 dep)
+  - 🌿 Marsh (20 caught) → Double berry drop chance
+  - 🔥 Volcano (3 ships) → Evolution 1 level earlier
+  - 🌍 Earth (Level 30) → Raid battles (F8 dep)
+- **`has_unlock(feature, stats)`** — feature-gate helper used throughout the engine
+- **`next_badge_hint(stats)`** — returns the next unearned badge + how to earn it
+- **Gym badge row in `/poke:status`** — shows earned badges + next target hint
+- **Level-up chatter now shows next badge hint** — statusline displays `Level N! Next: 🌿 Marsh Badge: catch 20 Pokémon`
+- **Backward compat** — existing trainers auto-receive badges for milestones already earned on first read; no re-earn required
+
+### Changed
+- **Exp Share gated behind Boulder badge** — new trainers start without it; existing trainers grandfathered in
+- **Shiny rate 1/150 with Cascade badge** — up from 1/200 base
+- **Berry drops doubled with Marsh badge**
+- **Evolution 1 level earlier with Volcano badge**
+- **`STATS_SCHEMA_VER` bumped to 3** — added `## Gym Badges Earned` section to `buddy-stats.md`
+
+---
+
 ## [2.9.0] — 2026-04-24
 
 ### Added
