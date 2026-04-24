@@ -5,6 +5,28 @@ Format: [version] — date — description
 
 ---
 
+## [2.19.0] — 2026-04-24
+
+### Added
+- **Wild level-up evolution** — 60+ Pokémon evolve automatically when they level up via Exp Share or party XP split. Full chains: Weedle→Kakuna→Beedrill, Magikarp→Gyarados, Pidgey→Pidgeot, Shinx→Luxray, Ralts→Gardevoir, Deino→Hydreigon, and more. Intermediate stages (Kakuna, Pidgeotto, etc.) keyed separately so multi-step chains complete correctly.
+- **Pokédex expanded 151 → 283** — common (23→73), uncommon (29→61), rare (30→66), legendary (47→60), mythical (22→23). Regirock/Regice/Registeel, lake trio, Forces of Nature, Ogerpon, Manaphy, 130+ common/uncommon/rare Pokémon added.
+- **`POKEDEX_IDS` expanded** — ~210 entries covering all new Pokémon for HTML card sprites.
+- **26 new tests** — wild evolution chain logic, Pokédex pool integrity (no dupes, size), level cap display (210→226 total).
+
+### Fixed
+- **`199/200` at level cap replaced with `MAX ✦ Exp Share active`** — Arceus/Miraidon at Lv.100 showed `199/200` indefinitely (intentional cap math). Now clearly shows buddy is maxed and XP overflows to party.
+- **Cross-tier duplicates** — Chandelure and Gyarados appeared in both uncommon and rare; removed from uncommon.
+- **`do_choose` collection entry** — initial entry now includes `form: ''` and `party: [name]` for schema consistency.
+- **Trade evo hint in `/poke:choose`** — Gastly, Abra, Machop now show their evolution trigger in the starter picker.
+
+### Changed
+- **File reads per XP call: 11x → 5x** — collection read once and passed as `col=` param through `sync_active_to_collection`, `distribute_overflow_xp`, `run_encounter`, `add_to_collection`. Held item extracted from already-read buddy text instead of 3 extra file reads.
+- **Exp Share announcement: O(party) lines → 1 summary line** — was listing all 98 party members; now shows count + up to 5 level-ups.
+- **`/poke:history` default: 128 lines → 13 lines** — summary mode by default; full log via `--verbose` or `--export`.
+- **Gym badge display** — full names replaced with emoji strip (`🪨💧⚡...`), ~60% shorter.
+
+---
+
 ## [2.18.0] — 2026-04-24
 
 ### Added

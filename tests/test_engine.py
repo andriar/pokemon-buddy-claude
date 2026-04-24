@@ -1711,5 +1711,104 @@ class TestPartyXpSplit(unittest.TestCase):
         self.assertEqual(len(self._party_splits()), 3)
 
 
+# ── Wild evolution system ─────────────────────────────────────────────────────
+
+class TestWildEvolutions(unittest.TestCase):
+    def _p(self, name, level):
+        return {'name': name, 'level': level, 'emoji': '?', 'type': '?'}
+
+    def test_weedle_to_kakuna(self):
+        p = self._p('Weedle', 7)
+        engine.try_wild_evolve(p)
+        self.assertEqual(p['name'], 'Kakuna')
+
+    def test_kakuna_to_beedrill(self):
+        p = self._p('Kakuna', 10)
+        engine.try_wild_evolve(p)
+        self.assertEqual(p['name'], 'Beedrill')
+
+    def test_weedle_skips_to_beedrill_at_10(self):
+        p = self._p('Weedle', 10)
+        engine.try_wild_evolve(p)
+        self.assertEqual(p['name'], 'Beedrill')
+
+    def test_magikarp_to_gyarados(self):
+        p = self._p('Magikarp', 20)
+        engine.try_wild_evolve(p)
+        self.assertEqual(p['name'], 'Gyarados')
+
+    def test_magikarp_below_threshold_no_evo(self):
+        p = self._p('Magikarp', 19)
+        engine.try_wild_evolve(p)
+        self.assertEqual(p['name'], 'Magikarp')
+
+    def test_no_wild_evo_data_returns_empty(self):
+        p = self._p('Arceus', 100)
+        result = engine.try_wild_evolve(p)
+        self.assertEqual(result, '')
+        self.assertEqual(p['name'], 'Arceus')
+
+    def test_intermediate_stage_works(self):
+        p = self._p('Pidgeotto', 36)
+        engine.try_wild_evolve(p)
+        self.assertEqual(p['name'], 'Pidgeot')
+
+    def test_type_and_emoji_updated_on_evo(self):
+        p = self._p('Magikarp', 20)
+        engine.try_wild_evolve(p)
+        self.assertEqual(p['type'], 'Water')
+        self.assertEqual(p['emoji'], '🐲')
+
+    def test_chain_integrity_no_duplicates(self):
+        all_names = list(engine.WILD_EVOLUTIONS.keys())
+        self.assertEqual(len(all_names), len(set(all_names)))
+
+    def test_all_evo_targets_have_valid_type(self):
+        from lib.data import TYPE_CHART, TYPE_ADVANTAGE
+        all_types = set(TYPE_ADVANTAGE.keys()) | {'Normal', 'Water', 'Fire', 'Grass',
+                    'Electric', 'Ice', 'Fighting', 'Poison', 'Ground', 'Flying',
+                    'Psychic', 'Bug', 'Rock', 'Ghost', 'Dragon', 'Dark', 'Steel', 'Fairy'}
+        for base, chain in engine.WILD_EVOLUTIONS.items():
+            for _, evo_name, _, evo_type in chain:
+                self.assertIn(evo_type, all_types, f'{evo_name} has invalid type {evo_type}')
+
+
+# ── Pokédex pool integrity ─────────────────────────────────────────────────────
+
+class TestPokedexPool(unittest.TestCase):
+    def test_no_cross_tier_duplicates(self):
+        all_names = [p[0] for pool in engine.POKEMON_POOL.values() for p in pool]
+        dupes = [n for n in set(all_names) if all_names.count(n) > 1]
+        self.assertEqual(dupes, [], f'Cross-tier duplicates: {dupes}')
+
+    def test_total_pool_size(self):
+        total = sum(len(v) for v in engine.POKEMON_POOL.values())
+        self.assertGreater(total, 250)
+
+    def test_pokedex_ids_cover_pool(self):
+        pool_names = {p[0] for pool in engine.POKEMON_POOL.values() for p in pool}
+        id_names   = set(engine.POKEDEX_IDS.keys())
+        missing    = pool_names - id_names
+        self.assertLess(len(missing), 30, f'Too many Pokémon missing from POKEDEX_IDS: {missing}')
+
+
+# ── MAX display at level cap ───────────────────────────────────────────────────
+
+class TestLevelCapDisplay(unittest.TestCase):
+    def test_cap_xp_below_next_level(self):
+        self.assertEqual(engine.CAP_XP, engine.xp_for_level(engine.LEVEL_CAP + 1) - 1)
+
+    def test_clamp_at_cap_returns_overflow(self):
+        over = engine.xp_for_level(engine.LEVEL_CAP + 1) + 50
+        lv, xp, overflow = engine.clamp_to_cap(over)
+        self.assertEqual(lv, engine.LEVEL_CAP)
+        self.assertEqual(overflow, 51)
+
+    def test_clamp_at_cap_stores_cap_xp(self):
+        over = engine.xp_for_level(engine.LEVEL_CAP + 1) + 100
+        _, xp, _ = engine.clamp_to_cap(over)
+        self.assertEqual(xp, engine.CAP_XP)
+
+
 if __name__ == '__main__':
     unittest.main()
