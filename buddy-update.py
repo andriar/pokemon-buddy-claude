@@ -60,7 +60,26 @@ ARCHIVE_FILE    = Path.home() / '.claude' / 'buddy-log-archive.md'
 
 SHINY_RATE        = 1 / 200   # 0.5% base (Cascade badge raises to 1/150)
 STREAK_BONUS_XP   = 20        # bonus XP for first award of the day
-STATS_SCHEMA_VER  = 3         # bumped: added gym_badges
+STATS_SCHEMA_VER  = 4         # bumped: added item_bag
+
+# ── Held items ────────────────────────────────────────────────────────────────
+HELD_ITEMS = {
+    'lucky_egg':   {'emoji': '🥚', 'name': 'Lucky Egg',   'desc': '+50% XP earned'},
+    'choice_band': {'emoji': '🎀', 'name': 'Choice Band', 'desc': '+20% battle win chance'},
+    'amulet_coin': {'emoji': '🪙', 'name': 'Amulet Coin', 'desc': '2× catch rate'},
+    'shiny_charm': {'emoji': '✨', 'name': 'Shiny Charm',  'desc': '1/100 shiny rate'},
+    'everstone':   {'emoji': '🪨', 'name': 'Everstone',   'desc': 'Blocks evolution'},
+}
+ITEM_IDS = list(HELD_ITEMS)
+
+# Drop chances per wild tier — gated behind Rainbow badge
+ITEM_DROP_TABLE = {
+    'common':    [('lucky_egg', 0.01),  ('choice_band', 0.01)],
+    'uncommon':  [('lucky_egg', 0.015), ('choice_band', 0.015), ('amulet_coin', 0.01)],
+    'rare':      [('lucky_egg', 0.02),  ('choice_band', 0.02),  ('amulet_coin', 0.015), ('shiny_charm', 0.005)],
+    'legendary': [('shiny_charm', 0.02), ('everstone', 0.02), ('amulet_coin', 0.03)],
+    'mythical':  [('shiny_charm', 0.05), ('everstone', 0.03)],
+}
 
 # ── Gym badge registry ────────────────────────────────────────────────────────
 # Each badge: (id, emoji, name, unlock_feature, hint)
@@ -223,6 +242,8 @@ def read_stats():
         'caught_legendary': False, 'caught_mythical': False, 'caught_shiny': False,
         'milestones': set(),
         'gym_badges': set(),
+        # Item bag
+        **{f'item_{iid}': 0 for iid in ITEM_IDS},
         # Inventory (new trainers start with 5 Poké Balls)
         'balls_poke': 5, 'balls_great': 0, 'balls_ultra': 0, 'balls_master': 0,
         'master_shards': 0,
@@ -272,6 +293,7 @@ def read_stats():
         'caught_shiny':      gb('caught_shiny'),
         'milestones':        milestones,
         'gym_badges':        gym_badges,
+        **{f'item_{iid}': gi(f'item_{iid}') for iid in ITEM_IDS},
         'balls_poke':        gi('balls_poke') if '**balls_poke**' in text else defaults['balls_poke'],
         'balls_great':       gi('balls_great'),
         'balls_ultra':       gi('balls_ultra'),
@@ -321,7 +343,9 @@ def write_stats(s):
         f'**daily_quest_date**: {s.get("daily_quest_date", "")}\n'
         f'**daily_quest_id**: {s.get("daily_quest_id", "")}\n'
         f'**daily_quest_done**: {b(s.get("daily_quest_done", False))}\n'
-        f'**tasks_today**: {s.get("tasks_today", 0)}\n\n'
+        f'**tasks_today**: {s.get("tasks_today", 0)}\n'
+        + ''.join(f'**item_{iid}**: {s.get(f"item_{iid}", 0)}\n' for iid in ITEM_IDS)
+        + '\n'
         f'## Milestones Awarded\n\n'
         f'{ms_lines}\n\n'
         f'## Gym Badges Earned\n\n'
@@ -576,12 +600,12 @@ def _pick_wild(tier, owned_names, role_type):
         return random.choices(available, weights=weights, k=1)[0]
     return random.choice(available)
 
-def run_battle(buddy_level, buddy_type, wild_level, wild_type):
+def run_battle(buddy_level, buddy_type, wild_level, wild_type, choice_band=False):
     """Returns (won: bool, win_pct: int)."""
     advantage = wild_type in TYPE_ADVANTAGE.get(buddy_type or '', [])
     base = buddy_level / max(1, wild_level) * 70
-    if advantage:
-        base += 20
+    if advantage:   base += 20
+    if choice_band: base += 20
     win_pct = max(20, min(95, int(base)))
     return random.randint(1, 100) <= win_pct, win_pct
 
@@ -601,6 +625,8 @@ def attempt_catch(tier, ball_key, stats):
         mult *= BERRY_TYPES['razz']['catch_boost']
         stats['berry_razz'] -= 1
         berry_used = 'razz'
+    if get_held_item() == 'amulet_coin':
+        mult *= 2.0
     catch_pct = min(95, int(base * mult * 100))
     return random.randint(1, 100) <= catch_pct, catch_pct
 
@@ -745,9 +771,13 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
     lv_min, lv_max = WILD_LEVELS.get(tier, (1, 5))
     wild_level = random.randint(lv_min, lv_max)
     shiny_rate = (1 / 150) if has_unlock('shiny_boost', stats) else SHINY_RATE
+    held = get_held_item()
+    if held == 'shiny_charm':
+        shiny_rate = min(shiny_rate, 1 / 100)
     is_shiny   = random.random() < shiny_rate
 
-    battle_won, win_pct = run_battle(buddy_level, buddy_type, wild_level, wild_type)
+    battle_won, win_pct = run_battle(buddy_level, buddy_type, wild_level, wild_type,
+                                     choice_band=(held == 'choice_band'))
 
     info = {
         'encountered':  True,
@@ -811,8 +841,18 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
         add_to_collection(wild_name, wild_type, wild_emoji, tier, is_shiny)
         stored_tier  = (tier + '-shiny') if is_shiny else tier
         catch_result = (stored_tier, wild_name, wild_type, wild_emoji, is_shiny)
+        # Item drop (Rainbow badge required)
+        item_drop = None
+        if has_unlock('held_items', stats):
+            for iid, chance in ITEM_DROP_TABLE.get(tier, []):
+                if random.random() < chance:
+                    stats[f'item_{iid}'] = stats.get(f'item_{iid}', 0) + 1
+                    item_drop = iid
+                    break
+        info['item_drop'] = item_drop
         return catch_result, info
 
+    info['item_drop'] = None
     return None, info
 
 def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
@@ -842,6 +882,24 @@ def read_buddy():
     stage = stage_m.group(1) if stage_m else 'Charmander'
     name  = name_m.group(1)  if name_m  else 'Charmander'
     return lines, text, level, xp, stage, name
+
+def get_held_item():
+    """Return held item id for active buddy, or None."""
+    if not BUDDY_FILE.exists():
+        return None
+    m = re.search(r'\*\*HeldItem\*\*:\s*(\S+)', BUDDY_FILE.read_text(encoding='utf-8'))
+    val = m.group(1) if m else 'none'
+    return val if val != 'none' else None
+
+def set_held_item(item_id):
+    """Write held item to buddy file. Pass None or 'none' to unequip."""
+    text = BUDDY_FILE.read_text(encoding='utf-8')
+    val = item_id or 'none'
+    if '**HeldItem**:' in text:
+        text = re.sub(r'\*\*HeldItem\*\*:\s*\S+', f'**HeldItem**: {val}', text)
+    else:
+        text = re.sub(r'(\*\*Stage\*\*:.*\n)', r'\1**HeldItem**: ' + val + '\n', text, count=1)
+    BUDDY_FILE.write_text(text, encoding='utf-8')
 
 def cap_journal(out):
     log_rows = [(i, l) for i, l in enumerate(out)
@@ -927,6 +985,13 @@ def _gym_badges_display(stats):
     next_str = f'  →  {hint}' if hint and n < 8 else ''
     return f'{n}/8  {badges_str}{next_str}'
 
+def _held_item_display():
+    held = get_held_item()
+    if not held or held not in HELD_ITEMS:
+        return 'none equipped  (use /poke:item equip <name>)'
+    it = HELD_ITEMS[held]
+    return f'{it["emoji"]} {it["name"]} — {it["desc"]}'
+
 def render_status(text):
     def g(pat, default='?'):
         m = re.search(pat, text)
@@ -1001,6 +1066,7 @@ def render_status(text):
         f' PATH: {stage} ──> (Lv.16) ──> (Lv.36)',
         f' DEX: {n_dex}/{n_total} caught   {streak_icon} Streak: {streak} days (best: {longest})  ×{streak_multiplier(streak):.2f} XP',
         f' GYM: {_gym_badges_display(trainer_stats)}',
+        f' ITEM: {_held_item_display()}',
     ]
 
     if col['pokemon']:
@@ -1971,7 +2037,8 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         inventory_msg='', combo=1, combo_mult=1.0,
                         quest_msg='', lv_reward_msg='',
                         encounter_info=None, active_quest=None, quest_done=False,
-                        exp_share=None, streak_mult=1.0):
+                        exp_share=None, streak_mult=1.0, lucky_mult=1.0,
+                        item_drop=None):
     xp_floor    = xp_for_level(new_level)
     xp_disp     = new_xp - xp_floor
     xp_max_disp = new_max - xp_floor
@@ -1987,7 +2054,9 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
             f' └{"─" * inner}┘', '',
         ]
 
-    xp_label = f'+{add_xp} XP ×{streak_mult:.2f}' if streak_mult > 1.0 else f'+{add_xp} XP!'
+    xp_mults = [m for m in [streak_mult, lucky_mult] if m > 1.0]
+    mult_tag  = ' ×' + '×'.join(f'{m:.2f}' for m in xp_mults) if xp_mults else ''
+    xp_label  = f'+{add_xp} XP{mult_tag}' if mult_tag else f'+{add_xp} XP!'
     parts = [xp_label]
     if combo_mult > 1.0: parts.append(f'🔥 Combo ×{combo} ({combo_mult:.1f}× XP)!')
     if streak_bonus and streak_count:
@@ -1997,6 +2066,9 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
     lines.append(' ' + '   '.join(parts))
     if inventory_msg:
         lines.append(f' 🎁 Earned: {inventory_msg}')
+    if item_drop and item_drop in HELD_ITEMS:
+        it = HELD_ITEMS[item_drop]
+        lines.append(f' 💎 Item drop! {it["emoji"]} {it["name"]} added to bag — {it["desc"]}')
     if lv_reward_msg:
         lines.append(f' 🎁 Level reward: {lv_reward_msg}')
     lines += [
@@ -2457,6 +2529,39 @@ def main():
         do_switch(args[1] if len(args) > 1 else '')
         sys.exit(0)
 
+    if mode == 'item':
+        sub = args[1] if len(args) > 1 else 'list'
+        tr_stats = read_stats()
+        if sub == 'list':
+            held = get_held_item()
+            print(' 💼 Item Bag:')
+            for iid, info in HELD_ITEMS.items():
+                count = tr_stats.get(f'item_{iid}', 0)
+                equipped = ' ← equipped' if iid == held else ''
+                print(f'   {info["emoji"]} {info["name"]:<14} ×{count}  — {info["desc"]}{equipped}')
+            if not held:
+                print('\n No item equipped. Use: /poke:item equip <item_name>')
+        elif sub == 'equip':
+            item_name = args[2].lower().replace(' ', '_') if len(args) > 2 else ''
+            # Accept partial name match
+            match = next((iid for iid in ITEM_IDS if item_name in iid or item_name in HELD_ITEMS[iid]['name'].lower()), None)
+            if not match:
+                print(f' ❌ Unknown item: {args[2] if len(args) > 2 else "?"}')
+                print(f'    Valid items: {", ".join(ITEM_IDS)}')
+            elif tr_stats.get(f'item_{match}', 0) < 1:
+                it = HELD_ITEMS[match]
+                print(f' ❌ You don\'t have {it["emoji"]} {it["name"]} in your bag.')
+            else:
+                set_held_item(match)
+                it = HELD_ITEMS[match]
+                print(f' {it["emoji"]} Equipped {it["name"]}! Effect: {it["desc"]}')
+        elif sub == 'unequip':
+            set_held_item(None)
+            print(' Item unequipped.')
+        else:
+            print(f' Usage: buddy-update.py item list|equip <name>|unequip')
+        sys.exit(0)
+
     if mode == 'catch':
         cname  = args[1] if len(args) > 1 else 'Pikachu'
         ctype  = args[2] if len(args) > 2 else 'Normal'
@@ -2504,8 +2609,9 @@ def main():
         if is_new_day:
             streak_bonus = bonus
         streak_mult = streak_multiplier(tr_stats.get('streak', 1))
+        lucky_mult  = 1.5 if get_held_item() == 'lucky_egg' else 1.0
 
-        add_xp = int(base_xp * combo_mult * streak_mult) + streak_bonus
+        add_xp = int(base_xp * combo_mult * streak_mult * lucky_mult) + streak_bonus
 
         # Track achievement counters + daily task count (keyword-driven → auto mode skips)
         if not is_auto:
@@ -2540,13 +2646,14 @@ def main():
 
     # Evolution: pick the highest-threshold form the new level qualifies for,
     # across whatever evolution chain the buddy's starter defines.
-    # Volcano badge unlocks evolution 1 level earlier.
+    # Volcano badge unlocks evolution 1 level earlier. Everstone blocks all.
     evo_offset = -1 if has_unlock('early_evolution', tr_stats) else 0
     evolutions = STARTER_DATA.get(buddy_name, {}).get('evolutions', [])
     target_stage = buddy_name
-    for evo_name, threshold, _ in evolutions:
-        if new_level >= threshold + evo_offset:
-            target_stage = evo_name
+    if get_held_item() != 'everstone':
+        for evo_name, threshold, _ in evolutions:
+            if new_level >= threshold + evo_offset:
+                target_stage = evo_name
     evolved = target_stage if target_stage != old_stage else ''
     new_stage = evolved or old_stage
 
@@ -2637,6 +2744,7 @@ def main():
     elif mode == 'badge':
         STATE_FILE.write_text(f'Badge earned! {b_emoji} {b_name} 🏅\n', encoding='utf-8')
 
+    item_drop = encounter_info.get('item_drop') if encounter_info else None
     print(render_announcement(
         mode, add_xp, old_level, new_level, new_xp, new_max,
         new_stage, stat_boost, new_moves_data, evolved,
@@ -2646,7 +2754,7 @@ def main():
         inventory_msg, combo, combo_mult,
         quest_msg, lv_reward_msg,
         encounter_info, active_quest, quest_done,
-        exp_share, streak_mult,
+        exp_share, streak_mult, lucky_mult, item_drop,
     ))
 
 if __name__ == '__main__':

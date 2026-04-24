@@ -5,6 +5,28 @@ Format: [version] — date — description
 
 ---
 
+## [2.11.0] — 2026-04-24
+
+### Added
+- **Held items system** — equip one item to your active buddy for passive effects:
+  - 🥚 Lucky Egg → +50% XP earned
+  - 🎀 Choice Band → +20% battle win chance
+  - 🪙 Amulet Coin → 2× catch rate
+  - ✨ Shiny Charm → 1/100 shiny rate (stacks with Cascade badge)
+  - 🪨 Everstone → blocks evolution
+- **`/poke:item list|equip|unequip`** — manage item bag and equip/unequip items
+- **Item drop on catch** — gated behind Rainbow badge (1-3% per encounter, tier-scaled drop table)
+- **Item display in `/poke:status`** — shows equipped item + effect
+- **Item drop announcement** — `💎 Item drop! 🥚 Lucky Egg added to bag` on lucky catches
+- **`**HeldItem**:` field in buddy file** — persists through all `patch_buddy` calls; new trainers start with `none`
+
+### Changed
+- **XP badge now shows all active multipliers** — `+N XP ×1.12×1.50` when both streak and Lucky Egg active
+- **Evolution gated by Everstone** — equipping Everstone prevents all evolution regardless of level
+- **`STATS_SCHEMA_VER` bumped to 4** — added per-item bag counts to `buddy-stats.md`
+
+---
+
 ## [2.10.0] — 2026-04-24
 
 ### Added

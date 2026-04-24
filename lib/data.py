@@ -611,6 +611,7 @@ BUDDY_TEMPLATE = """\
 **Level**: {level}
 **XP**: {xp} / {xp_max}
 **Stage**: {stage} {stage_emoji}
+**HeldItem**: none
 
 ## Evolution Path
 
