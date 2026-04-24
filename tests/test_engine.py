@@ -1861,5 +1861,26 @@ class TestShinyDeep(unittest.TestCase):
         self.assertNotIn('shiny_5', stats['milestones'])
 
 
+# ── Seasonal events (F18) ──────────────────────────────────────────────────────
+
+class TestSeasonalBoost(unittest.TestCase):
+    def test_all_months_defined(self):
+        from datetime import date as _date
+        for m in range(1, 13):
+            self.assertIsNotNone(engine.current_seasonal_boost(_date(2026, m, 15)))
+
+    def test_halloween_is_ghost(self):
+        from datetime import date as _date
+        season = engine.current_seasonal_boost(_date(2026, 10, 15))
+        self.assertEqual(season[0], 'Ghost')
+        self.assertEqual(season[2], 'Halloween')
+
+    def test_december_ice_extra_boost(self):
+        from datetime import date as _date
+        season = engine.current_seasonal_boost(_date(2026, 12, 1))
+        self.assertEqual(season[0], 'Ice')
+        self.assertGreaterEqual(season[1], 4)
+
+
 if __name__ == '__main__':
     unittest.main()

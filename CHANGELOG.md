@@ -5,6 +5,16 @@ Format: [version] — date — description
 
 ---
 
+## [2.22.0] — 2026-04-24
+
+### Added
+- **F18 Seasonal events** — month-gated spawn boosts: Jan Ice, Feb Fairy, Mar Grass, Apr Water, May Flying, Jun Bug, Jul Fire, Aug Electric, Sep Psychic, Oct Ghost (×4), Nov Dark, Dec Ice (×4). Each month has flavor label (e.g. Halloween, Thunder Season).
+- `_pick_wild` now filters to seasonal type with ~25–35% probability when pool contains a match. Pure probabilistic — no forced pick.
+- Trainer card shows `🗓 Season: Halloween (Ghost ×4 spawn)`.
+- **3 new tests** — all months defined, Halloween is Ghost, December Ice has ≥×4 boost (238 total).
+
+---
+
 ## [2.21.0] — 2026-04-24
 
 ### Added

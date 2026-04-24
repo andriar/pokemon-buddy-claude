@@ -776,13 +776,40 @@ def _roll_encounter_tier(base_xp, buddy_rarity):
             found = tier
     return found
 
+SEASONAL_BOOSTS = {
+    # month (1-12) -> (boosted_type, weight, flavor_label)
+    1:  ('Ice',       3, 'Winter Festival'),
+    2:  ('Fairy',     3, 'Lovers\' Season'),
+    3:  ('Grass',     3, 'Spring Bloom'),
+    4:  ('Water',     3, 'April Showers'),
+    5:  ('Flying',    3, 'Migration Month'),
+    6:  ('Bug',       3, 'Bug-Catching Contest'),
+    7:  ('Fire',      3, 'Summer Heatwave'),
+    8:  ('Electric',  3, 'Thunder Season'),
+    9:  ('Psychic',   3, 'Harvest Moon'),
+    10: ('Ghost',     4, 'Halloween'),
+    11: ('Dark',      3, 'Shadow Nights'),
+    12: ('Ice',       4, 'Snow Festival'),
+}
+
+def current_seasonal_boost(today=None):
+    """Returns (type, weight, label) for current month, or None."""
+    d = today or date.today()
+    return SEASONAL_BOOSTS.get(d.month)
+
 def _pick_wild(tier, owned_names, role_type):
-    """Pick a wild Pokémon from the pool, preferring unseen and role-type matches."""
+    """Pick a wild Pokémon from the pool, preferring unseen, role-type, and seasonal types."""
     pool      = POKEMON_POOL[tier]
     available = [p for p in pool if p[0] not in owned_names] or pool
+    season    = current_seasonal_boost()
+    if season:
+        season_matches = [p for p in available if p[1] == season[0]]
+        if season_matches and random.random() < (0.15 + 0.05 * season[1]):
+            available = season_matches
     if role_type:
-        weights = [3 if p[1] == role_type else 1 for p in available]
-        return random.choices(available, weights=weights, k=1)[0]
+        role_matches = [p for p in available if p[1] == role_type]
+        if role_matches and random.random() < 0.5:
+            available = role_matches
     return random.choice(available)
 
 def run_battle(buddy_level, buddy_type, wild_level, wild_type, choice_band=False):
@@ -1519,6 +1546,9 @@ def render_card():
     quest_line   = (f'Quest: {active_quest["desc"]}  {"✓ DONE" if quest_done else "[active]"}'
                     if active_quest else '')
 
+    season = current_seasonal_boost()
+    season_line = (f'Season: {season[2]} ({season[0]} ×{season[1]} spawn)' if season else '')
+
     out = [
         f' ╔{"═" * (W + 3)}╗',
         row(f'🏆  TRAINER CARD  ·  {trainer}'),
@@ -1538,6 +1568,8 @@ def render_card():
     ]
     if quest_line:
         out.append(row(f'📋 {quest_line}'))
+    if season_line:
+        out.append(row(f'🗓  {season_line}'))
     out.append(SEP)
 
     if badge_names:
