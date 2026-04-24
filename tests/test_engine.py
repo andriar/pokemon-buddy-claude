@@ -1833,5 +1833,33 @@ class TestNatures(unittest.TestCase):
         self.assertEqual(len(neutrals), 5)
 
 
+# ── Shiny deepening (F11) ──────────────────────────────────────────────────────
+
+class TestShinyDeep(unittest.TestCase):
+    def test_shiny_milestones_defined(self):
+        self.assertIn('shiny_5', engine.MILESTONES)
+        self.assertIn('shiny_10', engine.MILESTONES)
+
+    def test_shiny_5_triggers_at_5(self):
+        stats = {'milestones': set(), 'gym_badges': set(), 'shiny_count': 5}
+        col = {'pokemon': [], 'active': ''}
+        out = engine.check_milestones(stats, col, 1, 1, None, False)
+        keys = {m[1] for m in out}
+        self.assertIn('Shiny Collector', keys)
+
+    def test_shiny_10_triggers_at_10(self):
+        stats = {'milestones': set(), 'gym_badges': set(), 'shiny_count': 10}
+        col = {'pokemon': [], 'active': ''}
+        out = engine.check_milestones(stats, col, 1, 1, None, False)
+        keys = {m[1] for m in out}
+        self.assertIn('Shiny Connoisseur', keys)
+
+    def test_shiny_5_not_triggered_at_4(self):
+        stats = {'milestones': set(), 'gym_badges': set(), 'shiny_count': 4}
+        col = {'pokemon': [], 'active': ''}
+        out = engine.check_milestones(stats, col, 1, 1, None, False)
+        self.assertNotIn('shiny_5', stats['milestones'])
+
+
 if __name__ == '__main__':
     unittest.main()

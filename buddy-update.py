@@ -364,6 +364,7 @@ def read_stats():
         'streak': 0, 'last_xp_date': '', 'longest_streak': 0,
         'total_xp_ever': 0, 'bug_fixes': 0, 'features': 0, 'ships': 0,
         'caught_legendary': False, 'caught_mythical': False, 'caught_shiny': False,
+        'shiny_count': 0,
         'milestones': set(),
         'gym_badges': set(),
         # Item bag
@@ -418,6 +419,7 @@ def read_stats():
         'caught_legendary':  gb('caught_legendary'),
         'caught_mythical':   gb('caught_mythical'),
         'caught_shiny':      gb('caught_shiny'),
+        'shiny_count':       gi('shiny_count'),
         'milestones':        milestones,
         'gym_badges':        gym_badges,
         **{f'item_{iid}': gi(f'item_{iid}') for iid in ITEM_IDS},
@@ -461,6 +463,7 @@ def write_stats(s):
         f'**caught_legendary**: {b(s["caught_legendary"])}\n'
         f'**caught_mythical**: {b(s["caught_mythical"])}\n'
         f'**caught_shiny**: {b(s["caught_shiny"])}\n'
+        f'**shiny_count**: {s.get("shiny_count", 0)}\n'
         f'**balls_poke**: {s.get("balls_poke", 0)}\n'
         f'**balls_great**: {s.get("balls_great", 0)}\n'
         f'**balls_ultra**: {s.get("balls_ultra", 0)}\n'
@@ -557,6 +560,10 @@ def check_milestones(stats, col, old_level, new_level, catch_result, evolved):
         if base_tier == 'legendary': new_ms += maybe('legendary_catch')
         if base_tier == 'mythical':  new_ms += maybe('mythical_catch')
         if catch_result[4]:          new_ms += maybe('shiny_catch')  # is_shiny flag
+
+    shiny_n = stats.get('shiny_count', 0)
+    if shiny_n >= 5:  new_ms += maybe('shiny_5')
+    if shiny_n >= 10: new_ms += maybe('shiny_10')
 
     # Evolution milestones
     if evolved:
@@ -1496,7 +1503,8 @@ def render_card():
         f' ({rarest["rarity"].upper().replace("-SHINY", " ✨")})'
         if rarest else 'None yet'
     )
-    shiny_str = '  ✨ Shiny Caught' if tr_stats.get('caught_shiny') else ''
+    shiny_n   = tr_stats.get('shiny_count', 0)
+    shiny_str = f'  ✨×{shiny_n}' if shiny_n else ('  ✨ Shiny' if tr_stats.get('caught_shiny') else '')
 
     grouped = _group_by_tier(col['pokemon'])
 
@@ -3150,7 +3158,9 @@ def main():
         base_tier = catch_result[0].replace('-shiny', '')
         if base_tier == 'legendary': tr_stats['caught_legendary'] = True
         if base_tier == 'mythical':  tr_stats['caught_mythical']  = True
-        if catch_result[4]:          tr_stats['caught_shiny']      = True
+        if catch_result[4]:
+            tr_stats['caught_shiny'] = True
+            tr_stats['shiny_count']  = tr_stats.get('shiny_count', 0) + 1
 
     # Level-up rewards (after XP resolved)
     if new_level > old_level:

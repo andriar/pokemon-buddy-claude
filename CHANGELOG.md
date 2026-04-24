@@ -5,6 +5,19 @@ Format: [version] — date — description
 
 ---
 
+## [2.21.0] — 2026-04-24
+
+### Added
+- **F11 Shiny deepening** — `shiny_count` int tracked in trainer stats, increments on every shiny catch.
+- Trainer card now shows `✨×N` instead of a single `Shiny Caught` bool. Preserves prior binary flag for legacy grandfathering.
+- **2 new milestones**: `shiny_5` Shiny Collector 🌟, `shiny_10` Shiny Connoisseur 🌠 — trigger at 5 and 10 shiny catches.
+- **4 new tests** — milestone defs, 5/10 triggers, non-trigger at 4 (235 total).
+
+### Changed
+- Stats schema adds `**shiny_count**: N` line; existing trainers default to 0 and backfill naturally on next shiny catch.
+
+---
+
 ## [2.20.0] — 2026-04-24
 
 ### Added
