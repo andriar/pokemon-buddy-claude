@@ -2200,6 +2200,22 @@ class TestEliteFour(unittest.TestCase):
         self.assertGreaterEqual(xp, 500)
 
 
+class TestGuardsDisplay(unittest.TestCase):
+    def test_guards_shows_both_meters(self):
+        stats = {'battle_stamina': 2, 'battle_stamina_ts': int(__import__('time').time()),
+                 'daily_xp': 500, 'daily_xp_date': engine.TODAY}
+        out = engine._guards_display(stats)
+        self.assertIn('Stamina 2/', out)
+        self.assertIn('500/', out)
+        self.assertIn('🎯', out)
+
+    def test_guards_resets_daily_xp_on_stale_date(self):
+        stats = {'battle_stamina': 3, 'battle_stamina_ts': int(__import__('time').time()),
+                 'daily_xp': 999, 'daily_xp_date': '2020-01-01'}
+        out = engine._guards_display(stats)
+        self.assertIn('0/', out)
+
+
 class TestEliteFourStats(_TmpDir, unittest.TestCase):
     def test_elite_state_round_trips(self):
         s = engine.read_stats()

@@ -5,6 +5,19 @@ Format: [version] — date — description
 
 ---
 
+## [2.31.1] — 2026-04-24
+
+### Added
+- **Guards visibility** — F17 anti-cheat state now surfaces in UX:
+  - Statusline shows `💪 N/3` tag when battle stamina is below max.
+  - `/poke:status` card adds a `GUARDS:` line with stamina meter + daily XP progress bar (`🎯 XP today [███░░░░░░░] 500/2000`).
+- +2 tests for `_guards_display` (287 total).
+
+### Why
+F17 guards shipped invisibly — users hit limits without prior warning. These surfaces make the budget legible so players pace themselves.
+
+---
+
 ## [2.31.0] — 2026-04-24
 
 ### Added

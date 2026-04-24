@@ -1604,6 +1604,18 @@ def _egg_display(stats):
     bar = '█' * filled + '░' * (10 - filled)
     return f'🥚 Hatching {emoji} {species}  [{bar}] {prog}/{need} XP ({pct}%)'
 
+def _guards_display(stats):
+    """Anti-cheat status: battle stamina + daily XP budget."""
+    stamina = regen_stamina(stats)
+    # Daily XP: reset display if date rolled
+    daily_date = stats.get('daily_xp_date', '')
+    daily_xp   = stats.get('daily_xp', 0) if daily_date == TODAY else 0
+    pct = int(daily_xp * 100 / DAILY_XP_CAP) if DAILY_XP_CAP else 0
+    filled = int(10 * min(pct, 100) / 100)
+    xp_bar = '█' * filled + '░' * (10 - filled)
+    return (f'💪 Stamina {stamina}/{BATTLE_STAMINA_MAX}  ·  '
+            f'🎯 XP today [{xp_bar}] {daily_xp}/{DAILY_XP_CAP}')
+
 def _held_item_display():
     held = get_held_item()
     if not held or held not in HELD_ITEMS:
@@ -1690,6 +1702,7 @@ def render_status(text):
         f' GYM: {_gym_badges_display(trainer_stats)}',
         f' ITEM: {_held_item_display()}',
         f' EGG: {_egg_display(trainer_stats)}',
+        f' GUARDS: {_guards_display(trainer_stats)}',
     ]
 
     if col['pokemon']:
@@ -1804,7 +1817,11 @@ def render_statusline(plugin_mode=False):
     streak    = tr_stats.get('streak', 0)
     streak_tag = f'  🔥{streak}' if streak >= 3 else ''
 
-    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{streak_tag}{persona_suffix}'
+    # Anti-cheat guards: surface stamina when drained
+    stamina = regen_stamina(tr_stats)
+    stamina_tag = f'  💪{stamina}/{BATTLE_STAMINA_MAX}' if stamina < BATTLE_STAMINA_MAX else ''
+
+    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{streak_tag}{stamina_tag}{persona_suffix}'
 
 def _active_nature(col):
     active = next((p for p in col['pokemon'] if p['name'] == col.get('active')), None)
