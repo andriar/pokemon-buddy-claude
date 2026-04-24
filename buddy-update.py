@@ -289,6 +289,10 @@ def update_streak(stats):
         stats['longest_streak'] = new_streak
     return STREAK_BONUS_XP, new_streak, True
 
+def streak_multiplier(streak):
+    """XP multiplier from consecutive-day streak. Caps at 30 days (+60%)."""
+    return 1.0 + min(streak, 30) * 0.02
+
 # ── Milestone & title logic ───────────────────────────────────────────────────
 
 def get_trainer_title(stats, col):
@@ -911,7 +915,7 @@ def render_status(text):
     out += [
         f' {sep}',
         f' PATH: {stage} ──> (Lv.16) ──> (Lv.36)',
-        f' DEX: {n_dex}/{n_total} caught   {streak_icon} Streak: {streak} days (best: {longest})',
+        f' DEX: {n_dex}/{n_total} caught   {streak_icon} Streak: {streak} days (best: {longest})  ×{streak_multiplier(streak):.2f} XP',
     ]
 
     if col['pokemon']:
@@ -1019,7 +1023,11 @@ def render_statusline(plugin_mode=False):
     else:
         state_str = f'💭 {get_chatter(pct)}'
 
-    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{persona_suffix}'
+    tr_stats  = read_stats()
+    streak    = tr_stats.get('streak', 0)
+    streak_tag = f'  🔥{streak}' if streak >= 3 else ''
+
+    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{streak_tag}{persona_suffix}'
 
 def render_card():
     """Render a shareable ASCII trainer card."""
@@ -1878,7 +1886,7 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         inventory_msg='', combo=1, combo_mult=1.0,
                         quest_msg='', lv_reward_msg='',
                         encounter_info=None, active_quest=None, quest_done=False,
-                        exp_share=None):
+                        exp_share=None, streak_mult=1.0):
     xp_floor    = xp_for_level(new_level)
     xp_disp     = new_xp - xp_floor
     xp_max_disp = new_max - xp_floor
@@ -1894,7 +1902,8 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
             f' └{"─" * inner}┘', '',
         ]
 
-    parts = [f'+{add_xp} XP!']
+    xp_label = f'+{add_xp} XP ×{streak_mult:.2f}' if streak_mult > 1.0 else f'+{add_xp} XP!'
+    parts = [xp_label]
     if combo_mult > 1.0: parts.append(f'🔥 Combo ×{combo} ({combo_mult:.1f}× XP)!')
     if streak_bonus and streak_count:
         parts.append(f'🔥 Day {streak_count} streak (+{streak_bonus} bonus)!')
@@ -2377,7 +2386,7 @@ def main():
 
     add_xp = 0; log_desc = ''; badge_line = ''
     b_emoji = b_name = b_desc = ''
-    streak_bonus = 0; streak_count = 0
+    streak_bonus = 0; streak_count = 0; streak_mult = 1.0
     inventory_msg = ''; combo = 1; combo_mult = 1.0
     quest_msg = ''; lv_reward_msg = ''
 
@@ -2405,12 +2414,13 @@ def main():
         else:
             combo, combo_mult = update_combo(tr_stats)
 
-        # Streak: bonus XP for first award of the day
+        # Streak: bonus XP for first award of the day + multiplier for active streak
         bonus, streak_count, is_new_day = update_streak(tr_stats)
         if is_new_day:
             streak_bonus = bonus
+        streak_mult = streak_multiplier(tr_stats.get('streak', 1))
 
-        add_xp = int(base_xp * combo_mult) + streak_bonus
+        add_xp = int(base_xp * combo_mult * streak_mult) + streak_bonus
 
         # Track achievement counters + daily task count (keyword-driven → auto mode skips)
         if not is_auto:
@@ -2548,7 +2558,7 @@ def main():
         inventory_msg, combo, combo_mult,
         quest_msg, lv_reward_msg,
         encounter_info, active_quest, quest_done,
-        exp_share,
+        exp_share, streak_mult,
     ))
 
 if __name__ == '__main__':

@@ -5,6 +5,16 @@ Format: [version] — date — description
 
 ---
 
+## [2.9.0] — 2026-04-24
+
+### Added
+- **Daily streak XP multiplier** — consecutive-day coding streaks now boost XP earned. Formula: `1.0 + min(streak, 30) × 0.02` (caps at ×1.60 on a 30-day streak). Multiplier stacks with the existing combo multiplier and is applied before `clamp_to_cap`.
+- **Streak multiplier in XP flash badge** — announcement shows `+25 XP ×1.10` when a streak multiplier is active, so you always see the boost.
+- **`🔥N` streak tag in statusline** — when streak ≥ 3 days, statusline appends `🔥N` (e.g. `🔥7`) before the persona flag.
+- **Live multiplier in status card** — streak row in `/poke:status` now shows current multiplier: `🔥 Streak: 7 days (best: 30)  ×1.14 XP`.
+
+---
+
 ## [2.8.0] — 2026-04-22
 
 ### Added
