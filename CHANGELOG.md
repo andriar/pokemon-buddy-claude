@@ -5,6 +5,23 @@ Format: [version] — date — description
 
 ---
 
+## [2.20.0] — 2026-04-24
+
+### Added
+- **F13 Nature system** — every caught Pokémon gets 1 of 25 natures (Hardy, Adamant, Timid, Modest, etc.). Each nature boosts one stat and lowers another (5 neutral). Shown on trainer card under ACTIVE BUDDY as `Nature: Adamant (+ATK / -SPA)`.
+- **5 new tests** — nature table size, `pick_nature` randomness, `nature_info` lookup, neutral nature count (231 total).
+
+### Changed
+- **Encounter output compressed** — token cost review cut verbose narration on high-frequency path:
+  - Catch throw lines: merged ball + catch-bar into 1 line (was 2) — saves ~1 line per throw.
+  - Flavor text now rare+ tiers only — common/uncommon drop the mood line.
+  - Encounter dividers shortened from 54 chars to 44.
+  - Dropped `"→ /poke:switch to make them your buddy"` hint on every catch.
+  - Dropped shiny banner subtitle line + standalone `VICTORY!` blank line.
+- Estimated ~25–40% token reduction on encounter announcements (~5–8 lines per wild catch).
+
+---
+
 ## [2.19.0] — 2026-04-24
 
 ### Added

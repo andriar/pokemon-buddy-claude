@@ -1810,5 +1810,28 @@ class TestLevelCapDisplay(unittest.TestCase):
         self.assertEqual(xp, engine.CAP_XP)
 
 
+# ── Natures (F13) ──────────────────────────────────────────────────────────────
+
+class TestNatures(unittest.TestCase):
+    def test_25_natures_defined(self):
+        self.assertEqual(len(engine.NATURES), 25)
+
+    def test_pick_nature_returns_valid(self):
+        names = {n for n, _, _ in engine.NATURES}
+        for _ in range(50):
+            self.assertIn(engine.pick_nature(), names)
+
+    def test_nature_info_known(self):
+        up, down = engine.nature_info('Adamant')
+        self.assertEqual((up, down), ('ATK', 'SPA'))
+
+    def test_nature_info_unknown(self):
+        self.assertEqual(engine.nature_info('NotAReal'), ('', ''))
+
+    def test_neutral_natures_up_equals_down(self):
+        neutrals = [n for n, up, down in engine.NATURES if up == down]
+        self.assertEqual(len(neutrals), 5)
+
+
 if __name__ == '__main__':
     unittest.main()

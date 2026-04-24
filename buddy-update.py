@@ -65,6 +65,30 @@ SHINY_RATE        = 1 / 200   # 0.5% base (Cascade badge raises to 1/150)
 STREAK_BONUS_XP   = 20        # bonus XP for first award of the day
 STATS_SCHEMA_VER  = 5         # bumped: added egg
 
+# ── Natures (F13) ────────────────────────────────────────────────────────────
+# (name, up_stat, down_stat). 5 neutral natures (up == down) have no effect.
+NATURES = [
+    ('Hardy','ATK','ATK'),  ('Lonely','ATK','DEF'), ('Brave','ATK','SPE'),
+    ('Adamant','ATK','SPA'),('Naughty','ATK','SPD'),
+    ('Bold','DEF','ATK'),   ('Docile','DEF','DEF'), ('Relaxed','DEF','SPE'),
+    ('Impish','DEF','SPA'), ('Lax','DEF','SPD'),
+    ('Timid','SPE','ATK'),  ('Hasty','SPE','DEF'),  ('Serious','SPE','SPE'),
+    ('Jolly','SPE','SPA'),  ('Naive','SPE','SPD'),
+    ('Modest','SPA','ATK'), ('Mild','SPA','DEF'),   ('Quiet','SPA','SPE'),
+    ('Bashful','SPA','SPA'),('Rash','SPA','SPD'),
+    ('Calm','SPD','ATK'),   ('Gentle','SPD','DEF'), ('Sassy','SPD','SPE'),
+    ('Careful','SPD','SPA'),('Quirky','SPD','SPD'),
+]
+
+def pick_nature():
+    return random.choice(NATURES)[0]
+
+def nature_info(name):
+    for n, up, down in NATURES:
+        if n == name:
+            return (up, down)
+    return ('', '')
+
 # ── Held items ────────────────────────────────────────────────────────────────
 HELD_ITEMS = {
     'lucky_egg':   {'emoji': '🥚', 'name': 'Lucky Egg',   'desc': '+50% XP earned'},
@@ -1030,6 +1054,7 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False, col=None):
         'name': name, 'type': ptype, 'emoji': emoji,
         'level': start_level, 'xp': xp_for_level(start_level), 'caught': TODAY,
         'rarity': stored_rarity, 'shiny': is_shiny, 'form': form,
+        'nature': pick_nature(),
     })
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
@@ -1153,8 +1178,8 @@ def patch_buddy(lines, new_level, new_xp, new_max, new_stage,
 
 # ── Encounter display constants ───────────────────────────────────────────────
 
-_ENC_DIV  = ' ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-_ENC_DIV2 = ' ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─'
+_ENC_DIV  = ' ' + '━' * 44
+_ENC_DIV2 = ' ' + '· ' * 22
 _TIER_BADGE = {
     'common':    '◌  COMMON',
     'uncommon':  '◈  UNCOMMON',
@@ -1397,6 +1422,18 @@ def render_statusline(plugin_mode=False):
 
     return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{streak_tag}{persona_suffix}'
 
+def _active_nature(col):
+    active = next((p for p in col['pokemon'] if p['name'] == col.get('active')), None)
+    if not active:
+        return '—'
+    n = active.get('nature', '')
+    if not n:
+        return '—'
+    up, down = nature_info(n)
+    if up and down and up != down:
+        return f'{n} (+{up} / -{down})'
+    return f'{n} (neutral)'
+
 def render_card():
     """Render a shareable ASCII trainer card."""
     text     = BUDDY_FILE.read_text(encoding='utf-8')
@@ -1483,6 +1520,7 @@ def render_card():
         row(f'{buddy_emoji} {stage.upper():<14} Lv.{level}'),
         row(f'[{xp_b}]  {xp_disp}/{xp_max_disp} XP'),
         row(f'Specialty: {specialty}'),
+        row(f'Nature: {_active_nature(col)}'),
         SEP,
         row('ACHIEVEMENTS'),
         row(f'Badges: {len(badges)}   Dex: {n_caught}/{n_total} caught'),
@@ -2354,10 +2392,10 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
             lines.append(f' {aura_msgs.get(wtier, "")}')
 
         shiny_tag = '  ✨ SHINY' if is_shiny else ''
+        lines.append(f' {_TIER_BADGE.get(wtier, wtier.upper())}{shiny_tag}')
+        if wtier in ('rare', 'legendary', 'mythical'):
+            lines.append(f' {_TIER_FLAVOR.get(wtier, "")}')
         lines += [
-            f' {_TIER_BADGE.get(wtier, wtier.upper())}{shiny_tag}',
-            f' {_TIER_FLAVOR.get(wtier, "")}',
-            '',
             f'   {wemoji}  {wname}  ·  Lv.{wlv}',
             _ENC_DIV2,
         ]
@@ -2380,7 +2418,7 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                 _ENC_DIV,
             ]
         else:
-            lines += ['     ✓  VICTORY!', '']
+            lines.append('     ✓  VICTORY!')
 
             if ei.get('no_balls'):
                 lines += [
@@ -2392,28 +2430,25 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                 lines.append(' 🎯  CATCH PHASE')
                 throws = ei.get('throws', [])
                 for i, t in enumerate(throws):
-                    lines.append(f'     Throw #{i+1}  {t["ball_emoji"]}  {t["ball_name"]}')
-                    lines.append(f'               [{stat_bar(t["catch_pct"], 20)}]  {t["catch_pct"]}% catch rate')
+                    lines.append(
+                        f'     #{i+1} {t["ball_emoji"]} {t["ball_name"]:<10} '
+                        f'[{stat_bar(t["catch_pct"], 16)}] {t["catch_pct"]}%'
+                    )
                     if t['caught']:
                         if is_shiny:
                             w = max(len(wname) + 28, 50)
                             lines += [
-                                '',
                                 f' ╔{"═" * w}╗',
                                 f' ║   ✨✨✨  SHINY {wemoji} {wname.upper()} CAUGHT!  ✨✨✨{" " * max(0, w - len(wname) - 27)}║',
-                                f' ║   AN INCREDIBLY RARE SHINY — 1 in 200 ODDS!{" " * max(0, w - 44)}║',
                                 f' ╚{"═" * w}╝',
                             ]
                         else:
-                            lines += [
-                                f'               ★  GOTCHA!  {wname} was caught!',
-                                '               → /poke:switch to make them your buddy',
-                            ]
+                            lines.append(f'     ★  GOTCHA!  {wname} caught!')
                         break
                     else:
                         lines.append(
-                            f'               💨  Broke free!  '
-                            f'(🔴×{t["rem_poke"]} 🔵×{t["rem_great"]} 🟡×{t["rem_ultra"]} left)'
+                            f'        💨 broke free '
+                            f'(🔴×{t["rem_poke"]} 🔵×{t["rem_great"]} 🟡×{t["rem_ultra"]})'
                         )
 
                 if not ei['caught']:
