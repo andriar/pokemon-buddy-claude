@@ -22,7 +22,7 @@ from lib.data import (
     ENCOUNTER_RATES, POKEMON_POOL, XP_RULES, MILESTONES, TITLE_RULES, BUDDY_TEMPLATE,
     POKEBALL_TYPES, BALL_BY_RARITY, BALL_EARN_BY_XP,
     BERRY_TYPES, BERRY_DROP_RATES, POKEDEX_IDS,
-    WILD_LEVELS, BASE_CATCH_RATES, TYPE_ADVANTAGE,
+    WILD_LEVELS, BASE_CATCH_RATES, TYPE_ADVANTAGE, TYPE_CHART,
     COMBO_MULTIPLIERS, COMBO_WINDOW_SECS, LEVEL_UP_MILESTONE_REWARDS,
     DAILY_QUESTS,
 )
@@ -601,13 +601,12 @@ def _pick_wild(tier, owned_names, role_type):
     return random.choice(available)
 
 def run_battle(buddy_level, buddy_type, wild_level, wild_type, choice_band=False):
-    """Returns (won: bool, win_pct: int)."""
-    advantage = wild_type in TYPE_ADVANTAGE.get(buddy_type or '', [])
-    base = buddy_level / max(1, wild_level) * 70
-    if advantage:   base += 20
+    """Returns (won: bool, win_pct: int, effectiveness: float)."""
+    effectiveness = TYPE_CHART.get(buddy_type or 'Normal', {}).get(wild_type, 1.0)
+    base = buddy_level / max(1, wild_level) * 70 * effectiveness
     if choice_band: base += 20
-    win_pct = max(20, min(95, int(base)))
-    return random.randint(1, 100) <= win_pct, win_pct
+    win_pct = max(5, min(95, int(base)))
+    return random.randint(1, 100) <= win_pct, win_pct, effectiveness
 
 def attempt_catch(tier, ball_key, stats):
     """Roll the catch. Returns (caught: bool, catch_pct: int). Uses best berry automatically."""
@@ -776,8 +775,8 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
         shiny_rate = min(shiny_rate, 1 / 100)
     is_shiny   = random.random() < shiny_rate
 
-    battle_won, win_pct = run_battle(buddy_level, buddy_type, wild_level, wild_type,
-                                     choice_band=(held == 'choice_band'))
+    battle_won, win_pct, effectiveness = run_battle(buddy_level, buddy_type, wild_level, wild_type,
+                                                    choice_band=(held == 'choice_band'))
 
     info = {
         'encountered':  True,
@@ -789,6 +788,7 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
         'is_shiny':     is_shiny,
         'battle_won':   battle_won,
         'win_pct':      win_pct,
+        'effectiveness': effectiveness,
         'base_ts':      time.time(),
         'throw_secs':   3.0,
         'throws':       [],
@@ -2131,11 +2131,16 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
             _ENC_DIV2,
         ]
 
-        win_pct = ei["win_pct"]
+        win_pct       = ei["win_pct"]
+        eff           = ei.get("effectiveness", 1.0)
+        eff_str       = (' ⚔️  super effective!' if eff >= 2.0
+                         else ' ⚠️  not very effective...' if eff == 0.5
+                         else ' ✗  no effect!' if eff == 0.0
+                         else '')
         lines += [
             ' ⚔️   BATTLE',
             f'     {buddy_name} Lv.{new_level}  vs  {wname} Lv.{wlv}',
-            f'     [{stat_bar(win_pct, 20)}]  {win_pct}% win chance',
+            f'     [{stat_bar(win_pct, 20)}]  {win_pct}% win chance{eff_str}',
         ]
 
         if not ei['battle_won']:

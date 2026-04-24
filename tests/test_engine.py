@@ -773,29 +773,36 @@ class TestRunBattle(unittest.TestCase):
 
     def test_high_level_buddy_wins(self):
         # Lv.50 vs Lv.5 → win_pct capped at 95
-        won, pct = engine.run_battle(50, 'Fire', 5, 'Grass')
+        won, pct, _ = engine.run_battle(50, 'Fire', 5, 'Grass')
         self.assertEqual(pct, 95)
 
-    def test_low_level_buddy_minimum_20pct(self):
-        # Lv.1 vs Lv.60 → floored at 20
-        _, pct = engine.run_battle(1, 'Normal', 60, 'Dragon')
-        self.assertEqual(pct, 20)
+    def test_low_level_buddy_minimum_5pct(self):
+        # Lv.1 vs Lv.60 Normal vs Dragon → floored at 5
+        _, pct, _ = engine.run_battle(1, 'Normal', 60, 'Dragon')
+        self.assertEqual(pct, 5)
 
-    def test_type_advantage_adds_20pct(self):
-        # Fire vs Grass: base = 10/10*70 = 70, +20 = 90
-        _, pct_base = engine.run_battle(10, 'Normal', 10, 'Grass')
-        _, pct_adv  = engine.run_battle(10, 'Fire',   10, 'Grass')
-        self.assertEqual(pct_adv, pct_base + 20)
+    def test_type_super_effective_doubles_base(self):
+        # Fire vs Grass: eff=2.0 → base*2.0 vs normal*1.0
+        _, pct_base, eff_base = engine.run_battle(10, 'Normal', 10, 'Grass')
+        _, pct_adv,  eff_adv  = engine.run_battle(10, 'Fire',   10, 'Grass')
+        self.assertEqual(eff_adv, 2.0)
+        self.assertEqual(eff_base, 1.0)
+        self.assertGreater(pct_adv, pct_base)
+
+    def test_type_immune_floors_to_5pct(self):
+        # Electric vs Ground → immunity → floor 5
+        _, pct, eff = engine.run_battle(100, 'Electric', 1, 'Ground')
+        self.assertEqual(eff, 0.0)
+        self.assertEqual(pct, 5)
 
     def test_guaranteed_win_when_randint_1(self):
         with patch('random.randint', return_value=1):
-            won, _ = engine.run_battle(5, 'Normal', 5, 'Normal')
+            won, _, _ = engine.run_battle(5, 'Normal', 5, 'Normal')
         self.assertTrue(won)
 
     def test_guaranteed_loss_when_randint_100(self):
         with patch('random.randint', return_value=100):
-            won, _ = engine.run_battle(1, 'Normal', 60, 'Dragon')
-        # win_pct = 20, randint=100 → 100 <= 20 is False
+            won, _, _ = engine.run_battle(1, 'Normal', 60, 'Dragon')
         self.assertFalse(won)
 
 

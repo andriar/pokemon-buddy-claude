@@ -173,6 +173,7 @@ BASE_CATCH_RATES = {
 }
 
 # Type advantage: buddy_type → wild types it's strong against (+20% win chance)
+# Legacy alias kept for tests that import it directly
 TYPE_ADVANTAGE = {
     'Fire':     ['Grass', 'Bug', 'Steel', 'Ice'],
     'Water':    ['Fire', 'Ground', 'Rock'],
@@ -192,6 +193,51 @@ TYPE_ADVANTAGE = {
     'Steel':    ['Ice', 'Rock', 'Fairy'],
     'Fairy':    ['Fighting', 'Dragon', 'Dark'],
     'Flying':   ['Grass', 'Fighting', 'Bug'],
+}
+
+# Full type chart: attacker → {defender: multiplier}
+# 2.0=super effective, 0.5=not very effective, 0.0=immune, 1.0=neutral (omitted)
+_SE  = 2.0   # super effective
+_NVE = 0.5   # not very effective
+_IMM = 0.0   # immune
+TYPE_CHART = {
+    'Normal':   {'Rock': _NVE, 'Steel': _NVE, 'Ghost': _IMM},
+    'Fire':     {'Fire': _NVE, 'Water': _NVE, 'Rock': _NVE, 'Dragon': _NVE,
+                 'Grass': _SE, 'Ice': _SE, 'Bug': _SE, 'Steel': _SE},
+    'Water':    {'Water': _NVE, 'Grass': _NVE, 'Dragon': _NVE,
+                 'Fire': _SE, 'Ground': _SE, 'Rock': _SE},
+    'Electric': {'Electric': _NVE, 'Grass': _NVE, 'Dragon': _NVE, 'Ground': _IMM,
+                 'Water': _SE, 'Flying': _SE},
+    'Grass':    {'Fire': _NVE, 'Grass': _NVE, 'Poison': _NVE, 'Flying': _NVE,
+                 'Bug': _NVE, 'Dragon': _NVE, 'Steel': _NVE,
+                 'Water': _SE, 'Ground': _SE, 'Rock': _SE},
+    'Ice':      {'Water': _NVE, 'Ice': _NVE, 'Steel': _NVE,
+                 'Grass': _SE, 'Ground': _SE, 'Flying': _SE, 'Dragon': _SE},
+    'Fighting': {'Normal': _SE, 'Ice': _SE, 'Rock': _SE, 'Dark': _SE, 'Steel': _SE,
+                 'Poison': _NVE, 'Flying': _NVE, 'Psychic': _NVE, 'Bug': _NVE, 'Fairy': _NVE,
+                 'Ghost': _IMM},
+    'Poison':   {'Grass': _SE, 'Fairy': _SE,
+                 'Poison': _NVE, 'Ground': _NVE, 'Rock': _NVE, 'Ghost': _NVE, 'Steel': _IMM},
+    'Ground':   {'Fire': _SE, 'Electric': _SE, 'Poison': _SE, 'Rock': _SE, 'Steel': _SE,
+                 'Grass': _NVE, 'Bug': _NVE, 'Flying': _IMM},
+    'Flying':   {'Grass': _SE, 'Fighting': _SE, 'Bug': _SE,
+                 'Electric': _NVE, 'Rock': _NVE, 'Steel': _NVE},
+    'Psychic':  {'Fighting': _SE, 'Poison': _SE,
+                 'Psychic': _NVE, 'Steel': _NVE, 'Dark': _IMM},
+    'Bug':      {'Grass': _SE, 'Psychic': _SE, 'Dark': _SE,
+                 'Fire': _NVE, 'Fighting': _NVE, 'Flying': _NVE,
+                 'Ghost': _NVE, 'Steel': _NVE, 'Fairy': _NVE},
+    'Rock':     {'Fire': _SE, 'Ice': _SE, 'Flying': _SE, 'Bug': _SE,
+                 'Fighting': _NVE, 'Ground': _NVE, 'Steel': _NVE},
+    'Ghost':    {'Psychic': _SE, 'Ghost': _SE,
+                 'Dark': _NVE, 'Normal': _IMM},
+    'Dragon':   {'Dragon': _SE, 'Steel': _NVE, 'Fairy': _IMM},
+    'Dark':     {'Psychic': _SE, 'Ghost': _SE,
+                 'Fighting': _NVE, 'Dark': _NVE, 'Fairy': _NVE},
+    'Steel':    {'Ice': _SE, 'Rock': _SE, 'Fairy': _SE,
+                 'Fire': _NVE, 'Water': _NVE, 'Electric': _NVE, 'Steel': _NVE},
+    'Fairy':    {'Fighting': _SE, 'Dragon': _SE, 'Dark': _SE,
+                 'Fire': _NVE, 'Poison': _NVE, 'Steel': _NVE},
 }
 
 # ── Combo & rewards ───────────────────────────────────────────────────────────

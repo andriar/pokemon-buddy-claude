@@ -5,6 +5,20 @@ Format: [version] — date — description
 
 ---
 
+## [2.12.0] — 2026-04-24
+
+### Added
+- **Full Gen-1+ type chart** (`TYPE_CHART` in `lib/data.py`) — 18 types, all super-effective/resisted/immune interactions encoded as multipliers (2.0/0.5/0.0)
+- **Effectiveness line in encounter** — battle block now shows `⚔️ super effective!` / `⚠️ not very effective...` / `✗ no effect!`
+
+### Changed
+- **`run_battle` uses multiplicative type effectiveness** — replaces flat `TYPE_ADVANTAGE +20` bonus. `win_pct = base × effectiveness`, clamped [5, 95] (floor dropped from 20 → 5 to allow immune matchups to show real consequence)
+- **Electric vs Ground → immune (0.0×) → 5% win chance** instead of flat 70%
+- **`TYPE_ADVANTAGE` kept** in `lib/data.py` as legacy alias for backward-compatible test imports
+- **4 battle tests updated** to unpack `(won, pct, effectiveness)` and match new formula
+
+---
+
 ## [2.11.0] — 2026-04-24
 
 ### Added
