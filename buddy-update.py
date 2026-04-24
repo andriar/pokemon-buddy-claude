@@ -470,10 +470,15 @@ def parse_int(text):
 
 def read_collection():
     if not COLLECTION_FILE.exists():
-        return {'active': None, 'pokemon': []}
+        return {'active': None, 'party': [], 'pokemon': []}
     text = COLLECTION_FILE.read_text(encoding='utf-8')
     active_m = re.search(r'\*\*Active\*\*:\s*(\S+)', text)
     active = active_m.group(1).strip() if active_m else None
+    party_m = re.search(r'\*\*ActiveParty\*\*:\s*(.+)', text)
+    if party_m:
+        party = [n.strip() for n in party_m.group(1).split(',') if n.strip()]
+    else:
+        party = [active] if active else []
     pokemon = []
     for line in text.splitlines():
         if not line.startswith('|'): continue
@@ -494,12 +499,16 @@ def read_collection():
             })
         except (ValueError, IndexError):
             continue
-    return {'active': active, 'pokemon': pokemon}
+    return {'active': active, 'party': party, 'pokemon': pokemon}
 
-def write_collection(active, pokemon_list):
+def write_collection(active, pokemon_list, party=None):
+    if party is None:
+        party = [active] if active else []
+    party_str = ','.join(party[:3])
     lines = [
         '# Pokemon Collection\n\n',
-        f'**Active**: {active}\n\n',
+        f'**Active**: {active}\n',
+        f'**ActiveParty**: {party_str}\n\n',
         '| Name | Type | Emoji | Level | XP | Caught | Rarity |\n',
         '|---|---|---|---|---|---|---|\n',
     ]
@@ -516,7 +525,7 @@ def sync_active_to_collection(name, level, xp):
         if p['name'] == name:
             p['level'] = level
             p['xp']    = xp
-            write_collection(col['active'], col['pokemon'])
+            write_collection(col['active'], col['pokemon'], col.get('party'))
             return
     # Missing from collection — append rather than silently dropping the update.
     starter = STARTER_DATA.get(name, {})
@@ -529,7 +538,7 @@ def sync_active_to_collection(name, level, xp):
         'caught': TODAY,
         'rarity': 'starter',
     })
-    write_collection(col['active'], col['pokemon'])
+    write_collection(col['active'], col['pokemon'], col.get('party'))
 
 def distribute_overflow_xp(overflow, active_name, stats=None):
     """Exp Share: split overflow XP evenly across non-active party members
@@ -556,8 +565,35 @@ def distribute_overflow_xp(overflow, active_name, stats=None):
         p['level'] = new_lv
         p['xp']    = new_xp
         results.append((p['name'], share, old_lv, new_lv))
-    write_collection(col['active'], col['pokemon'])
+    write_collection(col['active'], col['pokemon'], col.get('party'))
     return results
+
+# Party XP split: 60% lead / 25% slot2 / 15% slot3 (Thunder badge required)
+_PARTY_SPLITS = [0.60, 0.25, 0.15]
+
+def distribute_party_xp(full_xp, active_name, col):
+    """Split XP across active_party (Thunder badge must be checked by caller).
+    Returns (lead_xp, list of (name, gained, old_lv, new_lv))."""
+    party = [n for n in col.get('party', []) if n][:3]
+    if len(party) < 2:
+        return full_xp, []
+    results = []
+    lead_xp = int(full_xp * _PARTY_SPLITS[0])
+    for i, name in enumerate(party[1:], 1):
+        bench_xp = int(full_xp * _PARTY_SPLITS[i])
+        if bench_xp <= 0:
+            continue
+        p = next((x for x in col['pokemon'] if x['name'] == name), None)
+        if not p or p.get('level', 1) >= LEVEL_CAP:
+            continue
+        old_lv = p['level']
+        new_lv, new_xp, _ = clamp_to_cap(p.get('xp', xp_for_level(old_lv)) + bench_xp)
+        p['level'] = new_lv
+        p['xp']    = new_xp
+        results.append((name, bench_xp, old_lv, new_lv))
+    if results:
+        write_collection(col['active'], col['pokemon'], col.get('party'))
+    return lead_xp, results
 
 # ── Catch system ──────────────────────────────────────────────────────────────
 
@@ -864,7 +900,7 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
         'level': start_level, 'xp': xp_for_level(start_level), 'caught': TODAY,
         'rarity': stored_rarity, 'shiny': is_shiny,
     })
-    write_collection(col['active'], col['pokemon'])
+    write_collection(col['active'], col['pokemon'], col.get('party'))
 
 # ── Buddy file I/O ────────────────────────────────────────────────────────────
 
@@ -2038,7 +2074,7 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         quest_msg='', lv_reward_msg='',
                         encounter_info=None, active_quest=None, quest_done=False,
                         exp_share=None, streak_mult=1.0, lucky_mult=1.0,
-                        item_drop=None):
+                        item_drop=None, party_xp_log=None):
     xp_floor    = xp_for_level(new_level)
     xp_disp     = new_xp - xp_floor
     xp_max_disp = new_max - xp_floor
@@ -2080,6 +2116,11 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
         lines.append(f' All stats +{stat_boost}!')
     for _, name, mtype, desc in new_moves_data:
         lines.append(f' New move: {name} [{mtype}] — {desc}')
+    if party_xp_log:
+        lines.append(f' 👥 Party XP (60/25/15 split):')
+        for name, gained, olv, nlv in party_xp_log:
+            lu = f'  ★ Lv.{olv}→{nlv}' if nlv > olv else ''
+            lines.append(f'    • {name} +{gained} XP  Lv.{nlv}{lu}')
     if exp_share:
         lines.append(f' 🔀 Exp Share ({len(exp_share)} party member{"s" if len(exp_share) != 1 else ""}, +{exp_share[0][1]} XP each):')
         for name, _gained, olv, nlv in exp_share:
@@ -2353,7 +2394,7 @@ def do_switch(target_name):
     BUDDY_FILE.write_text(content, encoding='utf-8')
 
     col['active'] = name
-    write_collection(col['active'], col['pokemon'])
+    write_collection(col['active'], col['pokemon'], col.get('party'))
 
     disp_name, disp_emj = displayed_form(match)
     STATE_FILE.write_text(f'Switched to {disp_name}! 🔄\n', encoding='utf-8')
@@ -2534,6 +2575,60 @@ def main():
         do_switch(args[1] if len(args) > 1 else '')
         sys.exit(0)
 
+    if mode == 'party':
+        sub = args[1] if len(args) > 1 else 'list'
+        col = read_collection()
+        party = col.get('party', [col['active']] if col['active'] else [])
+        if sub == 'list':
+            print(' 👥 Active Party (lead = slot 1):')
+            for i, name in enumerate(party, 1):
+                p = next((x for x in col['pokemon'] if x['name'] == name), None)
+                tag = ' ← LEAD' if i == 1 else ''
+                lvl = p['level'] if p else '?'
+                print(f'   Slot {i}: {name} Lv.{lvl}{tag}')
+            if len(party) < 3:
+                print(f'\n   Add more: /poke:party add <name>')
+        elif sub == 'add':
+            name = args[2] if len(args) > 2 else ''
+            match = next((p for p in col['pokemon'] if p['name'].lower() == name.lower()), None)
+            if not match:
+                print(f' ❌ {name} not in collection.')
+            elif match['name'] in party:
+                print(f' ❌ {match["name"]} already in party.')
+            elif len(party) >= 3:
+                print(f' ❌ Party full (3/3). Remove one first.')
+            else:
+                party.append(match['name'])
+                write_collection(col['active'], col['pokemon'], party)
+                print(f' ✅ {match["name"]} added to party (slot {len(party)}).')
+        elif sub == 'remove':
+            name = args[2] if len(args) > 2 else ''
+            if name.lower() == col['active'].lower():
+                print(f' ❌ Cannot remove lead buddy. Use /poke:switch first.')
+            else:
+                match = next((n for n in party if n.lower() == name.lower()), None)
+                if not match:
+                    print(f' ❌ {name} not in party.')
+                else:
+                    party.remove(match)
+                    write_collection(col['active'], col['pokemon'], party)
+                    print(f' ✅ {match} removed from party.')
+        elif sub == 'order':
+            # /poke:party order name1,name2,name3
+            names = [n.strip() for n in (args[2] if len(args) > 2 else '').split(',')]
+            valid = [n for n in names if any(p['name'].lower() == n.lower() for p in col['pokemon'])]
+            if not valid:
+                print(' ❌ No valid names provided.')
+            else:
+                canonical = [next(p['name'] for p in col['pokemon'] if p['name'].lower() == n.lower()) for n in valid]
+                party = canonical[:3]
+                col['active'] = party[0]
+                write_collection(col['active'], col['pokemon'], party)
+                print(f' ✅ Party reordered: {" → ".join(party)}')
+        else:
+            print(' Usage: buddy-update.py party list|add <name>|remove <name>|order <n1,n2,n3>')
+        sys.exit(0)
+
     if mode == 'item':
         sub = args[1] if len(args) > 1 else 'list'
         tr_stats = read_stats()
@@ -2643,6 +2738,12 @@ def main():
         badge_line = f'- {b_emoji} **{b_name}** — *{b_desc}* `{TODAY}`'
         tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + add_xp
         inventory_msg = earn_inventory(add_xp, True, tr_stats)
+
+    # Party XP split (Thunder badge): bench members get share before lead is banked.
+    party_xp_log = []
+    if mode in ('xp', 'xp-auto') and has_unlock('party_xp', tr_stats):
+        col_pre = read_collection()
+        add_xp, party_xp_log = distribute_party_xp(add_xp, buddy_name, col_pre)
 
     # At cap, excess XP flows to party via Exp Share.
     new_level, new_xp, overflow_xp = clamp_to_cap(old_xp + add_xp)
@@ -2759,7 +2860,7 @@ def main():
         inventory_msg, combo, combo_mult,
         quest_msg, lv_reward_msg,
         encounter_info, active_quest, quest_done,
-        exp_share, streak_mult, lucky_mult, item_drop,
+        exp_share, streak_mult, lucky_mult, item_drop, party_xp_log,
     ))
 
 if __name__ == '__main__':

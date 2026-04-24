@@ -5,6 +5,20 @@ Format: [version] — date — description
 
 ---
 
+## [2.13.0] — 2026-04-24
+
+### Added
+- **Party battles** — up to 3 Pokémon in `active_party`; XP splits 60%/25%/15% across lead/slot2/slot3 when Thunder badge is earned
+- **`/poke:party list|add|remove|order`** — manage the active trio; lead is always slot 1 (same as `active`)
+- **Party XP block in announcement** — `👥 Party XP (60/25/15 split): • Pikachu +25 XP` shown when split is active
+- **`**ActiveParty**:` field in collection file** — persists party order across sessions; backward-compatible (defaults to `[active]`)
+
+### Changed
+- **`write_collection` accepts `party` arg** — all call sites updated to pass `col.get('party')`
+- **`read_collection` returns `party` field** — list of up to 3 names; falls back to `[active]` for old files
+
+---
+
 ## [2.12.0] — 2026-04-24
 
 ### Added
