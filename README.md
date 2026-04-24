@@ -9,7 +9,7 @@ A Pokemon companion system for [Claude Code](https://claude.ai/code) — your co
 - **Auto XP from token usage** — every completed turn awards XP via a local Stop hook (no persona required)
 - **Manual XP** — Claude awards XP after bug fixes, features, deployments, and more
 - **Level up & evolve** — Lv.16 → Charmeleon · Lv.36 → Charizard (Volcano badge unlocks 1 level earlier)
-- **151-Pokémon Pokédex** — catch all gens from common to mythical; role-type affinity weights matching types 3×
+- **285-Pokémon Pokédex** — catch all gens from common to mythical; role-type affinity weights matching types 3×
 - **Shiny Pokémon** — 1/200 base chance; Cascade badge raises it to 1/150, Shiny Charm item to 1/100
 
 ### Combat & Catching

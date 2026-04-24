@@ -40,6 +40,9 @@ If one appears, it's automatically caught and added to your party.
 | Rayquaza | Dragon | 🐉 | Cloud architect — lives in the stratosphere |
 | Latios | Dragon | 🔵 | Blazing API response times |
 | Latias | Dragon | 🔴 | Elegant, graceful UI/UX — flies without effort |
+| Regirock | 3 | Rock | 🗿 | Ancient monolith — still running on the original architecture |
+| Regice | 3 | Ice | ❄️ | Frozen in time — legacy code that cannot be touched |
+| Registeel | 3 | Steel | ⚙️ | Industrial-grade reliability — zero downtime since creation |
 
 ### Gen 4 — Sinnoh
 
@@ -50,6 +53,10 @@ If one appears, it's automatically caught and added to your party.
 | Giratina | Ghost | 👁️ | Security expert — master of the shadow realm |
 | Heatran | Fire | 🌋 | The server that never cools down — always on |
 | Cresselia | Psychic | 🌙 | Dream architect — designs systems while others sleep |
+| Uxie | 4 | Psychic | 🧠 | All knowledge, zero ego — the senior who makes everyone smarter |
+| Mesprit | 4 | Psychic | 💗 | Emotional intelligence — the empathetic tech lead |
+| Azelf | 4 | Psychic | 💥 | Pure willpower — ships at 3am without complaint |
+| Regigigas | 4 | Normal | 🤝 | Slow start, unstoppable finish — the big migration that paid off |
 
 ### Gen 5 — Unova
 
@@ -61,6 +68,9 @@ If one appears, it's automatically caught and added to your party.
 | Cobalion | Steel | ⚔️ | Code reviewer — enforces standards with conviction |
 | Terrakion | Rock | 🪨 | Backend reliability — handles any load |
 | Virizion | Grass | 🌿 | Green code advocate — sustainable engineering |
+| Tornadus | 5 | Flying | 🌪️ | Whips up PRs from thin air — relentless feature velocity |
+| Thundurus | 5 | Electric | ⚡ | Sparks ideas constantly — the team's creative disruptor |
+| Landorus | 5 | Ground | 🌍 | Grounded perspective — turns chaos into fertile ground |
 
 ### Gen 6 — Kalos
 
@@ -92,6 +102,8 @@ If one appears, it's automatically caught and added to your party.
 | Calyrex | Psychic | 👑 | The king of system design |
 | Glastrier | Ice | 🐎 | Immutable data structures — never mutates |
 | Spectrier | Ghost | 🐎 | Async master — never blocks the thread |
+| Regieleki | 8 | Electric | ⚡ | Pure speed — 0ms p99 latency, no overhead |
+| Regidrago | 8 | Dragon | 🐉 | Absorbs every framework — polymorphic genius |
 
 ### Gen 9 — Paldea
 
@@ -103,6 +115,7 @@ If one appears, it's automatically caught and added to your party.
 | Chien-Pao | Dark | 🗡️ | Cuts through monoliths with precision |
 | Wo-Chien | Dark | 📜 | The documentation master |
 | Chi-Yu | Dark | 🐟 | Burns through features at impossible speed |
+| Ogerpon | 9 | Grass | 🎭 | Wears many masks — full-stack shape-shifter |
 
 ---
 
@@ -132,6 +145,7 @@ Rarest of all. One per production ship roll — if you see one, it's a career mo
 | Meltan | 7 | Steel | 🔩 | Transforms from chaos — the refactor starter |
 | Melmetal | 7 | Steel | ⚙️ | Hardened by repetition — 1000 deployments |
 | Zarude | 8 | Dark | 🌿 | Raised by the jungle — self-taught legend |
+| Manaphy | 4 | Water | 💧 | Born from the sea — at home anywhere, adapts to every stack |
 | Terapagos | 9 | Normal | 💎 | Hides true power — staff engineer energy |
 | Pecharunt | 9 | Poison | 🍑 | Chains others with technical debt — break free |
 
