@@ -5,6 +5,15 @@ Format: [version] — date — description
 
 ---
 
+## [2.18.0] — 2026-04-24
+
+### Added
+- **`/poke:history`** — chronological journey narrative grouped by month, sourced from buddy journal + badge rows + party snapshot
+- **`/poke:history --export`** → writes `journey.html` (readable in browser)
+- **`_render_journey(export_html)`** — parses journal table rows, groups by `YYYY-MM`, lists milestones by date
+
+---
+
 ## [2.17.0] — 2026-04-24
 
 ### Added

@@ -2442,6 +2442,71 @@ def _resolve_starter(arg):
             return entry
     return None
 
+def _render_journey(export_html=False):
+    """Render /poke:history — a chronological narrative of the trainer's journey."""
+    col      = read_collection()
+    stats    = read_stats()
+    buddy_text = BUDDY_FILE.read_text(encoding='utf-8') if BUDDY_FILE.exists() else ''
+
+    # Parse journal from buddy file (log table rows)
+    journal_rows = []
+    for line in buddy_text.splitlines():
+        m = re.match(r'\| (\d{4}-\d{2}-\d{2}) \| (.+?) \| \+(\d+) XP \|', line)
+        if m:
+            journal_rows.append({'date': m.group(1), 'desc': m.group(2).strip(), 'xp': int(m.group(3))})
+
+    # Group by month
+    from collections import defaultdict
+    by_month = defaultdict(list)
+    for row in journal_rows:
+        month = row['date'][:7]  # YYYY-MM
+        by_month[month].append(row)
+
+    # Milestones as narrative markers
+    ms_text = buddy_text
+    badge_rows = re.findall(r'- (.+?) \*\*(.+?)\*\* — \*(.+?)\* `(\d{4}-\d{2}-\d{2})`', ms_text)
+
+    lines = [
+        '# 🗺️  Journey into Pokémon Buddy\n',
+        f'**Trainer**: {re.search(r"\\*\\*Trainer\\*\\*: (.+)", buddy_text).group(1).strip() if re.search(r"\\*\\*Trainer\\*\\*: (.+)", buddy_text) else "Trainer"}\n',
+        f'**Pokédex**: {len(col["pokemon"])}/151 caught  |  **Streak**: {stats.get("streak", 0)} days  |  **Total XP**: {stats.get("total_xp_ever", 0)}\n\n',
+    ]
+
+    for month in sorted(by_month):
+        try:
+            dt = datetime.strptime(month, '%Y-%m')
+            month_label = dt.strftime('%B %Y')
+        except ValueError:
+            month_label = month
+        lines.append(f'\n## {month_label}\n\n')
+        rows = sorted(by_month[month], key=lambda r: r['date'])
+        for row in rows:
+            lines.append(f'- `{row["date"]}` — {row["desc"]} *(+{row["xp"]} XP)*\n')
+
+    # Badge section
+    lines.append('\n## Badges & Milestones\n\n')
+    if badge_rows:
+        for emoji_b, name_b, desc_b, date_b in badge_rows:
+            lines.append(f'- `{date_b}` {emoji_b.strip()} **{name_b}** — {desc_b}\n')
+    else:
+        lines.append('*(no badges yet)*\n')
+
+    # Party snapshot
+    lines.append('\n## Current Party\n\n')
+    for p in col['pokemon']:
+        dn, de = displayed_form(p)
+        shiny = '✨' if p.get('shiny') else ''
+        lines.append(f'- {shiny}{de} **{dn}** Lv.{p["level"]} · {p.get("rarity","").replace("-shiny","")} · caught {p["caught"]}\n')
+
+    output = ''.join(lines)
+    print(output)
+
+    if export_html:
+        html = f'<!DOCTYPE html><html><head><meta charset="utf-8"><title>Journey</title></head><body><pre style="font-family:monospace;white-space:pre-wrap">{output}</pre></body></html>'
+        out_path = Path.cwd() / 'journey.html'
+        out_path.write_text(html, encoding='utf-8')
+        print(f'\n ✅ Exported: {out_path}')
+
 def _build_buddy_content(name, ptype, emoji, trainer, level, xp):
     xp_max = xp_for_level(level + 1)
     # Stat boosts accumulate at every level divisible by 5 (+5 each time)
@@ -2614,6 +2679,11 @@ def main():
         print(f' ✅ Trainer card saved: {out_path}')
         print(f' ✅ Social share image: {og_path}')
         print(f'    Open in a browser — full-page interactive Pokemon-themed card.')
+        sys.exit(0)
+
+    if mode == 'history':
+        export_html = '--export' in args
+        _render_journey(export_html)
         sys.exit(0)
 
     if mode == 'purge':
