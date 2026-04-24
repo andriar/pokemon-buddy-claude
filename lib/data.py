@@ -66,6 +66,60 @@ MOVE_UNLOCKS = {
         15: ('Hydro Pump',    'Water',  'Query optimization'),
         20: ('Blizzard',      'Ice',    'Data warehousing & analytics'),
     },
+    'Pikachu': {
+        5:  ('Thunder Shock', 'Electric', 'Event handlers'),
+        10: ('Quick Attack',  'Normal',   'Hot reload & fast feedback'),
+        15: ('Thunderbolt',   'Electric', 'Real-time websockets'),
+        20: ('Thunder',       'Electric', 'Global broadcast / pub-sub'),
+    },
+    'Eevee': {
+        5:  ('Quick Attack',  'Normal',   'Iteration speed'),
+        10: ('Bite',          'Dark',     'Aggressive debugging'),
+        15: ('Baby-Doll Eyes','Fairy',    'Graceful degradation'),
+        20: ('Last Resort',   'Normal',   'Fallback error handling'),
+    },
+    'Riolu': {
+        5:  ('Counter',       'Fighting', 'Test-driven development'),
+        10: ('Force Palm',    'Fighting', 'Precise commits'),
+        15: ('Bone Rush',     'Ground',   'Foundation refactor'),
+        20: ('Aura Sphere',   'Fighting', 'Principled architecture'),
+    },
+    'Lucario': {
+        20: ('Metal Claw',    'Steel',    'Static types'),
+        30: ('Bone Rush',     'Ground',   'System foundation'),
+        40: ('Aura Sphere',   'Fighting', 'Principled code'),
+        50: ('Close Combat',  'Fighting', 'Deep refactor'),
+    },
+    'Gible': {
+        5:  ('Sand Attack',   'Ground',   'Obfuscation defense'),
+        15: ('Dragon Rage',   'Dragon',   'Critical fix'),
+        25: ('Dragon Claw',   'Dragon',   'Feature strike'),
+        35: ('Outrage',       'Dragon',   'Marathon coding'),
+    },
+    'Dratini': {
+        5:  ('Wrap',          'Normal',   'Wrapper utility'),
+        15: ('Dragon Rage',   'Dragon',   'Critical hotfix'),
+        25: ('Dragon Tail',   'Dragon',   'Tail recursion'),
+        35: ('Outrage',       'Dragon',   'Marathon debug'),
+    },
+    'Gastly': {
+        5:  ('Lick',          'Ghost',    'Exploratory testing'),
+        10: ('Night Shade',   'Ghost',    'Dark mode'),
+        15: ('Shadow Ball',   'Ghost',    'Silent bug killer'),
+        20: ('Dream Eater',   'Psychic',  'Memory profiler'),
+    },
+    'Abra': {
+        5:  ('Teleport',      'Psychic',  'Quick context switch'),
+        15: ('Confusion',     'Psychic',  'Intermittent failure'),
+        25: ('Psybeam',       'Psychic',  'Code review laser'),
+        35: ('Psychic',       'Psychic',  'Deep thought mode'),
+    },
+    'Machop': {
+        5:  ('Karate Chop',   'Fighting', 'Slice complexity'),
+        15: ('Low Kick',      'Fighting', 'Quick win'),
+        25: ('Seismic Toss',  'Fighting', 'Leveraged refactor'),
+        35: ('Cross Chop',    'Fighting', 'Decisive merge'),
+    },
 }
 
 # Starting level for newly caught Pokemon — higher rarity = joins at higher level

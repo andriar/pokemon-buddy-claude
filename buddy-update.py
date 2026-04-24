@@ -2942,6 +2942,27 @@ def main():
         print(render_dex(filter_arg))
         sys.exit(0)
 
+    if mode == 'moves':
+        col = read_collection()
+        active = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), None)
+        if not active:
+            print(' ❌ No active buddy.')
+            sys.exit(1)
+        name, level = active['name'], active['level']
+        moves = MOVE_UNLOCKS.get(name, {})
+        print(f' 📖 {active["emoji"]} {name} Lv.{level} — MOVE LEARNSET')
+        print(' ' + '─' * 48)
+        if not moves:
+            print(f'   No learnset data for {name} yet.')
+            print(f'   Shipped species: {", ".join(sorted(MOVE_UNLOCKS))}')
+        else:
+            for lv in sorted(moves):
+                mname, mtype, desc = moves[lv]
+                mark = '✓' if level >= lv else '·'
+                lock = '' if level >= lv else f'  (unlock Lv.{lv})'
+                print(f'   {mark} Lv.{lv:<3} {mname:<14} [{mtype}]  {desc}{lock}')
+        sys.exit(0)
+
     if mode == 'battle':
         tr_stats = read_stats()
         col = read_collection()

@@ -2052,6 +2052,19 @@ class TestGymBattles(unittest.TestCase):
         self.assertIn('⭐ RECOMMENDED', out)
         self.assertIn('×2 super-eff', out)
 
+    def test_learnset_coverage_popular_species(self):
+        for sp in ('Pikachu', 'Eevee', 'Riolu', 'Gible', 'Gastly', 'Abra', 'Machop', 'Dratini', 'Lucario'):
+            self.assertIn(sp, engine.MOVE_UNLOCKS)
+
+    def test_all_learnsets_have_4_moves(self):
+        for sp, moves in engine.MOVE_UNLOCKS.items():
+            self.assertEqual(len(moves), 4, f'{sp} should have 4 moves')
+
+    def test_all_moves_have_3_fields(self):
+        for sp, moves in engine.MOVE_UNLOCKS.items():
+            for lv, entry in moves.items():
+                self.assertEqual(len(entry), 3, f'{sp} Lv.{lv} malformed')
+
     def test_list_leaders_skips_defeated_in_recommendation(self):
         stats = {'leaders_defeated': {'brock'}, 'gym_badges': {'boulder'}}
         out = engine.list_leaders(stats, buddy_type='Water')

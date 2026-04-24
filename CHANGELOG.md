@@ -5,6 +5,15 @@ Format: [version] — date — description
 
 ---
 
+## [2.29.0] — 2026-04-24
+
+### Added
+- **F15-lite Move learnsets** — expanded `MOVE_UNLOCKS` from 3 starters to 12 species: Pikachu, Eevee, Riolu, Lucario, Gible, Dratini, Gastly, Abra, Machop (plus original 3).
+- **`/poke:moves` command** — shows active buddy's full learnset with current/unlocked (✓) and upcoming (·) moves. Includes lock hints `(unlock Lv.N)`.
+- **3 new tests** — popular-species coverage, all entries have 4 moves, all moves have 3 fields (263 total).
+
+---
+
 ## [2.28.0] — 2026-04-24
 
 ### Added
