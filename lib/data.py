@@ -240,6 +240,18 @@ TYPE_CHART = {
                  'Fire': _NVE, 'Poison': _NVE, 'Steel': _NVE},
 }
 
+# ── Trade evolutions ──────────────────────────────────────────────────────────
+# {pre_evo_name: (evolved_name, evolved_emoji, trigger_event)}
+# trigger_event: 'export' | 'backup' | 'ship'
+TRADE_EVOLUTIONS = {
+    'Gastly':  ('Haunter', '👻', 'export'),
+    'Haunter': ('Gengar',  '👻', 'export'),
+    'Abra':    ('Kadabra', '🔮', 'export'),
+    'Kadabra': ('Alakazam','🔮', 'export'),
+    'Machop':  ('Machoke', '💪', 'backup'),
+    'Machoke': ('Machamp', '🥊', 'backup'),
+}
+
 # ── Regional forms ────────────────────────────────────────────────────────────
 # {base_name: [(region, display_name, emoji, type_override), ...]}
 REGIONAL_FORMS = {

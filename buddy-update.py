@@ -24,6 +24,7 @@ from lib.data import (
     BERRY_TYPES, BERRY_DROP_RATES, POKEDEX_IDS,
     WILD_LEVELS, BASE_CATCH_RATES, TYPE_ADVANTAGE, TYPE_CHART,
     REGIONAL_FORMS, REGIONAL_CATCH_CHANCE,
+    TRADE_EVOLUTIONS,
     COMBO_MULTIPLIERS, COMBO_WINDOW_SECS, LEVEL_UP_MILESTONE_REWARDS,
     DAILY_QUESTS,
 )
@@ -919,6 +920,23 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
         'rarity': stored_rarity, 'shiny': is_shiny, 'form': form,
     })
     write_collection(col['active'], col['pokemon'], col.get('party'))
+
+def apply_trade_evolutions(trigger_event):
+    """Evolve any party members whose trade-evo trigger matches. Returns list of (old→new) strings."""
+    col = read_collection()
+    evolved = []
+    changed = False
+    for p in col['pokemon']:
+        te = TRADE_EVOLUTIONS.get(p['name'])
+        if te and te[2] == trigger_event:
+            evo_name, evo_emoji, _ = te
+            p['name']  = evo_name
+            p['emoji'] = evo_emoji
+            evolved.append(f'{p["name"]} → {evo_name}')  # note: already mutated
+            changed = True
+    if changed:
+        write_collection(col['active'], col['pokemon'], col.get('party'))
+    return evolved
 
 # ── Buddy file I/O ────────────────────────────────────────────────────────────
 
@@ -2540,6 +2558,10 @@ def main():
     if mode == 'og':
         out_path = Path(args[1]) if len(args) > 1 else Path.cwd() / 'trainer-card-og.svg'
         out_path.write_text(render_og_svg(), encoding='utf-8')
+        # Trade evolutions: /poke:export triggers Gastly→Haunter→Gengar, Abra chain
+        evos = apply_trade_evolutions('export')
+        if evos:
+            print(f' ✨ Trade evolution! {", ".join(evos)}')
         print(f' ✅ Social share image saved: {out_path}')
         sys.exit(0)
 
@@ -2558,6 +2580,10 @@ def main():
             payload['summary'] = {'name': name, 'level': lvl, 'xp': xp, 'stage': stage}
         except Exception:
             pass
+        # Trade evolutions: /poke:backup triggers Machop→Machoke→Machamp
+        evos = apply_trade_evolutions('backup')
+        if evos:
+            print(f' ✨ Trade evolution! {", ".join(evos)}')
         out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding='utf-8')
         print(f' ✅ Buddy backed up: {out_path}')
         print(f'    Share this file to transfer your party — restore with /poke:import.')

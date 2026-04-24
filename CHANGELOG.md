@@ -5,6 +5,17 @@ Format: [version] — date — description
 
 ---
 
+## [2.15.0] — 2026-04-24
+
+### Added
+- **Trade evolutions** — real events trigger evolution for trade-evo Pokémon in party:
+  - `/poke:export` → Gastly→Haunter→Gengar, Abra→Kadabra→Alakazam
+  - `/poke:backup` → Machop→Machoke→Machamp
+- **`TRADE_EVOLUTIONS`** in `lib/data.py` — `{pre_evo: (evo_name, emoji, trigger)}` dict
+- **`apply_trade_evolutions(trigger)`** — scans full collection, mutates in-place, returns list of evolution strings for announcement
+
+---
+
 ## [2.14.0] — 2026-04-24
 
 ### Added
