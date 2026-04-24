@@ -24,7 +24,7 @@ from lib.data import (
     BERRY_TYPES, BERRY_DROP_RATES, POKEDEX_IDS,
     WILD_LEVELS, BASE_CATCH_RATES, TYPE_ADVANTAGE, TYPE_CHART,
     REGIONAL_FORMS, REGIONAL_CATCH_CHANCE,
-    TRADE_EVOLUTIONS,
+    TRADE_EVOLUTIONS, WILD_EVOLUTIONS,
     COMBO_MULTIPLIERS, COMBO_WINDOW_SECS, LEVEL_UP_MILESTONE_REWARDS,
     DAILY_QUESTS,
 )
@@ -683,6 +683,7 @@ def distribute_overflow_xp(overflow, active_name, stats=None):
         new_lv, new_xp, _ = clamp_to_cap(raw_xp)
         p['level'] = new_lv
         p['xp']    = new_xp
+        try_wild_evolve(p)
         results.append((p['name'], share, old_lv, new_lv))
     write_collection(col['active'], col['pokemon'], col.get('party'))
     return results
@@ -709,7 +710,8 @@ def distribute_party_xp(full_xp, active_name, col):
         new_lv, new_xp, _ = clamp_to_cap(p.get('xp', xp_for_level(old_lv)) + bench_xp)
         p['level'] = new_lv
         p['xp']    = new_xp
-        results.append((name, bench_xp, old_lv, new_lv))
+        try_wild_evolve(p)
+        results.append((p['name'], bench_xp, old_lv, new_lv))
     if results:
         write_collection(col['active'], col['pokemon'], col.get('party'))
     return lead_xp, results
@@ -1032,6 +1034,24 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
         'rarity': stored_rarity, 'shiny': is_shiny, 'form': form,
     })
     write_collection(col['active'], col['pokemon'], col.get('party'))
+
+def try_wild_evolve(p):
+    """Check if a collection Pokémon should level-up evolve. Mutates p in-place.
+    Returns evo description string like 'Weedle → Beedrill' or ''."""
+    chain = WILD_EVOLUTIONS.get(p['name'])
+    if not chain:
+        return ''
+    level = p.get('level', 1)
+    for min_lv, evo_name, evo_emoji, evo_type in reversed(chain):
+        if level >= min_lv:
+            if p['name'] == evo_name:
+                return ''
+            old_name = p['name']
+            p['name']  = evo_name
+            p['emoji'] = evo_emoji
+            p['type']  = evo_type
+            return f'{old_name} → {evo_name}'
+    return ''
 
 def apply_trade_evolutions(trigger_event):
     """Evolve any party members whose trade-evo trigger matches. Returns list of (old→new) strings."""
