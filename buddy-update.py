@@ -638,28 +638,24 @@ def write_collection(active, pokemon_list, party=None):
         )
     COLLECTION_FILE.write_text(''.join(lines), encoding='utf-8')
 
-def sync_active_to_collection(name, level, xp):
-    col = read_collection()
+def sync_active_to_collection(name, level, xp, col=None):
+    if col is None:
+        col = read_collection()
     for p in col['pokemon']:
         if p['name'] == name:
             p['level'] = level
             p['xp']    = xp
             write_collection(col['active'], col['pokemon'], col.get('party'))
             return
-    # Missing from collection — append rather than silently dropping the update.
     starter = STARTER_DATA.get(name, {})
     col['pokemon'].append({
-        'name':   name,
-        'type':   starter.get('type', '?'),
-        'emoji':  starter.get('emoji', '?'),
-        'level':  level,
-        'xp':     xp,
-        'caught': TODAY,
-        'rarity': 'starter',
+        'name': name, 'type': starter.get('type', '?'),
+        'emoji': starter.get('emoji', '?'), 'level': level,
+        'xp': xp, 'caught': TODAY, 'rarity': 'starter', 'form': '',
     })
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
-def distribute_overflow_xp(overflow, active_name, stats=None):
+def distribute_overflow_xp(overflow, active_name, stats=None, col=None):
     """Exp Share: split overflow XP evenly across non-active party members
     under level 100. Returns list of (name, gained, old_lv, new_lv) for
     announcement. Remainder XP (too small to split) is dropped.
@@ -668,7 +664,8 @@ def distribute_overflow_xp(overflow, active_name, stats=None):
         return []
     if stats is not None and not has_unlock('exp_share', stats):
         return []
-    col = read_collection()
+    if col is None:
+        col = read_collection()
     eligible = [p for p in col['pokemon']
                 if p['name'] != active_name and p.get('level', 1) < LEVEL_CAP]
     if not eligible:
@@ -912,7 +909,7 @@ def level_up_rewards(old_level, new_level, stats):
     return '  '.join(p for p in parts if p)
 
 def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
-                  buddy_level, buddy_type, stats):
+                  buddy_level, buddy_type, stats, col=None):
     """Full adventure flow: spawn → battle → ball throws until caught or empty.
 
     Returns (catch_result, encounter_info) where:
@@ -995,7 +992,7 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
     info['balls_master'] = stats.get('balls_master', 0)
 
     if caught:
-        add_to_collection(wild_name, wild_type, wild_emoji, tier, is_shiny)
+        add_to_collection(wild_name, wild_type, wild_emoji, tier, is_shiny, col=col)
         stored_tier  = (tier + '-shiny') if is_shiny else tier
         catch_result = (stored_tier, wild_name, wild_type, wild_emoji, is_shiny)
         # Item drop (Rainbow badge required)
@@ -1012,8 +1009,9 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
     info['item_drop'] = None
     return None, info
 
-def add_to_collection(name, ptype, emoji, rarity, is_shiny=False):
-    col = read_collection()
+def add_to_collection(name, ptype, emoji, rarity, is_shiny=False, col=None):
+    if col is None:
+        col = read_collection()
     owned_names = {p['name'] for p in col['pokemon']}
     stored_rarity = (rarity + '-shiny') if is_shiny else rarity
     start_level = RARITY_START_LEVEL.get(rarity, 1)
@@ -2956,6 +2954,10 @@ def main():
     # ── xp / badge ────────────────────────────────────────────────────────────
     lines, text, old_level, old_xp, old_stage, buddy_name = read_buddy()
 
+    # Extract held item once from already-read buddy text (avoids 3 extra file reads)
+    _held_m     = re.search(r'\*\*HeldItem\*\*:\s*(\S+)', text)
+    _held_item  = _held_m.group(1) if _held_m and _held_m.group(1) != 'none' else None
+
     add_xp = 0; log_desc = ''; badge_line = ''
     b_emoji = b_name = b_desc = ''
     streak_bonus = 0; streak_count = 0; streak_mult = 1.0
@@ -2991,7 +2993,7 @@ def main():
         if is_new_day:
             streak_bonus = bonus
         streak_mult = streak_multiplier(tr_stats.get('streak', 1))
-        lucky_mult  = 1.5 if get_held_item() == 'lucky_egg' else 1.0
+        lucky_mult  = 1.5 if _held_item == 'lucky_egg' else 1.0
 
         add_xp = int(base_xp * combo_mult * streak_mult * lucky_mult) + streak_bonus
 
@@ -3041,11 +3043,13 @@ def main():
                 raid_msg = (f'🐉 Raid: {raid["boss_emoji"]} {raid["boss_name"]} '
                             f'{hp_pct}% HP  (-{raid_dmg} dmg)')
 
+    # Read collection once — reused for party split, sync, exp share, encounter
+    col = read_collection()
+
     # Party XP split (Thunder badge): bench members get share before lead is banked.
     party_xp_log = []
     if mode in ('xp', 'xp-auto') and has_unlock('party_xp', tr_stats):
-        col_pre = read_collection()
-        add_xp, party_xp_log = distribute_party_xp(add_xp, buddy_name, col_pre)
+        add_xp, party_xp_log = distribute_party_xp(add_xp, buddy_name, col)
 
     # At cap, excess XP flows to party via Exp Share.
     new_level, new_xp, overflow_xp = clamp_to_cap(old_xp + add_xp)
@@ -3058,7 +3062,7 @@ def main():
     evo_offset = -1 if has_unlock('early_evolution', tr_stats) else 0
     evolutions = STARTER_DATA.get(buddy_name, {}).get('evolutions', [])
     target_stage = buddy_name
-    if get_held_item() != 'everstone':
+    if _held_item != 'everstone':
         for evo_name, threshold, _ in evolutions:
             if new_level >= threshold + evo_offset:
                 target_stage = evo_name
@@ -3077,10 +3081,10 @@ def main():
     out = cap_journal(out)
     BUDDY_FILE.write_text(''.join(out), encoding='utf-8')
 
-    # Sync collection
-    sync_active_to_collection(buddy_name, new_level, new_xp)
+    # Sync collection (reuses col in-place)
+    sync_active_to_collection(buddy_name, new_level, new_xp, col)
 
-    exp_share = distribute_overflow_xp(overflow_xp, buddy_name, tr_stats) if overflow_xp else []
+    exp_share = distribute_overflow_xp(overflow_xp, buddy_name, tr_stats, col) if overflow_xp else []
 
     # Run wild encounter (battle + ball throw)
     if mode == 'xp':
@@ -3089,25 +3093,21 @@ def main():
         base_xp_for_enc = base_xp
     else:
         base_xp_for_enc = add_xp
-    col          = read_collection()
     owned        = {p['name'] for p in col['pokemon']}
-    buddy_rarity = get_buddy_rarity()
+    buddy_rarity = next((p.get('rarity','').replace('-shiny','') for p in col['pokemon'] if p['name'] == col.get('active')), None)
     buddy_type   = STARTER_DATA.get(buddy_name, {}).get('type', 'Normal')
-    # role_type biases which wild Pokémon appear — suppressed in auto mode
     enc_role = None if mode == 'xp-auto' else get_role_type()
 
     catch_result, encounter_info = run_encounter(
         base_xp_for_enc, owned, enc_role, buddy_rarity,
-        new_level, buddy_type, tr_stats,
+        new_level, buddy_type, tr_stats, col,
     )
 
     if catch_result:
-        # Update stats flags (collection already updated inside run_encounter)
         base_tier = catch_result[0].replace('-shiny', '')
         if base_tier == 'legendary': tr_stats['caught_legendary'] = True
         if base_tier == 'mythical':  tr_stats['caught_mythical']  = True
         if catch_result[4]:          tr_stats['caught_shiny']      = True
-        col = read_collection()
 
     # Level-up rewards (after XP resolved)
     if new_level > old_level:
