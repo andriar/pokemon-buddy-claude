@@ -5,6 +5,20 @@ Format: [version] — date — description
 
 ---
 
+## [2.23.0] — 2026-04-24
+
+### Added
+- **F17 Friendship system** — every caught Pokémon starts at 70 friendship (canonical). Clamped 0–255.
+- Active buddy earns friendship on every XP event: **+1 per award, +3 per level-up, +5 per evolution**.
+- Trainer card shows `Friendship: 185/255  ♥♥♥♥♡` (5-heart bar) under ACTIVE BUDDY.
+- **1 new milestone**: `friendship_max` Best Friends 💖 at 255 friendship.
+- **5 new tests** — boost increments, clamps at max / min, unknown returns None, max triggers milestone (243 total).
+
+### Changed
+- **Collection schema**: table extended with `Nature` + `Friendship` columns. Old rows backfill nature='' and friendship=70 on read. Empty-cell form/nature now written as `-` to preserve column positions.
+
+---
+
 ## [2.22.0] — 2026-04-24
 
 ### Added

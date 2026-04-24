@@ -1882,5 +1882,53 @@ class TestSeasonalBoost(unittest.TestCase):
         self.assertGreaterEqual(season[1], 4)
 
 
+# ── Friendship (F17) ───────────────────────────────────────────────────────────
+
+class TestFriendship(_TmpDir, unittest.TestCase):
+    def test_boost_increments(self):
+        engine.write_collection('Pikachu', [
+            {'name': 'Pikachu', 'type': 'Electric', 'emoji': '⚡',
+             'level': 5, 'xp': 0, 'caught': '2026-01-01', 'rarity': 'starter',
+             'form': '', 'friendship': 70}
+        ], party=['Pikachu'])
+        engine.boost_friendship('Pikachu', 10)
+        col = engine.read_collection()
+        self.assertEqual(col['pokemon'][0]['friendship'], 80)
+
+    def test_boost_clamps_at_max(self):
+        engine.write_collection('Pikachu', [
+            {'name': 'Pikachu', 'type': 'Electric', 'emoji': '⚡',
+             'level': 5, 'xp': 0, 'caught': '2026-01-01', 'rarity': 'starter',
+             'form': '', 'friendship': 250}
+        ], party=['Pikachu'])
+        v = engine.boost_friendship('Pikachu', 100)
+        self.assertEqual(v, engine.FRIENDSHIP_MAX)
+
+    def test_boost_clamps_at_zero(self):
+        engine.write_collection('Pikachu', [
+            {'name': 'Pikachu', 'type': 'Electric', 'emoji': '⚡',
+             'level': 5, 'xp': 0, 'caught': '2026-01-01', 'rarity': 'starter',
+             'form': '', 'friendship': 10}
+        ], party=['Pikachu'])
+        v = engine.boost_friendship('Pikachu', -100)
+        self.assertEqual(v, 0)
+
+    def test_boost_unknown_returns_none(self):
+        engine.write_collection(None, [])
+        self.assertIsNone(engine.boost_friendship('NoExist', 5))
+
+    def test_friendship_max_milestone(self):
+        engine.write_collection('Pikachu', [
+            {'name': 'Pikachu', 'type': 'Electric', 'emoji': '⚡',
+             'level': 5, 'xp': 0, 'caught': '2026-01-01', 'rarity': 'starter',
+             'form': '', 'friendship': 255}
+        ], party=['Pikachu'])
+        col = engine.read_collection()
+        stats = {'milestones': set(), 'gym_badges': set(), 'shiny_count': 0}
+        out = engine.check_milestones(stats, col, 1, 1, None, False)
+        keys = {m[1] for m in out}
+        self.assertIn('Best Friends', keys)
+
+
 if __name__ == '__main__':
     unittest.main()

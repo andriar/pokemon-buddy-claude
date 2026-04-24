@@ -565,6 +565,10 @@ def check_milestones(stats, col, old_level, new_level, catch_result, evolved):
     if shiny_n >= 5:  new_ms += maybe('shiny_5')
     if shiny_n >= 10: new_ms += maybe('shiny_10')
 
+    active = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), None)
+    if active and active.get('friendship', 0) >= FRIENDSHIP_MAX:
+        new_ms += maybe('friendship_max')
+
     # Evolution milestones
     if evolved:
         new_ms += maybe('first_evolution')
@@ -634,18 +638,22 @@ def read_collection():
         cols = [c for c in cols if c]
         if len(cols) < 6 or cols[0] == 'Name': continue
         try:
-            rarity = cols[6] if len(cols) > 6 else 'caught'
-            form   = cols[7] if len(cols) > 7 else ''
+            rarity     = cols[6] if len(cols) > 6 else 'caught'
+            form       = cols[7] if len(cols) > 7 and cols[7] != '-' else ''
+            nature     = cols[8] if len(cols) > 8 and cols[8] != '-' else ''
+            friendship = int(cols[9]) if len(cols) > 9 and cols[9].isdigit() else 70
             pokemon.append({
-                'name':    cols[0],
-                'type':    cols[1],
-                'emoji':   cols[2],
-                'level':   int(cols[3]),
-                'xp':      int(cols[4]),
-                'caught':  cols[5],
-                'rarity':  rarity,
-                'shiny':   rarity.endswith('-shiny'),
-                'form':    form,
+                'name':       cols[0],
+                'type':       cols[1],
+                'emoji':      cols[2],
+                'level':      int(cols[3]),
+                'xp':         int(cols[4]),
+                'caught':     cols[5],
+                'rarity':     rarity,
+                'shiny':      rarity.endswith('-shiny'),
+                'form':       form,
+                'nature':     nature,
+                'friendship': friendship,
             })
         except (ValueError, IndexError):
             continue
@@ -659,15 +667,33 @@ def write_collection(active, pokemon_list, party=None):
         '# Pokemon Collection\n\n',
         f'**Active**: {active}\n',
         f'**ActiveParty**: {party_str}\n\n',
-        '| Name | Type | Emoji | Level | XP | Caught | Rarity | Form |\n',
-        '|---|---|---|---|---|---|---|---|\n',
+        '| Name | Type | Emoji | Level | XP | Caught | Rarity | Form | Nature | Friendship |\n',
+        '|---|---|---|---|---|---|---|---|---|---|\n',
     ]
     for p in pokemon_list:
         lines.append(
             f"| {p['name']} | {p['type']} | {p['emoji']} | "
-            f"{p['level']} | {p['xp']} | {p['caught']} | {p['rarity']} | {p.get('form', '')} |\n"
+            f"{p['level']} | {p['xp']} | {p['caught']} | {p['rarity']} | {p.get('form', '') or '-'} | "
+            f"{p.get('nature', '') or '-'} | {p.get('friendship', 70)} |\n"
         )
     COLLECTION_FILE.write_text(''.join(lines), encoding='utf-8')
+
+FRIENDSHIP_MAX = 255
+
+def boost_friendship(name, amount, col=None):
+    """Add `amount` to a Pokemon's friendship, clamped [0, 255]. Returns new value or None."""
+    own_col = col is None
+    if own_col:
+        col = read_collection()
+    for p in col['pokemon']:
+        if p['name'] == name:
+            cur = p.get('friendship', 70)
+            new = max(0, min(FRIENDSHIP_MAX, cur + amount))
+            p['friendship'] = new
+            if own_col:
+                write_collection(col['active'], col['pokemon'], col.get('party'))
+            return new
+    return None
 
 def sync_active_to_collection(name, level, xp, col=None):
     if col is None:
@@ -1088,7 +1114,7 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False, col=None):
         'name': name, 'type': ptype, 'emoji': emoji,
         'level': start_level, 'xp': xp_for_level(start_level), 'caught': TODAY,
         'rarity': stored_rarity, 'shiny': is_shiny, 'form': form,
-        'nature': pick_nature(),
+        'nature': pick_nature(), 'friendship': 70,
     })
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
@@ -1468,6 +1494,15 @@ def _active_nature(col):
         return f'{n} (+{up} / -{down})'
     return f'{n} (neutral)'
 
+def _active_friendship(col):
+    active = next((p for p in col['pokemon'] if p['name'] == col.get('active')), None)
+    if not active:
+        return ''
+    f = active.get('friendship', 70)
+    filled = int(f / FRIENDSHIP_MAX * 5 + 0.5)
+    hearts = '♥' * filled + '♡' * (5 - filled)
+    return f'{f}/{FRIENDSHIP_MAX}  {hearts}'
+
 def render_card():
     """Render a shareable ASCII trainer card."""
     text     = BUDDY_FILE.read_text(encoding='utf-8')
@@ -1559,6 +1594,7 @@ def render_card():
         row(f'[{xp_b}]  {xp_disp}/{xp_max_disp} XP'),
         row(f'Specialty: {specialty}'),
         row(f'Nature: {_active_nature(col)}'),
+        row(f'Friendship: {_active_friendship(col)}'),
         SEP,
         row('ACHIEVEMENTS'),
         row(f'Badges: {len(badges)}   Dex: {n_caught}/{n_total} caught'),
@@ -2692,6 +2728,7 @@ def do_choose(target_name, trainer=None):
     write_collection(name, [{
         'name': name, 'type': ptype, 'emoji': emoji,
         'level': level, 'xp': xp, 'caught': TODAY, 'rarity': 'starter', 'form': '',
+        'nature': pick_nature(), 'friendship': 70,
     }], party=[name])
 
     STATE_FILE.write_text(f'Starter chosen: {name}! 🎉\n', encoding='utf-8')
@@ -3163,6 +3200,13 @@ def main():
 
     out = cap_journal(out)
     BUDDY_FILE.write_text(''.join(out), encoding='utf-8')
+
+    # Friendship tick: +1 per XP award, +3 per level-up, +5 per evolution
+    if mode in ('xp', 'xp-auto', 'badge'):
+        gained_friendship = 1
+        if new_level > old_level: gained_friendship += 3 * (new_level - old_level)
+        if evolved:               gained_friendship += 5
+        boost_friendship(buddy_name, gained_friendship, col)
 
     # Sync collection (reuses col in-place)
     sync_active_to_collection(buddy_name, new_level, new_xp, col)

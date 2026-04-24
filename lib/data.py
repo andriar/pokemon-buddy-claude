@@ -935,6 +935,7 @@ MILESTONES = {
     'shiny_catch':     ('💫', 'Shiny Hunter',       'Caught a shiny Pokemon — 1 in 200 odds!'),
     'shiny_5':         ('🌟', 'Shiny Collector',    'Caught 5 shiny Pokemon!'),
     'shiny_10':        ('🌠', 'Shiny Connoisseur',  'Caught 10 shiny Pokemon — absurd luck!'),
+    'friendship_max':  ('💖', 'Best Friends',       'Max friendship with your buddy — unshakable bond!'),
     'first_evolution': ('🆙',  'First Evolution',   'Your buddy evolved for the first time!'),
     'final_evolution': ('🐉', 'Final Form',         'Reached the final evolution stage!'),
     'level_10':        ('🥇', 'Lv.10 Reached',     'Reached Level 10 — the journey is real!'),
