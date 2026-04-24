@@ -5,6 +5,20 @@ Format: [version] — date — description
 
 ---
 
+## [2.31.0] — 2026-04-24
+
+### Added
+- **F18 Elite Four** — post-gym endgame gauntlet: Lorelei → Bruno → Agatha → Lance → Champion (Blue). Sequential — must defeat in order.
+- **`/poke:elite` command** — lists roster + progression, or `/poke:elite <trainer>` to challenge. Shows lock state with missing gym badges.
+- **Champion title** — beating all five Elite Four unlocks `🏆 Champion`, the highest-prestige trainer title (overrides Mythical Master).
+- **Battle rewards** — +150 XP per Elite victory, +500 bonus XP on Champion win.
+- **10 new tests** — gate logic, order enforcement, stats round-trip, Champion title precedence (285 total).
+
+### Changed
+- Elite Four shares the F17 battle-stamina pool (1 per challenge, 3 max, 30-min regen).
+
+---
+
 ## [2.30.0] — 2026-04-24
 
 ### Added

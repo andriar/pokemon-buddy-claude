@@ -1005,6 +1005,7 @@ MILESTONES = {
 
 # First matching rule wins (highest prestige first)
 TITLE_RULES = [
+    ('beat_elite_four',  'Champion'),
     ('caught_mythical',  'Mythical Master'),
     ('caught_legendary', 'Legend Hunter'),
     ('caught_shiny',     'Shiny Chaser'),

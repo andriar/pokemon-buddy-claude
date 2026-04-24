@@ -2143,5 +2143,81 @@ class TestAntiCheat(unittest.TestCase):
         self.assertEqual(engine.fmt_duration(-10), '0s')
 
 
+class TestEliteFour(unittest.TestCase):
+    def _full_badges(self):
+        return set(engine._BADGE_ORDER)
+
+    def test_gate_blocks_without_all_badges(self):
+        stats = {'gym_badges': {'boulder', 'cascade'}, 'elite_defeated': set()}
+        ok, reason = engine._elite_gate(stats)
+        self.assertFalse(ok)
+        self.assertIn('Missing', reason)
+
+    def test_gate_passes_with_all_badges(self):
+        stats = {'gym_badges': self._full_badges(), 'elite_defeated': set()}
+        ok, _ = engine._elite_gate(stats)
+        self.assertTrue(ok)
+
+    def test_next_elite_follows_order(self):
+        stats = {'elite_defeated': {'lorelei', 'bruno'}}
+        self.assertEqual(engine._next_elite(stats), 'agatha')
+
+    def test_next_elite_none_when_all_beaten(self):
+        stats = {'elite_defeated': set(engine._ELITE_ORDER)}
+        self.assertIsNone(engine._next_elite(stats))
+
+    def test_battle_elite_blocked_without_badges(self):
+        stats = {'gym_badges': set(), 'elite_defeated': set()}
+        won, xp, log, champ = engine.battle_elite('lorelei', 100, 'Normal', stats)
+        self.assertFalse(won)
+        self.assertEqual(xp, 0)
+        self.assertFalse(champ)
+        self.assertIn('locked', log[0].lower())
+
+    def test_battle_elite_blocked_out_of_order(self):
+        stats = {'gym_badges': self._full_badges(), 'elite_defeated': set()}
+        won, xp, log, champ = engine.battle_elite('champion', 100, 'Normal', stats)
+        self.assertFalse(won)
+        self.assertIn('Lorelei', log[0])
+
+    def test_battle_elite_all_beaten_blocks(self):
+        stats = {'gym_badges': self._full_badges(),
+                 'elite_defeated': set(engine._ELITE_ORDER)}
+        won, xp, log, champ = engine.battle_elite('lorelei', 100, 'Normal', stats)
+        self.assertFalse(won)
+        self.assertIn('Already defeated', log[0])
+
+    def test_battle_elite_win_sets_champion_on_last(self):
+        stats = {'gym_badges': self._full_badges(),
+                 'elite_defeated': {'lorelei', 'bruno', 'agatha', 'lance'}}
+        import random as _r
+        _r.seed(1)
+        won, xp, log, champ = engine.battle_elite('champion', 100, 'Normal', stats)
+        # Level 100 vs 65 overlevel → nearly guaranteed win
+        self.assertTrue(won)
+        self.assertTrue(champ)
+        self.assertTrue(stats['beat_elite_four'])
+        self.assertGreaterEqual(xp, 500)
+
+
+class TestEliteFourStats(_TmpDir, unittest.TestCase):
+    def test_elite_state_round_trips(self):
+        s = engine.read_stats()
+        s['gym_badges'] = set(engine._BADGE_ORDER)
+        s['elite_defeated'] = {'lorelei', 'bruno'}
+        s['beat_elite_four'] = False
+        engine.write_stats(s)
+        got = engine.read_stats()
+        self.assertEqual(got['elite_defeated'], {'lorelei', 'bruno'})
+        self.assertFalse(got['beat_elite_four'])
+
+    def test_champion_title_wins_over_mythical(self):
+        s = engine.read_stats()
+        s['beat_elite_four'] = True
+        s['caught_mythical'] = True
+        col = {'pokemon': [], 'active': None}
+        self.assertEqual(engine.get_trainer_title(s, col), 'Champion')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -393,6 +393,8 @@ def read_stats():
         'daily_xp': 0, 'daily_xp_date': '',
         'last_xp_hash': '', 'last_xp_ts': 0,
         'battle_stamina': BATTLE_STAMINA_MAX, 'battle_stamina_ts': 0,
+        # Elite Four (F18)
+        'elite_defeated': set(), 'beat_elite_four': False,
     }
     if not STATS_FILE.exists():
         return defaults
@@ -410,6 +412,8 @@ def read_stats():
     milestones = set(re.findall(r'^- (\S+)', ms_section.group(1), re.MULTILINE)) if ms_section else set()
     ld_section = re.search(r'## Leaders Defeated\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
     leaders_defeated = set(re.findall(r'^- (\S+)', ld_section.group(1), re.MULTILINE)) if ld_section else set()
+    ef_section = re.search(r'## Elite Four Defeated\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
+    elite_defeated = set(re.findall(r'^- (\S+)', ef_section.group(1), re.MULTILINE)) if ef_section else set()
     gb_section = re.search(r'## Gym Badges Earned\n(.*?)(?=\n##|\Z)', text, re.DOTALL)
     if gb_section:
         gym_badges = set(re.findall(r'^- (\S+)', gb_section.group(1), re.MULTILINE))
@@ -464,6 +468,8 @@ def read_stats():
         'last_xp_ts':        gi('last_xp_ts'),
         'battle_stamina':    gi('battle_stamina') if '**battle_stamina**' in text else defaults['battle_stamina'],
         'battle_stamina_ts': gi('battle_stamina_ts'),
+        'elite_defeated':    elite_defeated,
+        'beat_elite_four':   gb('beat_elite_four'),
     }
     return stats
 
@@ -472,6 +478,7 @@ def write_stats(s):
     ms_lines = '\n'.join(f'- {m}' for m in sorted(s['milestones'])) or '*(none yet)*'
     gb_lines = '\n'.join(f'- {bid}' for bid in _BADGE_ORDER if bid in s.get('gym_badges', set())) or '*(none yet)*'
     ld_lines = '\n'.join(f'- {lid}' for lid in sorted(s.get('leaders_defeated', set()))) or '*(none yet)*'
+    ef_lines = '\n'.join(f'- {eid}' for eid in _ELITE_ORDER if eid in s.get('elite_defeated', set())) or '*(none yet)*'
     STATS_FILE.write_text(
         f'# Trainer Stats\n\n'
         f'**schema_version**: {STATS_SCHEMA_VER}\n'
@@ -507,6 +514,7 @@ def write_stats(s):
         f'**last_xp_ts**: {s.get("last_xp_ts", 0)}\n'
         f'**battle_stamina**: {s.get("battle_stamina", BATTLE_STAMINA_MAX)}\n'
         f'**battle_stamina_ts**: {s.get("battle_stamina_ts", 0)}\n'
+        f'**beat_elite_four**: {b(s.get("beat_elite_four", False))}\n'
         + ''.join(f'**item_{iid}**: {s.get(f"item_{iid}", 0)}\n' for iid in ITEM_IDS)
         + f'**egg_species**: {s.get("egg_species", "")}\n'
         + f'**egg_type**: {s.get("egg_type", "")}\n'
@@ -519,7 +527,9 @@ def write_stats(s):
         f'## Gym Badges Earned\n\n'
         f'{gb_lines}\n\n'
         f'## Leaders Defeated\n\n'
-        f'{ld_lines}\n'
+        f'{ld_lines}\n\n'
+        f'## Elite Four Defeated\n\n'
+        f'{ef_lines}\n'
     )
 
 # ── Streak logic ──────────────────────────────────────────────────────────────
@@ -607,6 +617,7 @@ def fmt_duration(secs):
 def get_trainer_title(stats, col):
     n = len(col['pokemon'])
     checks = {
+        'beat_elite_four':  stats.get('beat_elite_four'),
         'caught_mythical':  stats.get('caught_mythical'),
         'caught_legendary': stats.get('caught_legendary'),
         'caught_shiny':     stats.get('caught_shiny'),
@@ -784,6 +795,100 @@ GYM_LEADERS = [
     ('giovanni', 'Giovanni',  'Ground',   50, 'Rhydon',   '🦏', 'earth',   'Seismic slam!'),
 ]
 _LEADER_BY_ID = {L[0]: L for L in GYM_LEADERS}
+
+# ── Elite Four (F18) ──────────────────────────────────────────────────────────
+# (id, name, type, level, signature, emoji, flavor)
+ELITE_FOUR = [
+    ('lorelei',  'Lorelei',  'Ice',       55, 'Lapras',      '🧊', 'Frozen fury!'),
+    ('bruno',    'Bruno',    'Fighting',  58, 'Machamp',     '💪', 'Four-arm crush!'),
+    ('agatha',   'Agatha',   'Ghost',     60, 'Gengar',      '👻', 'Shadow veil!'),
+    ('lance',    'Lance',    'Dragon',    62, 'Dragonite',   '🐉', 'Dragon rage!'),
+    ('champion', 'Blue',     'Normal',    65, 'Pidgeot',     '🦅', 'Champion gambit!'),
+]
+_ELITE_BY_ID  = {E[0]: E for E in ELITE_FOUR}
+_ELITE_ORDER  = [E[0] for E in ELITE_FOUR]
+
+def _elite_gate(stats):
+    """Returns (allowed, reason). Requires all 8 gym badges."""
+    earned = stats.get('gym_badges', set())
+    missing = [b for b in _BADGE_ORDER if b not in earned]
+    if missing:
+        return False, f'Need all 8 gym badges. Missing: {", ".join(missing)}'
+    return True, ''
+
+def _next_elite(stats):
+    """Next trainer to face, or None if all defeated."""
+    beaten = stats.get('elite_defeated', set())
+    for eid in _ELITE_ORDER:
+        if eid not in beaten:
+            return eid
+    return None
+
+def battle_elite(eid, buddy_level, buddy_type, stats, held_item=None):
+    """Run PvP vs an Elite Four trainer. Returns (won, xp_reward, log, champion_flag)."""
+    trainer = _ELITE_BY_ID.get(eid)
+    if not trainer:
+        return False, 0, [f'Unknown Elite Four trainer: {eid}'], False
+    _, tname, ttype, tlv, sig, emoji, flavor = trainer
+    ok, reason = _elite_gate(stats)
+    if not ok:
+        return False, 0, [f' 🔒 Elite Four locked — {reason}'], False
+    expected = _next_elite(stats)
+    if expected is None:
+        return False, 0, [' 🏆 Already defeated the Elite Four.'], False
+    if eid != expected:
+        exp_name = _ELITE_BY_ID[expected][1]
+        return False, 0, [f' 🔒 Face {exp_name} first — Elite Four is sequential.'], False
+    mega = (held_item == 'mega_stone') and ('earth' in stats.get('gym_badges', set()))
+    effective_level = buddy_level + (10 if mega else 0)
+    won, win_pct, eff = run_battle(effective_level, buddy_type, tlv, ttype)
+    xp_reward = 150 if won else 20
+    eff_tag = ' super effective!' if eff >= 2.0 else ' not very effective...' if eff == 0.5 else ''
+    mega_tag = '  💫 MEGA EVOLVED!' if mega else ''
+    rank = _ELITE_ORDER.index(eid) + 1
+    log = [
+        f' 👑 ELITE FOUR #{rank} — {tname} ({ttype}) Lv.{tlv}',
+        f'   {emoji} {sig}  vs  YOU Lv.{buddy_level} [{buddy_type}]{mega_tag}',
+        f'   [{stat_bar(win_pct, 20)}]  {win_pct}% win{eff_tag}',
+        f'   "{flavor}"',
+    ]
+    champion_flag = False
+    if won:
+        stats.setdefault('elite_defeated', set()).add(eid)
+        log.append(f'   ✓  VICTORY! +{xp_reward} XP')
+        if _next_elite(stats) is None:
+            stats['beat_elite_four'] = True
+            champion_flag = True
+            log.append('   🏆 YOU ARE THE CHAMPION!  +500 bonus XP')
+            xp_reward += 500
+    else:
+        log.append(f'   ✗  DEFEAT. +{xp_reward} XP (keep training)')
+    return won, xp_reward, log, champion_flag
+
+def list_elite(stats):
+    """Render Elite Four roster + progression state."""
+    beaten = stats.get('elite_defeated', set())
+    ok, reason = _elite_gate(stats)
+    lines = [' 👑 ELITE FOUR', ' ' + '─' * 48]
+    if not ok:
+        lines.append(f' 🔒 Locked — {reason}')
+        lines.append('')
+    nxt = _next_elite(stats)
+    for eid, name, ttype, tlv, sig, emoji, _ in ELITE_FOUR:
+        if eid in beaten:
+            mark = '✓'
+        elif eid == nxt and ok:
+            mark = '▶'
+        else:
+            mark = '·'
+        star = '  ⭐ NEXT' if eid == nxt and ok else ''
+        lines.append(f'   {mark} {emoji} {name:<9} Lv.{tlv:<3} [{ttype:<8}] {sig:<12}{star}')
+    lines.append('')
+    if stats.get('beat_elite_four'):
+        lines.append(' 🏆 CHAMPION — you have defeated the Elite Four.')
+    elif ok and nxt:
+        lines.append(f' Next → /poke:elite {nxt}')
+    return '\n'.join(lines)
 
 def battle_leader(leader_id, buddy_level, buddy_type, stats, held_item=None):
     """Run PvP vs a gym leader. Returns (won, xp_reward, log_lines, badge_awarded)."""
@@ -2993,7 +3098,7 @@ def do_switch(target_name):
 def main():
     args = sys.argv[1:]
     if not args:
-        print("Usage: buddy-update.py status|statusline|card|html|og|readme|dex|backup|import|xp|xp-auto|badge|choose|switch|catch|purge")
+        print("Usage: buddy-update.py status|statusline|card|html|og|readme|dex|backup|import|xp|xp-auto|badge|choose|switch|catch|battle|elite|purge")
         sys.exit(1)
 
     mode = args[0]
@@ -3082,6 +3187,38 @@ def main():
         write_stats(tr_stats)
         if badge:
             append_badge(f'- {badge[1]} **{badge[2]}** — *earned by defeating {_LEADER_BY_ID[leader_id][1]}* `{TODAY}`')
+        sys.exit(0)
+
+    if mode == 'elite':
+        tr_stats = read_stats()
+        col = read_collection()
+        active = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), None)
+        if len(args) < 2:
+            print(list_elite(tr_stats))
+            sys.exit(0)
+        eid = args[1].lower()
+        if not active:
+            print(' ❌ No active buddy. Pick one with /poke:switch.')
+            sys.exit(1)
+        stamina = regen_stamina(tr_stats)
+        if stamina <= 0:
+            wait = stamina_eta(tr_stats)
+            print(' 💤 Out of battle stamina. Rest and try again.')
+            print(f'    Next point regenerates in {fmt_duration(wait)}.')
+            write_stats(tr_stats)
+            sys.exit(0)
+        tr_stats['battle_stamina'] = stamina - 1
+        if tr_stats.get('battle_stamina_ts', 0) == 0 or stamina == BATTLE_STAMINA_MAX:
+            tr_stats['battle_stamina_ts'] = int(time.time())
+        won, xp_reward, log, champion = battle_elite(
+            eid, active['level'], active['type'], tr_stats, held_item=get_held_item()
+        )
+        print('\n'.join(log))
+        print(f'    💪 Stamina: {tr_stats["battle_stamina"]}/{BATTLE_STAMINA_MAX}')
+        tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + xp_reward
+        write_stats(tr_stats)
+        if champion:
+            append_badge(f'- 🏆 **Champion** — *defeated the Elite Four* `{TODAY}`')
         sys.exit(0)
 
     if mode in ('html', 'svg'):
