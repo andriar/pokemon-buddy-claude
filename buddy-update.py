@@ -63,7 +63,7 @@ ARCHIVE_FILE    = Path.home() / '.claude' / 'buddy-log-archive.md'
 
 SHINY_RATE        = 1 / 200   # 0.5% base (Cascade badge raises to 1/150)
 STREAK_BONUS_XP   = 20        # bonus XP for first award of the day
-STATS_SCHEMA_VER  = 4         # bumped: added item_bag
+STATS_SCHEMA_VER  = 5         # bumped: added egg
 
 # ── Held items ────────────────────────────────────────────────────────────────
 HELD_ITEMS = {
@@ -83,6 +83,45 @@ ITEM_DROP_TABLE = {
     'legendary': [('shiny_charm', 0.02), ('everstone', 0.02), ('amulet_coin', 0.03)],
     'mythical':  [('shiny_charm', 0.05), ('everstone', 0.03)],
 }
+
+# ── Breeding / egg ────────────────────────────────────────────────────────────
+EGG_HATCH_XP = 200   # XP needed to hatch an egg
+EGG_BABIES = [
+    ('Pichu',    'Electric', '⚡'), ('Cleffa',  'Fairy',    '✨'),
+    ('Igglybuff','Normal',   '🎤'), ('Magby',   'Fire',     '🔥'),
+    ('Elekid',   'Electric', '⚡'), ('Smoochum','Ice',      '💋'),
+    ('Tyrogue',  'Fighting', '👊'), ('Togepi',  'Fairy',    '🥚'),
+]
+
+def award_egg(stats, reason=''):
+    """Give trainer an egg if they don't already have one."""
+    if stats.get('egg_species'):
+        return ''
+    baby = random.choice(EGG_BABIES)
+    stats['egg_species']  = baby[0]
+    stats['egg_type']     = baby[1]
+    stats['egg_emoji']    = baby[2]
+    stats['egg_xp_need']  = EGG_HATCH_XP
+    stats['egg_xp_prog']  = 0
+    hint = f'({baby[2]} {baby[0]} hint)' if random.random() < 0.5 else '(mystery)'
+    return f'🥚 Egg received! {hint}{" — " + reason if reason else ""}'
+
+def tick_egg(stats, xp_gained):
+    """Add XP progress to egg. Returns hatch message if hatched, else ''."""
+    if not stats.get('egg_species'):
+        return ''
+    stats['egg_xp_prog'] = stats.get('egg_xp_prog', 0) + xp_gained
+    if stats['egg_xp_prog'] < stats.get('egg_xp_need', EGG_HATCH_XP):
+        return ''
+    # Hatch!
+    name, ptype, emoji = stats['egg_species'], stats['egg_type'], stats['egg_emoji']
+    add_to_collection(name, ptype, emoji, 'common')
+    stats['egg_species'] = ''
+    stats['egg_type']    = ''
+    stats['egg_emoji']   = ''
+    stats['egg_xp_prog'] = 0
+    stats['egg_xp_need'] = 0
+    return f'🥚✨ Egg hatched! {emoji} {name} (Lv.1) joined your party!'
 
 # ── Weekly raid ────────────────────────────────────────────────────────────────
 RAID_BASE_HP = 5000   # total HP pool for the weekly boss
@@ -307,6 +346,9 @@ def read_stats():
         'gym_badges': set(),
         # Item bag
         **{f'item_{iid}': 0 for iid in ITEM_IDS},
+        # Egg
+        'egg_species': '', 'egg_type': '', 'egg_emoji': '',
+        'egg_xp_need': 0, 'egg_xp_prog': 0,
         # Inventory (new trainers start with 5 Poké Balls)
         'balls_poke': 5, 'balls_great': 0, 'balls_ultra': 0, 'balls_master': 0,
         'master_shards': 0,
@@ -357,6 +399,11 @@ def read_stats():
         'milestones':        milestones,
         'gym_badges':        gym_badges,
         **{f'item_{iid}': gi(f'item_{iid}') for iid in ITEM_IDS},
+        'egg_species':       gs('egg_species'),
+        'egg_type':          gs('egg_type'),
+        'egg_emoji':         gs('egg_emoji'),
+        'egg_xp_need':       gi('egg_xp_need'),
+        'egg_xp_prog':       gi('egg_xp_prog'),
         'balls_poke':        gi('balls_poke') if '**balls_poke**' in text else defaults['balls_poke'],
         'balls_great':       gi('balls_great'),
         'balls_ultra':       gi('balls_ultra'),
@@ -408,6 +455,11 @@ def write_stats(s):
         f'**daily_quest_done**: {b(s.get("daily_quest_done", False))}\n'
         f'**tasks_today**: {s.get("tasks_today", 0)}\n'
         + ''.join(f'**item_{iid}**: {s.get(f"item_{iid}", 0)}\n' for iid in ITEM_IDS)
+        + f'**egg_species**: {s.get("egg_species", "")}\n'
+        + f'**egg_type**: {s.get("egg_type", "")}\n'
+        + f'**egg_emoji**: {s.get("egg_emoji", "")}\n'
+        + f'**egg_xp_need**: {s.get("egg_xp_need", 0)}\n'
+        + f'**egg_xp_prog**: {s.get("egg_xp_prog", 0)}\n'
         + '\n'
         f'## Milestones Awarded\n\n'
         f'{ms_lines}\n\n'
@@ -471,7 +523,9 @@ def check_milestones(stats, col, old_level, new_level, catch_result, evolved):
 
     # Dex milestones
     if n_caught >= 1:  new_ms += maybe('first_catch')
-    if n_caught >= 10: new_ms += maybe('dex_10')
+    if n_caught >= 10:
+        new_ms += maybe('dex_10')
+        if not stats.get('egg_species'): award_egg(stats, '10 Pokémon caught')
     if n_caught >= 20: new_ms += maybe('dex_20')
     if n_caught >= 30: new_ms += maybe('dex_30')
 
@@ -493,7 +547,9 @@ def check_milestones(stats, col, old_level, new_level, catch_result, evolved):
 
     # Streak milestones
     streak = stats.get('streak', 0)
-    if streak >= 7:  new_ms += maybe('streak_7')
+    if streak >= 7:
+        new_ms += maybe('streak_7')
+        if not stats.get('egg_species'): award_egg(stats, '7-day streak')
     if streak >= 30: new_ms += maybe('streak_30')
 
     stats['milestones'] = awarded
@@ -1115,6 +1171,18 @@ def _gym_badges_display(stats):
     next_str = f'  →  {hint}' if hint and n < 8 else ''
     return f'{n}/8  {badges_str}{next_str}'
 
+def _egg_display(stats):
+    species = stats.get('egg_species', '')
+    if not species:
+        return 'no egg  (earn by: 10 catches, 7-day streak, or gym badge)'
+    prog = stats.get('egg_xp_prog', 0)
+    need = stats.get('egg_xp_need', EGG_HATCH_XP)
+    emoji = stats.get('egg_emoji', '🥚')
+    pct   = int(prog / need * 100) if need else 0
+    filled = int(10 * pct / 100)
+    bar = '█' * filled + '░' * (10 - filled)
+    return f'🥚 Hatching {emoji} {species}  [{bar}] {prog}/{need} XP ({pct}%)'
+
 def _held_item_display():
     held = get_held_item()
     if not held or held not in HELD_ITEMS:
@@ -1197,6 +1265,7 @@ def render_status(text):
         f' DEX: {n_dex}/{n_total} caught   {streak_icon} Streak: {streak} days (best: {longest})  ×{streak_multiplier(streak):.2f} XP',
         f' GYM: {_gym_badges_display(trainer_stats)}',
         f' ITEM: {_held_item_display()}',
+        f' EGG: {_egg_display(trainer_stats)}',
     ]
 
     if col['pokemon']:
@@ -2168,7 +2237,7 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         quest_msg='', lv_reward_msg='',
                         encounter_info=None, active_quest=None, quest_done=False,
                         exp_share=None, streak_mult=1.0, lucky_mult=1.0,
-                        item_drop=None, party_xp_log=None, raid_msg=''):
+                        item_drop=None, party_xp_log=None, raid_msg='', egg_msg=''):
     xp_floor    = xp_for_level(new_level)
     xp_disp     = new_xp - xp_floor
     xp_max_disp = new_max - xp_floor
@@ -2198,6 +2267,8 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
         lines.append(f' 🎁 Earned: {inventory_msg}')
     if raid_msg:
         lines.append(f' {raid_msg}')
+    if egg_msg:
+        lines.append(f' {egg_msg}')
     if item_drop and item_drop in HELD_ITEMS:
         it = HELD_ITEMS[item_drop]
         lines.append(f' 💎 Item drop! {it["emoji"]} {it["name"]} added to bag — {it["desc"]}')
@@ -2862,6 +2933,11 @@ def main():
         tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + add_xp
         inventory_msg = earn_inventory(add_xp, True, tr_stats)
 
+    # Egg hatching: tick progress on every XP gain (Soul badge required)
+    egg_msg = ''
+    if mode in ('xp', 'xp-auto') and has_unlock('breeding', tr_stats):
+        egg_msg = tick_egg(tr_stats, add_xp)
+
     # Raid boss damage (Earth badge): XP chips boss HP
     raid_msg = ''
     if mode in ('xp', 'xp-auto') and has_unlock('raid_battles', tr_stats):
@@ -2998,7 +3074,7 @@ def main():
         inventory_msg, combo, combo_mult,
         quest_msg, lv_reward_msg,
         encounter_info, active_quest, quest_done,
-        exp_share, streak_mult, lucky_mult, item_drop, party_xp_log, raid_msg,
+        exp_share, streak_mult, lucky_mult, item_drop, party_xp_log, raid_msg, egg_msg,
     ))
 
 if __name__ == '__main__':

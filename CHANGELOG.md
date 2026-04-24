@@ -5,6 +5,18 @@ Format: [version] — date — description
 
 ---
 
+## [2.17.0] — 2026-04-24
+
+### Added
+- **Egg hatching system** — earn an egg via: 10 Pokémon caught, 7-day streak, or gym badge milestone. One egg slot at a time.
+- **Egg XP ticking** — each XP gain adds progress (Soul badge required). After 200 XP → egg hatches, Lv.1 baby joins collection.
+- **Baby Pokémon pool** — Pichu, Cleffa, Igglybuff, Magby, Elekid, Smoochum, Tyrogue, Togepi
+- **Egg progress in `/poke:status`** — `🥚 Hatching ⚡ Pichu [████████░░] 160/200 XP (80%)`
+- **Hatch announcement** — `🥚✨ Egg hatched! ⚡ Pichu (Lv.1) joined your party!`
+- **`STATS_SCHEMA_VER` bumped to 5** — added egg fields to `buddy-stats.md`
+
+---
+
 ## [2.16.0] — 2026-04-24
 
 ### Added
