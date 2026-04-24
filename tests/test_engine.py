@@ -1508,5 +1508,208 @@ class TestDistributeOverflowXp(_TmpDir, unittest.TestCase):
         self.assertEqual(engine.distribute_overflow_xp(500, 'Charizard'), [])
 
 
+# ── F1: streak multiplier ─────────────────────────────────────────────────────
+
+class TestStreakMultiplier(unittest.TestCase):
+    def test_zero_streak(self):
+        self.assertAlmostEqual(engine.streak_multiplier(0), 1.0)
+
+    def test_day_1(self):
+        self.assertAlmostEqual(engine.streak_multiplier(1), 1.02)
+
+    def test_day_7(self):
+        self.assertAlmostEqual(engine.streak_multiplier(7), 1.14)
+
+    def test_caps_at_30(self):
+        self.assertAlmostEqual(engine.streak_multiplier(30), 1.60)
+        self.assertAlmostEqual(engine.streak_multiplier(50), 1.60)
+
+
+# ── F2: type chart ────────────────────────────────────────────────────────────
+
+class TestTypeChart(unittest.TestCase):
+    def test_super_effective_2x(self):
+        self.assertEqual(engine.TYPE_CHART['Fire'].get('Grass'), 2.0)
+
+    def test_not_very_effective_0_5x(self):
+        self.assertEqual(engine.TYPE_CHART['Fire'].get('Water'), 0.5)
+
+    def test_immune_0x(self):
+        self.assertEqual(engine.TYPE_CHART['Electric'].get('Ground'), 0.0)
+
+    def test_neutral_absent(self):
+        self.assertIsNone(engine.TYPE_CHART['Normal'].get('Normal'))
+
+    def test_run_battle_immune_floors_at_5(self):
+        _, pct, eff = engine.run_battle(100, 'Electric', 1, 'Ground')
+        self.assertEqual(eff, 0.0)
+        self.assertEqual(pct, 5)
+
+    def test_run_battle_super_effective_boosts_pct(self):
+        _, pct_neutral, _ = engine.run_battle(10, 'Normal', 10, 'Normal')
+        _, pct_se,      _ = engine.run_battle(10, 'Fire',   10, 'Grass')
+        self.assertGreater(pct_se, pct_neutral)
+
+
+# ── F3: gym badges ────────────────────────────────────────────────────────────
+
+class TestGymBadges(unittest.TestCase):
+    def _stats(self, badges=()):
+        return {'gym_badges': set(badges)}
+
+    def test_has_unlock_true(self):
+        stats = self._stats(['boulder'])
+        self.assertTrue(engine.has_unlock('exp_share', stats))
+
+    def test_has_unlock_false(self):
+        stats = self._stats()
+        self.assertFalse(engine.has_unlock('exp_share', stats))
+
+    def test_next_badge_hint_returns_first_unearned(self):
+        stats = self._stats(['boulder'])
+        hint = engine.next_badge_hint(stats)
+        self.assertIn('Cascade', hint)
+
+    def test_all_badges_earned(self):
+        all_ids = [b[0] for b in engine.GYM_BADGE_DATA]
+        stats = self._stats(all_ids)
+        self.assertIn('All 8 badges', engine.next_badge_hint(stats))
+
+    def test_exp_share_blocked_without_boulder(self):
+        stats = self._stats()
+        result = engine.distribute_overflow_xp(1000, 'Pikachu', stats)
+        self.assertEqual(result, [])
+
+
+# ── F4: held items ────────────────────────────────────────────────────────────
+
+class TestHeldItems(unittest.TestCase):
+    def test_item_ids_match_held_items(self):
+        self.assertEqual(engine.ITEM_IDS, list(engine.HELD_ITEMS))
+
+    def test_item_drop_table_keys_valid_tiers(self):
+        valid = {'common', 'uncommon', 'rare', 'legendary', 'mythical'}
+        self.assertTrue(set(engine.ITEM_DROP_TABLE).issubset(valid))
+
+    def test_item_drop_table_items_are_valid_ids(self):
+        for tier, drops in engine.ITEM_DROP_TABLE.items():
+            for iid, chance in drops:
+                self.assertIn(iid, engine.ITEM_IDS, f'{iid} not in ITEM_IDS')
+                self.assertGreater(chance, 0)
+                self.assertLessEqual(chance, 1)
+
+    def test_choice_band_boosts_win_pct(self):
+        _, pct_base, _ = engine.run_battle(10, 'Normal', 10, 'Normal')
+        _, pct_band, _ = engine.run_battle(10, 'Normal', 10, 'Normal', choice_band=True)
+        self.assertGreater(pct_band, pct_base)
+
+
+# ── F6: regional variants ─────────────────────────────────────────────────────
+
+class TestRegionalForms(unittest.TestCase):
+    def test_regional_forms_keys_in_pokemon_pool(self):
+        all_names = {p[0] for pool in engine.POKEMON_POOL.values() for p in pool}
+        for base in engine.REGIONAL_FORMS:
+            self.assertIn(base, all_names, f'{base} not in POKEMON_POOL')
+
+    def test_regional_forms_structure(self):
+        for base, forms in engine.REGIONAL_FORMS.items():
+            for form in forms:
+                self.assertEqual(len(form), 4, f'form tuple for {base} should have 4 elements')
+
+    def test_catch_chance_between_0_and_1(self):
+        self.assertGreater(engine.REGIONAL_CATCH_CHANCE, 0)
+        self.assertLess(engine.REGIONAL_CATCH_CHANCE, 1)
+
+
+# ── F7: trade evolutions ──────────────────────────────────────────────────────
+
+class TestTradeEvolutions(unittest.TestCase):
+    def test_trade_evo_structure(self):
+        for pre, (evo_name, evo_emoji, trigger) in engine.TRADE_EVOLUTIONS.items():
+            self.assertIsInstance(pre, str)
+            self.assertIsInstance(evo_name, str)
+            self.assertIn(trigger, ('export', 'backup', 'ship'))
+
+    def test_trade_evo_triggers_are_valid(self):
+        valid = {'export', 'backup', 'ship'}
+        for _, (_, _, trigger) in engine.TRADE_EVOLUTIONS.items():
+            self.assertIn(trigger, valid)
+
+
+# ── F8: weekly raid ───────────────────────────────────────────────────────────
+
+class TestWeeklyRaid(unittest.TestCase):
+    def test_current_week_id_format(self):
+        wid = engine._current_week_id()
+        self.assertRegex(wid, r'^\d{4}-W\d{2}$')
+
+    def test_raid_base_hp_positive(self):
+        self.assertGreater(engine.RAID_BASE_HP, 0)
+
+    def test_apply_raid_damage_with_no_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            orig = engine.RAID_FILE
+            engine.RAID_FILE = Path(tmpdir) / 'buddy-raid.json'
+            orig_pool = engine.POKEMON_POOL.get('legendary', [])
+            raid, dmg, ko = engine.apply_raid_damage(50)
+            engine.RAID_FILE = orig
+        self.assertIsNotNone(raid)
+        self.assertGreater(dmg, 0)
+        self.assertFalse(ko)
+
+
+# ── F9: egg hatching ──────────────────────────────────────────────────────────
+
+class TestEggHatching(unittest.TestCase):
+    def _empty_stats(self):
+        return {'egg_species': '', 'egg_type': '', 'egg_emoji': '',
+                'egg_xp_need': 0, 'egg_xp_prog': 0}
+
+    def test_award_egg_sets_species(self):
+        stats = self._empty_stats()
+        msg = engine.award_egg(stats, 'test')
+        self.assertNotEqual(stats['egg_species'], '')
+        self.assertIn('🥚', msg)
+
+    def test_award_egg_no_double_award(self):
+        stats = self._empty_stats()
+        engine.award_egg(stats)
+        first = stats['egg_species']
+        engine.award_egg(stats)
+        self.assertEqual(stats['egg_species'], first)
+
+    def test_tick_egg_no_hatch_below_threshold(self):
+        stats = self._empty_stats()
+        engine.award_egg(stats)
+        msg = engine.tick_egg(stats, 50)
+        self.assertEqual(msg, '')
+        self.assertEqual(stats['egg_xp_prog'], 50)
+
+    def test_egg_hatch_xp_constant(self):
+        self.assertEqual(engine.EGG_HATCH_XP, 200)
+
+    def test_egg_babies_all_have_3_fields(self):
+        for baby in engine.EGG_BABIES:
+            self.assertEqual(len(baby), 3)
+
+
+# ── F5: party XP split ────────────────────────────────────────────────────────
+
+class TestPartyXpSplit(unittest.TestCase):
+    def _party_splits(self):
+        return engine._PARTY_SPLITS
+
+    def test_splits_sum_to_1(self):
+        self.assertAlmostEqual(sum(self._party_splits()), 1.0)
+
+    def test_lead_gets_most(self):
+        splits = self._party_splits()
+        self.assertEqual(splits[0], max(splits))
+
+    def test_three_slots(self):
+        self.assertEqual(len(self._party_splits()), 3)
+
+
 if __name__ == '__main__':
     unittest.main()

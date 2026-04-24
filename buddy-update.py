@@ -113,7 +113,6 @@ def tick_egg(stats, xp_gained):
     stats['egg_xp_prog'] = stats.get('egg_xp_prog', 0) + xp_gained
     if stats['egg_xp_prog'] < stats.get('egg_xp_need', EGG_HATCH_XP):
         return ''
-    # Hatch!
     name, ptype, emoji = stats['egg_species'], stats['egg_type'], stats['egg_emoji']
     add_to_collection(name, ptype, emoji, 'common')
     stats['egg_species'] = ''
@@ -142,7 +141,6 @@ def write_raid(data):
 
 def get_weekly_raid():
     """Return current raid dict; auto-generates new boss on week change."""
-    from lib.data import POKEMON_POOL
     raid = read_raid()
     week_id = _current_week_id()
     if raid and raid.get('week_id') == week_id:
