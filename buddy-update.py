@@ -1238,7 +1238,10 @@ def render_status(text):
     streak  = trainer_stats.get('streak', 0)
     longest = trainer_stats.get('longest_streak', 0)
 
-    xp_b = bar(xp_disp, xp_max_disp, 24)
+    lv_int   = int(level) if str(level).isdigit() else 1
+    at_cap   = lv_int >= LEVEL_CAP
+    xp_b     = bar(xp_max_disp if at_cap else xp_disp, xp_max_disp, 24)
+    xp_label = 'MAX ✦ Exp Share active' if at_cap else f'{xp_disp} / {xp_max_disp}'
     sep  = '─' * 52
 
     streak_icon = '🔥' if streak >= 7 else '📅'
@@ -1246,7 +1249,7 @@ def render_status(text):
         f' 🔥 {stage.upper():<12} Lv.{level:<4}      Trainer: {trainer}',
         f'    · {title} ·',
         f' {sep}',
-        f' XP  [{xp_b}]  {xp_disp} / {xp_max_disp}',
+        f' XP  [{xp_b}]  {xp_label}',
         '',
     ]
 
@@ -1368,7 +1371,10 @@ def render_statusline(plugin_mode=False):
     xp_disp     = xp_cur - xp_floor
     xp_max_disp = xp_max - xp_floor
     pct      = int(xp_disp * 100 / xp_max_disp) if xp_max_disp else 0
-    xp_str   = f'{colored_bar(xp_disp, xp_max_disp, 10)} {xp_disp}/{xp_max_disp}'
+    if active['level'] >= LEVEL_CAP:
+        xp_str = f'{colored_bar(xp_max_disp, xp_max_disp, 10)} MAX ✦ Exp Share active'
+    else:
+        xp_str = f'{colored_bar(xp_disp, xp_max_disp, 10)} {xp_disp}/{xp_max_disp}'
 
     # ── Section 3: State (encounter or chatter) ─────────────────────────────
     enc = None
@@ -2286,10 +2292,12 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
         lines.append(f' 💎 Item drop! {it["emoji"]} {it["name"]} added to bag — {it["desc"]}')
     if lv_reward_msg:
         lines.append(f' 🎁 Level reward: {lv_reward_msg}')
+    at_cap    = new_level >= LEVEL_CAP
+    xp_label  = 'MAX ✦ Exp Share active' if at_cap else f'{xp_disp} / {xp_max_disp}'
     lines += [
         f' 🔥 {new_stage.upper():<12} Lv.{new_level:<4}',
         ' ' + '─' * 52,
-        f' XP  [{xp_b}]  {xp_disp} / {xp_max_disp}',
+        f' XP  [{xp_b}]  {xp_label}',
     ]
     if stat_boost > 0:
         lines.append(f' All stats +{stat_boost}!')
