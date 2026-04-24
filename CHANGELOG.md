@@ -5,6 +5,15 @@ Format: [version] — date — description
 
 ---
 
+## [2.25.0] — 2026-04-24
+
+### Added
+- **Friendship catch bonus** — active buddy's friendship adds up to +25% catch multiplier at max (255). Formula: `×(1.0 + friendship/255 × 0.25)`. Rewards long-term bonded buddies.
+- **Riolu → Lucario** friendship evolution (daytime, friendship ≥220) added alongside existing Eevee branches.
+- **2 new tests** — Riolu day evo, Riolu night no-op (249 total).
+
+---
+
 ## [2.24.0] — 2026-04-24
 
 ### Added

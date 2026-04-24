@@ -682,8 +682,9 @@ FRIENDSHIP_MAX = 255
 
 # F17b: friendship-gated evolutions. (source, target_name, target_type, target_emoji, min_friendship, hours_range_or_None)
 FRIENDSHIP_EVOLUTIONS = [
-    ('Eevee', 'Espeon',  'Psychic', '🔮', 220, ('day',   range(5, 18))),
-    ('Eevee', 'Umbreon', 'Dark',    '🌑', 220, ('night', set(range(18, 24)) | set(range(0, 5)))),
+    ('Eevee', 'Espeon',  'Psychic',  '🔮', 220, ('day',   range(5, 18))),
+    ('Eevee', 'Umbreon', 'Dark',     '🌑', 220, ('night', set(range(18, 24)) | set(range(0, 5)))),
+    ('Riolu', 'Lucario', 'Fighting', '💪', 220, ('day',   range(5, 18))),
 ]
 
 def _time_is_day(hour=None):
@@ -898,8 +899,19 @@ def attempt_catch(tier, ball_key, stats):
         berry_used = 'razz'
     if get_held_item() == 'amulet_coin':
         mult *= 2.0
+    # Friendship bonus: active buddy's bond adds up to +25% catch chance at max friendship
+    buddy_friendship = _active_buddy_friendship()
+    mult *= 1.0 + (buddy_friendship / FRIENDSHIP_MAX) * 0.25
     catch_pct = min(95, int(base * mult * 100))
     return random.randint(1, 100) <= catch_pct, catch_pct
+
+def _active_buddy_friendship():
+    try:
+        col = read_collection()
+        active = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), None)
+        return active.get('friendship', 70) if active else 0
+    except Exception:
+        return 0
 
 def earn_inventory(base_xp, is_badge, stats):
     """Add balls and berries earned from the task. Returns description string."""

@@ -1966,6 +1966,26 @@ class TestFriendshipEvolution(_TmpDir, unittest.TestCase):
         engine.apply_friendship_evolutions(col, hour=12)
         self.assertEqual(col['active'], 'Espeon')
 
+    def test_riolu_to_lucario_day(self):
+        engine.write_collection('Riolu', [
+            {'name': 'Riolu', 'type': 'Fighting', 'emoji': '💪',
+             'level': 25, 'xp': 0, 'caught': '2026-01-01', 'rarity': 'uncommon',
+             'form': '', 'nature': 'Jolly', 'friendship': 225}
+        ], party=['Riolu'])
+        col = engine.read_collection()
+        out = engine.apply_friendship_evolutions(col, hour=10)
+        self.assertEqual(out, ['Riolu → Lucario'])
+
+    def test_riolu_no_night_evo(self):
+        engine.write_collection('Riolu', [
+            {'name': 'Riolu', 'type': 'Fighting', 'emoji': '💪',
+             'level': 25, 'xp': 0, 'caught': '2026-01-01', 'rarity': 'uncommon',
+             'form': '', 'nature': 'Jolly', 'friendship': 255}
+        ], party=['Riolu'])
+        col = engine.read_collection()
+        out = engine.apply_friendship_evolutions(col, hour=22)
+        self.assertEqual(out, [])
+
 
 if __name__ == '__main__':
     unittest.main()
