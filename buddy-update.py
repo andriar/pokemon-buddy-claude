@@ -1175,24 +1175,20 @@ _TIER_FLAVOR = {
 # ── Renderers ─────────────────────────────────────────────────────────────────
 
 def _gym_badges_display(stats):
-    """Compact badge row: earned badges + next target hint."""
+    """Compact badge row: emoji-strip when ≥4 earned, full names when few."""
     earned = stats.get('gym_badges', set())
     n = len(earned)
     if n == 0:
-        hint = next_badge_hint(stats)
-        return f'0/8 badges  →  {hint}'
-    badges_str = '  '.join(
-        f'{_BADGE_BY_ID[bid][1]} {_BADGE_BY_ID[bid][2]}'
-        for bid in _BADGE_ORDER if bid in earned
-    )
-    hint = next_badge_hint(stats)
+        return f'0/8  →  {next_badge_hint(stats)}'
+    emojis = ''.join(_BADGE_BY_ID[bid][1] for bid in _BADGE_ORDER if bid in earned)
+    hint   = next_badge_hint(stats)
     next_str = f'  →  {hint}' if hint and n < 8 else ''
-    return f'{n}/8  {badges_str}{next_str}'
+    return f'{n}/8  {emojis}{next_str}'
 
 def _egg_display(stats):
     species = stats.get('egg_species', '')
     if not species:
-        return 'no egg  (earn by: 10 catches, 7-day streak, or gym badge)'
+        return 'none'
     prog = stats.get('egg_xp_prog', 0)
     need = stats.get('egg_xp_need', EGG_HATCH_XP)
     emoji = stats.get('egg_emoji', '🥚')
@@ -1204,7 +1200,7 @@ def _egg_display(stats):
 def _held_item_display():
     held = get_held_item()
     if not held or held not in HELD_ITEMS:
-        return 'none equipped  (use /poke:item equip <name>)'
+        return 'none'
     it = HELD_ITEMS[held]
     return f'{it["emoji"]} {it["name"]} — {it["desc"]}'
 
@@ -2307,10 +2303,13 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
             lu = f'  ★ Lv.{olv}→{nlv}' if nlv > olv else ''
             lines.append(f'    • {name} +{gained} XP  Lv.{nlv}{lu}')
     if exp_share:
-        lines.append(f' 🔀 Exp Share ({len(exp_share)} party member{"s" if len(exp_share) != 1 else ""}, +{exp_share[0][1]} XP each):')
-        for name, _gained, olv, nlv in exp_share:
-            lu = f'  ★ Lv.{olv}→{nlv}' if nlv > olv else ''
-            lines.append(f'    • {name} Lv.{nlv}{lu}')
+        leveled = [(n, ol, nl) for n, _, ol, nl in exp_share if nl > ol]
+        lines.append(f' 🔀 Exp Share → {len(exp_share)} party members +{exp_share[0][1]} XP each'
+                     + (f'  ({len(leveled)} leveled up)' if leveled else ''))
+        for name, olv, nlv in leveled[:5]:
+            lines.append(f'    • {name} Lv.{olv}→{nlv}')
+        if len(leveled) > 5:
+            lines.append(f'    • ... and {len(leveled) - 5} more level-ups')
     if quest_msg:
         lines.append(f' {quest_msg}')
     elif active_quest:
@@ -2460,61 +2459,61 @@ def _resolve_starter(arg):
             return entry
     return None
 
-def _render_journey(export_html=False):
-    """Render /poke:history — a chronological narrative of the trainer's journey."""
-    col      = read_collection()
-    stats    = read_stats()
+def _render_journey(export_html=False, verbose=False):
+    """Render /poke:history. Default: summary only. --verbose or --export: full log."""
+    from collections import defaultdict
+    col        = read_collection()
+    stats      = read_stats()
     buddy_text = BUDDY_FILE.read_text(encoding='utf-8') if BUDDY_FILE.exists() else ''
 
-    # Parse journal from buddy file (log table rows)
     journal_rows = []
     for line in buddy_text.splitlines():
         m = re.match(r'\| (\d{4}-\d{2}-\d{2}) \| (.+?) \| \+(\d+) XP \|', line)
         if m:
             journal_rows.append({'date': m.group(1), 'desc': m.group(2).strip(), 'xp': int(m.group(3))})
 
-    # Group by month
-    from collections import defaultdict
-    by_month = defaultdict(list)
-    for row in journal_rows:
-        month = row['date'][:7]  # YYYY-MM
-        by_month[month].append(row)
+    badge_rows = re.findall(r'- (.+?) \*\*(.+?)\*\* — \*(.+?)\* `(\d{4}-\d{2}-\d{2})`', buddy_text)
+    trainer_m  = re.search(r'\*\*Trainer\*\*:\s*(.+)', buddy_text)
+    trainer    = trainer_m.group(1).strip() if trainer_m else 'Trainer'
 
-    # Milestones as narrative markers
-    ms_text = buddy_text
-    badge_rows = re.findall(r'- (.+?) \*\*(.+?)\*\* — \*(.+?)\* `(\d{4}-\d{2}-\d{2})`', ms_text)
+    total_xp   = stats.get('total_xp_ever', 0)
+    streak     = stats.get('streak', 0)
+    n_caught   = len(col['pokemon'])
 
     lines = [
-        '# 🗺️  Journey into Pokémon Buddy\n',
-        f'**Trainer**: {re.search(r"\\*\\*Trainer\\*\\*: (.+)", buddy_text).group(1).strip() if re.search(r"\\*\\*Trainer\\*\\*: (.+)", buddy_text) else "Trainer"}\n',
-        f'**Pokédex**: {len(col["pokemon"])}/151 caught  |  **Streak**: {stats.get("streak", 0)} days  |  **Total XP**: {stats.get("total_xp_ever", 0)}\n\n',
+        f'🗺️  {trainer} — Pokémon Journey\n',
+        f'Pokédex: {n_caught}  |  Streak: {streak} days  |  Total XP: {total_xp}\n',
+        f'Tasks logged: {len(journal_rows)}  |  Badges: {len(badge_rows)}\n',
     ]
 
-    for month in sorted(by_month):
-        try:
-            dt = datetime.strptime(month, '%Y-%m')
-            month_label = dt.strftime('%B %Y')
-        except ValueError:
-            month_label = month
-        lines.append(f'\n## {month_label}\n\n')
-        rows = sorted(by_month[month], key=lambda r: r['date'])
-        for row in rows:
-            lines.append(f'- `{row["date"]}` — {row["desc"]} *(+{row["xp"]} XP)*\n')
-
-    # Badge section
-    lines.append('\n## Badges & Milestones\n\n')
-    if badge_rows:
+    if verbose or export_html:
+        by_month = defaultdict(list)
+        for row in journal_rows:
+            by_month[row['date'][:7]].append(row)
+        for month in sorted(by_month):
+            try:    month_label = datetime.strptime(month, '%Y-%m').strftime('%B %Y')
+            except ValueError: month_label = month
+            lines.append(f'\n## {month_label}\n')
+            for row in sorted(by_month[month], key=lambda r: r['date']):
+                lines.append(f'- `{row["date"]}` {row["desc"]} (+{row["xp"]} XP)\n')
+        lines.append('\n## Badges & Milestones\n')
         for emoji_b, name_b, desc_b, date_b in badge_rows:
             lines.append(f'- `{date_b}` {emoji_b.strip()} **{name_b}** — {desc_b}\n')
+        lines.append('\n## Party\n')
+        for p in col['pokemon']:
+            dn, de = displayed_form(p)
+            shiny = '✨' if p.get('shiny') else ''
+            lines.append(f'- {shiny}{de} {dn} Lv.{p["level"]} · {p.get("rarity","").replace("-shiny","")}\n')
     else:
-        lines.append('*(no badges yet)*\n')
-
-    # Party snapshot
-    lines.append('\n## Current Party\n\n')
-    for p in col['pokemon']:
-        dn, de = displayed_form(p)
-        shiny = '✨' if p.get('shiny') else ''
-        lines.append(f'- {shiny}{de} **{dn}** Lv.{p["level"]} · {p.get("rarity","").replace("-shiny","")} · caught {p["caught"]}\n')
+        # Summary: last 5 tasks + recent badges
+        lines.append('\nRecent tasks:\n')
+        for row in journal_rows[-5:]:
+            lines.append(f'  {row["date"]}  {row["desc"]} (+{row["xp"]} XP)\n')
+        if badge_rows:
+            lines.append('\nRecent badges:\n')
+            for emoji_b, name_b, _, date_b in badge_rows[-3:]:
+                lines.append(f'  {date_b}  {emoji_b.strip()} {name_b}\n')
+        lines.append('\nUse /poke:history --verbose for full log.\n')
 
     output = ''.join(lines)
     print(output)
@@ -2701,7 +2700,8 @@ def main():
 
     if mode == 'history':
         export_html = '--export' in args
-        _render_journey(export_html)
+        verbose     = '--verbose' in args or '--export' in args
+        _render_journey(export_html, verbose)
         sys.exit(0)
 
     if mode == 'purge':
