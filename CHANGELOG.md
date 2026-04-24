@@ -5,6 +5,19 @@ Format: [version] — date — description
 
 ---
 
+## [2.27.0] — 2026-04-24
+
+### Added
+- **F16 Mega Evolution** — new `mega_stone` held item (💫). When equipped with Earth badge owned, gym battles get **+10 effective level** (huge win% swing vs higher-level leaders).
+- Mega activation displayed in battle log: `💫 MEGA EVOLVED!` tag.
+- `mega_stone` added to legendary (2%) and mythical (5%) wild-encounter drop tables.
+- **3 new tests** — Earth badge gating, mega flag in log, drop-table entry (258 total).
+
+### Changed
+- **README overhauled** — added "Bond & Personality (v2.20+)" and "PvP & Mega Evolution (v2.26+)" sections surfacing Nature, Friendship, Shiny deepening, Seasonal events, Gym battles, Mega Stone.
+
+---
+
 ## [2.26.0] — 2026-04-24
 
 ### Added

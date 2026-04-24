@@ -2028,6 +2028,23 @@ class TestGymBattles(unittest.TestCase):
         self.assertFalse(won)
         self.assertEqual(xp, 10)
 
+    def test_mega_stone_without_earth_badge_no_boost(self):
+        stats = {'leaders_defeated': set(), 'gym_badges': set()}
+        with patch('random.randint', return_value=1):
+            _, _, log, _ = engine.battle_leader('brock', 10, 'Water', stats, held_item='mega_stone')
+        self.assertFalse(any('MEGA EVOLVED' in line for line in log))
+
+    def test_mega_stone_with_earth_badge_boosts(self):
+        stats = {'leaders_defeated': set(), 'gym_badges': {'earth'}}
+        with patch('random.randint', return_value=1):
+            _, _, log, _ = engine.battle_leader('brock', 10, 'Water', stats, held_item='mega_stone')
+        self.assertTrue(any('MEGA EVOLVED' in line for line in log))
+
+    def test_mega_stone_has_drop_entry(self):
+        self.assertIn('mega_stone', engine.HELD_ITEMS)
+        legendary_drops = {item for item, _ in engine.ITEM_DROP_TABLE['legendary']}
+        self.assertIn('mega_stone', legendary_drops)
+
 
 if __name__ == '__main__':
     unittest.main()

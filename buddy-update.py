@@ -96,6 +96,7 @@ HELD_ITEMS = {
     'amulet_coin': {'emoji': '🪙', 'name': 'Amulet Coin', 'desc': '2× catch rate'},
     'shiny_charm': {'emoji': '✨', 'name': 'Shiny Charm',  'desc': '1/100 shiny rate'},
     'everstone':   {'emoji': '🪨', 'name': 'Everstone',   'desc': 'Blocks evolution'},
+    'mega_stone':  {'emoji': '💫', 'name': 'Mega Stone',  'desc': '+20% gym battle win (Earth badge)'},
 }
 ITEM_IDS = list(HELD_ITEMS)
 
@@ -104,8 +105,8 @@ ITEM_DROP_TABLE = {
     'common':    [('lucky_egg', 0.01),  ('choice_band', 0.01)],
     'uncommon':  [('lucky_egg', 0.015), ('choice_band', 0.015), ('amulet_coin', 0.01)],
     'rare':      [('lucky_egg', 0.02),  ('choice_band', 0.02),  ('amulet_coin', 0.015), ('shiny_charm', 0.005)],
-    'legendary': [('shiny_charm', 0.02), ('everstone', 0.02), ('amulet_coin', 0.03)],
-    'mythical':  [('shiny_charm', 0.05), ('everstone', 0.03)],
+    'legendary': [('shiny_charm', 0.02), ('everstone', 0.02), ('amulet_coin', 0.03), ('mega_stone', 0.02)],
+    'mythical':  [('shiny_charm', 0.05), ('everstone', 0.03), ('mega_stone', 0.05)],
 }
 
 # ── Breeding / egg ────────────────────────────────────────────────────────────
@@ -701,18 +702,22 @@ GYM_LEADERS = [
 ]
 _LEADER_BY_ID = {L[0]: L for L in GYM_LEADERS}
 
-def battle_leader(leader_id, buddy_level, buddy_type, stats):
+def battle_leader(leader_id, buddy_level, buddy_type, stats, held_item=None):
     """Run PvP vs a gym leader. Returns (won, xp_reward, log_lines, badge_awarded)."""
     leader = _LEADER_BY_ID.get(leader_id)
     if not leader:
         return False, 0, [f'Unknown leader: {leader_id}'], None
     lid, lname, ltype, llv, sig, lemoji, badge_id, flavor = leader
-    won, win_pct, eff = run_battle(buddy_level, buddy_type, llv, ltype)
+    # Mega evolution: mega_stone + Earth badge = +20% win
+    mega = (held_item == 'mega_stone') and ('earth' in stats.get('gym_badges', set()))
+    effective_level = buddy_level + (10 if mega else 0)
+    won, win_pct, eff = run_battle(effective_level, buddy_type, llv, ltype)
     xp_reward = 75 if won else 10
     eff_tag = ' super effective!' if eff >= 2.0 else ' not very effective...' if eff == 0.5 else ''
+    mega_tag = '  💫 MEGA EVOLVED!' if mega else ''
     log = [
         f' ⚔️  GYM BATTLE — {lname} ({ltype}) Lv.{llv}',
-        f'   {lemoji} {sig}  vs  YOU Lv.{buddy_level} [{buddy_type}]',
+        f'   {lemoji} {sig}  vs  YOU Lv.{buddy_level} [{buddy_type}]{mega_tag}',
         f'   [{stat_bar(win_pct, 20)}]  {win_pct}% win{eff_tag}',
         f'   "{flavor}"',
     ]
@@ -2926,7 +2931,9 @@ def main():
         if not active:
             print(' ❌ No active buddy. Pick one with /poke:switch.')
             sys.exit(1)
-        won, xp_reward, log, badge = battle_leader(leader_id, active['level'], active['type'], tr_stats)
+        won, xp_reward, log, badge = battle_leader(
+            leader_id, active['level'], active['type'], tr_stats, held_item=get_held_item()
+        )
         print('\n'.join(log))
         tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + xp_reward
         write_stats(tr_stats)

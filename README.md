@@ -39,6 +39,7 @@ A Pokemon companion system for [Claude Code](https://claude.ai/code) — your co
   - 🪙 Amulet Coin → 2× catch rate
   - ✨ Shiny Charm → 1/100 shiny rate
   - 🪨 Everstone → blocks evolution
+  - 💫 Mega Stone → +10 effective level in gym battles (Earth badge)
 
 - **Party battles** — up to 3 Pokémon in your active trio; XP splits 60%/25%/15% (Thunder badge)
 - **Regional variants** — repeat catches roll 15% chance for Alolan/Galarian forms (Vulpix, Zigzagoon)
@@ -46,6 +47,17 @@ A Pokemon companion system for [Claude Code](https://claude.ai/code) — your co
 - **Weekly raid boss** — legendary spawns every Monday; each XP gain chips HP; KO adds boss to collection (Earth badge)
 - **Egg hatching** — earn an egg via 10 catches or 7-day streak; 200 XP to hatch a baby Pokémon (Soul badge)
 - **Exp Share** — overflow XP from a capped buddy splits evenly across non-maxed party members (Boulder badge)
+
+### Bond & Personality (v2.20+)
+- **Natures** — every caught Pokémon rolls 1 of 25 canonical natures (Adamant, Timid, Modest, etc.). Each boosts one stat / lowers another; 5 are neutral.
+- **Friendship (0–255)** — every Pokémon starts at 70; active buddy earns +1/XP, +3/level-up, +5/evolution. Max friendship grants **Best Friends 💖** milestone and **+25% wild catch rate**.
+- **Friendship evolutions** — Eevee → Espeon (day, friendship ≥220) / Umbreon (night). Riolu → Lucario (day). Fires automatically during XP awards.
+- **Shiny deepening** — `shiny_count` tracked on trainer card (`✨×N`). Milestones at 5 (Shiny Collector 🌟) and 10 (Shiny Connoisseur 🌠) catches.
+- **Seasonal events** — monthly type spawn boosts: Halloween Ghost ×4, December Ice ×4, and 10 other themed months. Current season shown on trainer card.
+
+### PvP & Mega Evolution (v2.26+)
+- **Gym leader battles** — `/poke:battle <leader>` challenges Brock, Misty, Lt. Surge, Erika, Koga, Sabrina, Blaine, Giovanni. First win earns that leader's gym badge. Uses TYPE_CHART + buddy stats.
+- **Mega Stone** — rare drop from legendary/mythical encounters. Equipped buddy with Earth badge gets **+10 effective level** in gym battles (`💫 MEGA EVOLVED!` flash in log).
 
 ### Trainer Card & History
 - **Live status bar** — buddy · XP bar · streak tag · encounter state · persona flag
