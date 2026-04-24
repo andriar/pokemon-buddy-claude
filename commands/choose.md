@@ -13,11 +13,11 @@ The user is picking their starter. Present this menu exactly:
   2. 🌿 Bulbasaur    Grass      Backend / Python
   3. 💧 Squirtle     Water      Database / SQL
   4. ⚡ Pikachu      Electric   Fullstack
-  5. 👻 Gastly       Ghost      Security / Reverse Eng
+  5. 👻 Gastly       Ghost      Security  (trade-evolves → Gengar via /poke:export)
   6. 🐉 Dratini      Dragon     Mobile / Android
   7. 🪨 Geodude      Rock       DevOps / Infra
-  8. 🧠 Abra         Psychic    AI / ML
-  9. 🥊 Machop       Fighting   QA / Testing
+  8. 🧠 Abra         Psychic    AI / ML   (trade-evolves → Alakazam via /poke:export)
+  9. 🥊 Machop       Fighting   QA / Testing (trade-evolves → Machamp via /poke:backup)
   10. 🌑 Umbreon     Dark       Cybersecurity
 ```
 

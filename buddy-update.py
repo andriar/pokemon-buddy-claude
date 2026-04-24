@@ -2591,8 +2591,8 @@ def do_choose(target_name, trainer=None):
 
     write_collection(name, [{
         'name': name, 'type': ptype, 'emoji': emoji,
-        'level': level, 'xp': xp, 'caught': TODAY, 'rarity': 'starter',
-    }])
+        'level': level, 'xp': xp, 'caught': TODAY, 'rarity': 'starter', 'form': '',
+    }], party=[name])
 
     STATE_FILE.write_text(f'Starter chosen: {name}! 🎉\n', encoding='utf-8')
 
