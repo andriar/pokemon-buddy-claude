@@ -1930,5 +1930,42 @@ class TestFriendship(_TmpDir, unittest.TestCase):
         self.assertIn('Best Friends', keys)
 
 
+# ── Friendship evolution (F17b) ────────────────────────────────────────────────
+
+class TestFriendshipEvolution(_TmpDir, unittest.TestCase):
+    def _eevee_col(self, friendship):
+        engine.write_collection('Eevee', [
+            {'name': 'Eevee', 'type': 'Normal', 'emoji': '🦊',
+             'level': 20, 'xp': 0, 'caught': '2026-01-01', 'rarity': 'rare',
+             'form': '', 'nature': 'Hardy', 'friendship': friendship}
+        ], party=['Eevee'])
+
+    def test_eevee_to_espeon_day(self):
+        self._eevee_col(230)
+        col = engine.read_collection()
+        out = engine.apply_friendship_evolutions(col, hour=12)
+        self.assertEqual(out, ['Eevee → Espeon'])
+        self.assertEqual(col['pokemon'][0]['name'], 'Espeon')
+
+    def test_eevee_to_umbreon_night(self):
+        self._eevee_col(230)
+        col = engine.read_collection()
+        out = engine.apply_friendship_evolutions(col, hour=22)
+        self.assertEqual(out, ['Eevee → Umbreon'])
+
+    def test_no_evo_below_threshold(self):
+        self._eevee_col(200)
+        col = engine.read_collection()
+        out = engine.apply_friendship_evolutions(col, hour=12)
+        self.assertEqual(out, [])
+        self.assertEqual(col['pokemon'][0]['name'], 'Eevee')
+
+    def test_active_updated_on_evo(self):
+        self._eevee_col(255)
+        col = engine.read_collection()
+        engine.apply_friendship_evolutions(col, hour=12)
+        self.assertEqual(col['active'], 'Espeon')
+
+
 if __name__ == '__main__':
     unittest.main()

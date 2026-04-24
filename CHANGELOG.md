@@ -5,6 +5,17 @@ Format: [version] — date — description
 
 ---
 
+## [2.24.0] — 2026-04-24
+
+### Added
+- **F17b Friendship evolution** — Eevee branches based on friendship + time of day:
+  - Eevee + friendship ≥220 + daytime (5:00–17:59) → **Espeon**
+  - Eevee + friendship ≥220 + nighttime (18:00–4:59) → **Umbreon**
+- Fires automatically during XP awards. Active buddy auto-renames to evolved form. Announcement: `💖 Bond evolution! Eevee → Espeon`.
+- **4 new tests** — day evo, night evo, below-threshold no-op, active slot updates (247 total).
+
+---
+
 ## [2.23.0] — 2026-04-24
 
 ### Added

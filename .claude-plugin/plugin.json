@@ -1,7 +1,7 @@
 {
   "name": "poke",
   "description": "Train a Pok\u00e9mon with every Claude Code session. EXP, evolution chains, wild catches, shiny hunts, trainer titles, and a live ASCII status bar.",
-  "version": "2.23.0",
+  "version": "2.24.0",
   "author": {
     "name": "andriar",
     "url": "https://github.com/andriar"

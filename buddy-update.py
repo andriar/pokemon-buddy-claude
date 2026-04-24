@@ -680,6 +680,40 @@ def write_collection(active, pokemon_list, party=None):
 
 FRIENDSHIP_MAX = 255
 
+# F17b: friendship-gated evolutions. (source, target_name, target_type, target_emoji, min_friendship, hours_range_or_None)
+FRIENDSHIP_EVOLUTIONS = [
+    ('Eevee', 'Espeon',  'Psychic', '🔮', 220, ('day',   range(5, 18))),
+    ('Eevee', 'Umbreon', 'Dark',    '🌑', 220, ('night', set(range(18, 24)) | set(range(0, 5)))),
+]
+
+def _time_is_day(hour=None):
+    h = datetime.now().hour if hour is None else hour
+    return 5 <= h < 18
+
+def apply_friendship_evolutions(col=None, hour=None):
+    """Evolve any party Pokémon that crossed friendship threshold. Returns list of 'old→new' strings."""
+    own_col = col is None
+    if own_col:
+        col = read_collection()
+    day = _time_is_day(hour)
+    evolved = []
+    for p in col['pokemon']:
+        for src, tgt_name, tgt_type, tgt_emoji, min_f, (when, _) in FRIENDSHIP_EVOLUTIONS:
+            if p.get('name') != src: continue
+            if p.get('friendship', 0) < min_f: continue
+            if when == 'day' and not day: continue
+            if when == 'night' and day: continue
+            p['name']  = tgt_name
+            p['type']  = tgt_type
+            p['emoji'] = tgt_emoji
+            evolved.append(f'{src} → {tgt_name}')
+            if col.get('active') == src:
+                col['active'] = tgt_name
+            break
+    if evolved and own_col:
+        write_collection(col['active'], col['pokemon'], col.get('party'))
+    return evolved
+
 def boost_friendship(name, amount, col=None):
     """Add `amount` to a Pokemon's friendship, clamped [0, 255]. Returns new value or None."""
     own_col = col is None
@@ -3202,11 +3236,17 @@ def main():
     BUDDY_FILE.write_text(''.join(out), encoding='utf-8')
 
     # Friendship tick: +1 per XP award, +3 per level-up, +5 per evolution
+    friendship_evo_msg = ''
     if mode in ('xp', 'xp-auto', 'badge'):
         gained_friendship = 1
         if new_level > old_level: gained_friendship += 3 * (new_level - old_level)
         if evolved:               gained_friendship += 5
         boost_friendship(buddy_name, gained_friendship, col)
+        f_evos = apply_friendship_evolutions(col)
+        if f_evos:
+            friendship_evo_msg = ' 💖 Bond evolution! ' + ', '.join(f_evos)
+            if col.get('active') and col['active'] != buddy_name:
+                buddy_name = col['active']
 
     # Sync collection (reuses col in-place)
     sync_active_to_collection(buddy_name, new_level, new_xp, col)
@@ -3293,6 +3333,8 @@ def main():
         encounter_info, active_quest, quest_done,
         exp_share, streak_mult, lucky_mult, item_drop, party_xp_log, raid_msg, egg_msg,
     ))
+    if friendship_evo_msg:
+        print(friendship_evo_msg)
 
 if __name__ == '__main__':
     main()
