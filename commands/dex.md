@@ -1,5 +1,6 @@
 ---
 description: Browse your Pokédex — all caught Pokémon, optionally filtered
+argument-hint: [common|uncommon|rare|legendary|mythical|starter|shiny|fire|water|grass|...]
 ---
 
 Usage:

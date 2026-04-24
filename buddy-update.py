@@ -737,15 +737,37 @@ def battle_leader(leader_id, buddy_level, buddy_type, stats, held_item=None):
         log.append(f'   ✗  DEFEAT. +{xp_reward} XP (participation)')
     return won, xp_reward, log, badge_awarded
 
-def list_leaders(stats):
-    """Return rendered string listing leaders + win status."""
+def list_leaders(stats, buddy_type=None, buddy_level=None):
+    """Render leader list + win status + recommendation (super-effective match not yet defeated)."""
     defeated = stats.get('leaders_defeated', set())
+    recommended = None
+    if buddy_type:
+        best_eff = 1.0
+        for lid, _, ltype, llv, *_ in GYM_LEADERS:
+            if lid in defeated: continue
+            eff = TYPE_CHART.get(buddy_type, {}).get(ltype, 1.0)
+            if eff > best_eff:
+                best_eff = eff
+                recommended = lid
+        # If no super-effective, pick lowest-level undefeated
+        if not recommended:
+            undefeated = [(lid, llv) for lid, _, _, llv, *_ in GYM_LEADERS if lid not in defeated]
+            if undefeated:
+                recommended = min(undefeated, key=lambda x: x[1])[0]
     lines = [' 🏛  GYM LEADERS', ' ' + '─' * 48]
-    for lid, lname, ltype, llv, sig, lemoji, badge_id, _ in GYM_LEADERS:
+    for lid, lname, ltype, llv, sig, lemoji, _, _ in GYM_LEADERS:
         mark = '✓' if lid in defeated else '·'
-        lines.append(f'   {mark} {lemoji} {lname:<11} Lv.{llv:<3} [{ltype:<8}] {sig}')
+        star = '  ⭐ RECOMMENDED' if lid == recommended else ''
+        eff = TYPE_CHART.get(buddy_type, {}).get(ltype, 1.0) if buddy_type else 1.0
+        eff_tag = (' ×2 super-eff' if eff >= 2.0
+                   else ' ×0.5 weak' if eff == 0.5
+                   else ' ×0 null' if eff == 0.0 else '')
+        lines.append(f'   {mark} {lemoji} {lname:<11} Lv.{llv:<3} [{ltype:<8}] {sig:<10}{eff_tag}{star}')
     lines.append('')
-    lines.append(' /poke:battle <leader> to challenge')
+    if recommended:
+        lines.append(f' Best matchup → /poke:battle {recommended}')
+    else:
+        lines.append(' /poke:battle <leader> to challenge')
     return '\n'.join(lines)
 
 # F17b: friendship-gated evolutions. (source, target_name, target_type, target_emoji, min_friendship, hours_range_or_None)
@@ -2922,12 +2944,14 @@ def main():
 
     if mode == 'battle':
         tr_stats = read_stats()
-        if len(args) < 2:
-            print(list_leaders(tr_stats))
-            sys.exit(0)
-        leader_id = args[1].lower()
         col = read_collection()
         active = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), None)
+        if len(args) < 2:
+            btype = active['type'] if active else None
+            blv = active['level'] if active else None
+            print(list_leaders(tr_stats, buddy_type=btype, buddy_level=blv))
+            sys.exit(0)
+        leader_id = args[1].lower()
         if not active:
             print(' ❌ No active buddy. Pick one with /poke:switch.')
             sys.exit(1)
@@ -3148,6 +3172,27 @@ def main():
                     party.remove(match)
                     write_collection(col['active'], col['pokemon'], party)
                     print(f' ✅ {match} removed from party.')
+        elif sub == 'suggest':
+            # Recommend a type-diverse trio from collection, highest levels first
+            sorted_pool = sorted(col['pokemon'], key=lambda p: p.get('level', 1), reverse=True)
+            picks, seen_types = [], set()
+            for p in sorted_pool:
+                t = p.get('type', '?')
+                if t not in seen_types:
+                    picks.append(p)
+                    seen_types.add(t)
+                if len(picks) == 3: break
+            if len(picks) < 3:
+                for p in sorted_pool:
+                    if p['name'] not in {x['name'] for x in picks}:
+                        picks.append(p)
+                    if len(picks) == 3: break
+            print(' 🎯 SUGGESTED PARTY (type diversity + highest level):')
+            for i, p in enumerate(picks, 1):
+                tag = ' ← LEAD' if i == 1 else ''
+                print(f'   Slot {i}: {p["emoji"]} {p["name"]} [{p.get("type","?")}] Lv.{p.get("level",1)}{tag}')
+            print('')
+            print(f' Apply → /poke:party order {",".join(p["name"] for p in picks)}')
         elif sub == 'order':
             # /poke:party order name1,name2,name3
             names = [n.strip() for n in (args[2] if len(args) > 2 else '').split(',')]

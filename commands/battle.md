@@ -1,5 +1,6 @@
 ---
 description: Challenge a gym leader to a PvP battle. Win earns the badge.
+argument-hint: [brock|misty|surge|erika|koga|sabrina|blaine|giovanni]
 ---
 
 Usage:

@@ -2045,6 +2045,20 @@ class TestGymBattles(unittest.TestCase):
         legendary_drops = {item for item, _ in engine.ITEM_DROP_TABLE['legendary']}
         self.assertIn('mega_stone', legendary_drops)
 
+    def test_list_leaders_recommends_super_effective(self):
+        stats = {'leaders_defeated': set(), 'gym_badges': set()}
+        # Water buddy → super-effective vs Blaine (Fire) and Giovanni (Ground)
+        out = engine.list_leaders(stats, buddy_type='Water')
+        self.assertIn('⭐ RECOMMENDED', out)
+        self.assertIn('×2 super-eff', out)
+
+    def test_list_leaders_skips_defeated_in_recommendation(self):
+        stats = {'leaders_defeated': {'brock'}, 'gym_badges': {'boulder'}}
+        out = engine.list_leaders(stats, buddy_type='Water')
+        # Brock should not be recommended (already defeated)
+        brock_line = next(L for L in out.splitlines() if 'Brock' in L)
+        self.assertNotIn('⭐ RECOMMENDED', brock_line)
+
 
 if __name__ == '__main__':
     unittest.main()

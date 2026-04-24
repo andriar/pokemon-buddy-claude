@@ -5,6 +5,19 @@ Format: [version] — date — description
 
 ---
 
+## [2.28.0] — 2026-04-24
+
+### Added
+- **Argument hints** — slash commands now show inline option hints in Claude Code: `/poke:battle [brock|misty|surge|...]`, `/poke:party [list|add|remove|suggest|order]`, `/poke:dex [common|rare|fire|...]`, `/poke:switch <pokemon name>`, `/poke:item [list|equip|unequip]`. Reduces "which option?" friction.
+- **Smart leader recommendation** — `/poke:battle` (no-arg) now highlights the super-effective undefeated leader as `⭐ RECOMMENDED` based on your active buddy's type, plus shows per-leader `×2/×0.5/×0` effectiveness tags. Falls back to lowest-level undefeated when no super-effective match exists.
+- **`/poke:party suggest`** — auto-recommends a type-diverse trio from your collection sorted by level, prints ready-to-run `/poke:party order` command to apply.
+- **2 new tests** — leader recommendation picks super-effective, excludes defeated (260 total).
+
+### Changed
+- `list_leaders()` accepts `buddy_type` + `buddy_level` for context-aware output.
+
+---
+
 ## [2.27.0] — 2026-04-24
 
 ### Added
