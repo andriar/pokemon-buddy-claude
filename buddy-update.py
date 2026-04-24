@@ -55,6 +55,7 @@ COLLECTION_FILE = Path.home() / '.claude' / 'pokemon-collection.md'
 STATS_FILE      = Path.home() / '.claude' / 'buddy-stats.md'
 STATE_FILE      = Path.home() / '.claude' / 'buddy-state.txt'
 ENCOUNTER_FILE  = Path.home() / '.claude' / 'buddy-encounter.json'
+RAID_FILE       = Path.home() / '.claude' / 'buddy-raid.json'
 TODAY           = date.today().strftime('%Y-%m-%d')
 LOG_CAP         = 15
 LEVEL_CAP       = 100         # max Pokémon level; XP past cap → Exp Share
@@ -82,6 +83,63 @@ ITEM_DROP_TABLE = {
     'legendary': [('shiny_charm', 0.02), ('everstone', 0.02), ('amulet_coin', 0.03)],
     'mythical':  [('shiny_charm', 0.05), ('everstone', 0.03)],
 }
+
+# ── Weekly raid ────────────────────────────────────────────────────────────────
+RAID_BASE_HP = 5000   # total HP pool for the weekly boss
+
+def _current_week_id():
+    return date.today().strftime('%Y-W%W')
+
+def read_raid():
+    if not RAID_FILE.exists():
+        return None
+    try:
+        return json.loads(RAID_FILE.read_text(encoding='utf-8'))
+    except Exception:
+        return None
+
+def write_raid(data):
+    RAID_FILE.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding='utf-8')
+
+def get_weekly_raid():
+    """Return current raid dict; auto-generates new boss on week change."""
+    from lib.data import POKEMON_POOL
+    raid = read_raid()
+    week_id = _current_week_id()
+    if raid and raid.get('week_id') == week_id:
+        return raid
+    # New week — pick a new legendary boss
+    pool = POKEMON_POOL.get('legendary', [])
+    if not pool:
+        return None
+    idx  = hash(week_id) % len(pool)
+    boss_name, boss_type, boss_emoji = pool[idx]
+    raid = {
+        'week_id':      week_id,
+        'boss_name':    boss_name,
+        'boss_type':    boss_type,
+        'boss_emoji':   boss_emoji,
+        'boss_hp':      RAID_BASE_HP,
+        'hp_remaining': RAID_BASE_HP,
+        'captured':     False,
+        'damage_log':   [],
+    }
+    write_raid(raid)
+    return raid
+
+def apply_raid_damage(xp_gained):
+    """Deal damage to weekly boss equal to xp * 0.1. Returns (raid, damage, ko'd)."""
+    raid = get_weekly_raid()
+    if not raid or raid.get('captured'):
+        return raid, 0, False
+    damage = max(1, int(xp_gained * 0.1))
+    raid['hp_remaining'] = max(0, raid['hp_remaining'] - damage)
+    raid['damage_log'].append({'date': TODAY, 'xp': xp_gained, 'damage': damage})
+    ko = raid['hp_remaining'] == 0
+    if ko:
+        raid['captured'] = True
+    write_raid(raid)
+    return raid, damage, ko
 
 # ── Gym badge registry ────────────────────────────────────────────────────────
 # Each badge: (id, emoji, name, unlock_feature, hint)
@@ -2110,7 +2168,7 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                         quest_msg='', lv_reward_msg='',
                         encounter_info=None, active_quest=None, quest_done=False,
                         exp_share=None, streak_mult=1.0, lucky_mult=1.0,
-                        item_drop=None, party_xp_log=None):
+                        item_drop=None, party_xp_log=None, raid_msg=''):
     xp_floor    = xp_for_level(new_level)
     xp_disp     = new_xp - xp_floor
     xp_max_disp = new_max - xp_floor
@@ -2138,6 +2196,8 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
     lines.append(' ' + '   '.join(parts))
     if inventory_msg:
         lines.append(f' 🎁 Earned: {inventory_msg}')
+    if raid_msg:
+        lines.append(f' {raid_msg}')
     if item_drop and item_drop in HELD_ITEMS:
         it = HELD_ITEMS[item_drop]
         lines.append(f' 💎 Item drop! {it["emoji"]} {it["name"]} added to bag — {it["desc"]}')
@@ -2619,6 +2679,25 @@ def main():
         do_switch(args[1] if len(args) > 1 else '')
         sys.exit(0)
 
+    if mode == 'raid':
+        raid = get_weekly_raid()
+        if not raid:
+            print(' 🐉 No raid boss available.')
+        else:
+            hp_pct  = int(raid['hp_remaining'] / raid['boss_hp'] * 100)
+            bar_len = 30
+            filled  = int(bar_len * hp_pct / 100)
+            hp_bar  = '█' * filled + '░' * (bar_len - filled)
+            status  = '✅ CAPTURED' if raid.get('captured') else f'{hp_pct}% HP remaining'
+            total_dmg = sum(e['damage'] for e in raid.get('damage_log', []))
+            print(f' 🐉 Weekly Raid Boss — Week {raid["week_id"]}')
+            print(f'    {raid["boss_emoji"]} {raid["boss_name"]} [{raid["boss_type"]}]')
+            print(f'    [{hp_bar}]  {raid["hp_remaining"]} / {raid["boss_hp"]} HP')
+            print(f'    Status: {status}')
+            print(f'    Your total damage dealt: {total_dmg}')
+            print(f'    New boss spawns every Monday.')
+        sys.exit(0)
+
     if mode == 'party':
         sub = args[1] if len(args) > 1 else 'list'
         col = read_collection()
@@ -2722,7 +2801,7 @@ def main():
     b_emoji = b_name = b_desc = ''
     streak_bonus = 0; streak_count = 0; streak_mult = 1.0
     inventory_msg = ''; combo = 1; combo_mult = 1.0
-    quest_msg = ''; lv_reward_msg = ''
+    quest_msg = ''; lv_reward_msg = ''; raid_msg = ''
 
     # Load stats early — needed for streak and milestone tracking
     tr_stats = read_stats()
@@ -2782,6 +2861,21 @@ def main():
         badge_line = f'- {b_emoji} **{b_name}** — *{b_desc}* `{TODAY}`'
         tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + add_xp
         inventory_msg = earn_inventory(add_xp, True, tr_stats)
+
+    # Raid boss damage (Earth badge): XP chips boss HP
+    raid_msg = ''
+    if mode in ('xp', 'xp-auto') and has_unlock('raid_battles', tr_stats):
+        raid, raid_dmg, raid_ko = apply_raid_damage(add_xp)
+        if raid and raid_dmg:
+            hp_pct = int(raid['hp_remaining'] / raid['boss_hp'] * 100)
+            if raid_ko:
+                raid_msg = (f'🐉 RAID KO! {raid["boss_emoji"]} {raid["boss_name"]} defeated! '
+                            f'Added to Pokédex! Bonus XP incoming!')
+                # Add boss to collection
+                add_to_collection(raid['boss_name'], raid['boss_type'], raid['boss_emoji'], 'legendary')
+            else:
+                raid_msg = (f'🐉 Raid: {raid["boss_emoji"]} {raid["boss_name"]} '
+                            f'{hp_pct}% HP  (-{raid_dmg} dmg)')
 
     # Party XP split (Thunder badge): bench members get share before lead is banked.
     party_xp_log = []
@@ -2904,7 +2998,7 @@ def main():
         inventory_msg, combo, combo_mult,
         quest_msg, lv_reward_msg,
         encounter_info, active_quest, quest_done,
-        exp_share, streak_mult, lucky_mult, item_drop, party_xp_log,
+        exp_share, streak_mult, lucky_mult, item_drop, party_xp_log, raid_msg,
     ))
 
 if __name__ == '__main__':

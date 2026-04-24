@@ -5,6 +5,17 @@ Format: [version] — date — description
 
 ---
 
+## [2.16.0] — 2026-04-24
+
+### Added
+- **Weekly raid boss** — legendary boss auto-generated every Monday from the legendary pool (deterministic from ISO week hash). HP = 5000.
+- **XP deals raid damage** — each XP gain chips `xp × 0.1` HP off the boss (Earth badge required). KO adds boss to Pokédex.
+- **`/poke:raid`** — shows current boss, HP bar, status, total damage dealt, week ID
+- **`buddy-raid.json`** — persistent raid state (`week_id`, `boss_name`, `hp_remaining`, `captured`, `damage_log`)
+- **Raid message in XP announcement** — `🐉 Raid: Rayquaza 62% HP (-5 dmg)` shown on each XP gain when raid active
+
+---
+
 ## [2.15.0] — 2026-04-24
 
 ### Added
