@@ -5,6 +5,20 @@ Format: [version] — date — description
 
 ---
 
+## [2.30.0] — 2026-04-24
+
+### Added
+- **F17 Anti-cheat** — three layered guards against XP/battle abuse:
+  - **Dedup window** — identical `/poke:xp <desc>` rejected within 5 min (SHA1 of normalized text). Countdown shown in rejection message.
+  - **Daily XP cap** — hard ceiling of 2000 XP per UTC day. Excess clipped with `🛑 Daily XP cap reached` notice; resets 00:00.
+  - **Battle stamina** — gym battles cost 1 of 3 stamina points, regen +1 per 30 min. Out-of-stamina blocks battle with ETA to next point; stamina line shown after every victory.
+- Stats schema bumped to v6 with fields: `daily_xp`, `daily_xp_date`, `last_xp_hash`, `last_xp_ts`, `battle_stamina`, `battle_stamina_ts`.
+
+### Why
+Previously `/poke:battle giovanni` spam + duplicate `/poke:xp` descriptions farmed unlimited XP. These guards raise friction on obvious abuse while staying invisible during normal play.
+
+---
+
 ## [2.29.0] — 2026-04-24
 
 ### Added

@@ -63,7 +63,13 @@ ARCHIVE_FILE    = Path.home() / '.claude' / 'buddy-log-archive.md'
 
 SHINY_RATE        = 1 / 200   # 0.5% base (Cascade badge raises to 1/150)
 STREAK_BONUS_XP   = 20        # bonus XP for first award of the day
-STATS_SCHEMA_VER  = 5         # bumped: added egg
+STATS_SCHEMA_VER  = 6         # bumped: anti-cheat fields
+
+# ── Anti-cheat (F17) ─────────────────────────────────────────────────────────
+DAILY_XP_CAP       = 2000   # hard ceiling per UTC day
+XP_DEDUP_WINDOW    = 300    # 5 min — same desc rejected
+BATTLE_STAMINA_MAX = 3      # gym battles allowed before regen required
+BATTLE_REGEN_SECS  = 1800   # 30 min per stamina point
 
 # ── Natures (F13) ────────────────────────────────────────────────────────────
 # (name, up_stat, down_stat). 5 neutral natures (up == down) have no effect.
@@ -383,6 +389,10 @@ def read_stats():
         # Daily quest
         'daily_quest_date': '', 'daily_quest_id': '', 'daily_quest_done': False,
         'tasks_today': 0,
+        # Anti-cheat
+        'daily_xp': 0, 'daily_xp_date': '',
+        'last_xp_hash': '', 'last_xp_ts': 0,
+        'battle_stamina': BATTLE_STAMINA_MAX, 'battle_stamina_ts': 0,
     }
     if not STATS_FILE.exists():
         return defaults
@@ -448,6 +458,12 @@ def read_stats():
         'daily_quest_id':    gs('daily_quest_id'),
         'daily_quest_done':  gb('daily_quest_done'),
         'tasks_today':       gi('tasks_today'),
+        'daily_xp':          gi('daily_xp'),
+        'daily_xp_date':     gs('daily_xp_date'),
+        'last_xp_hash':      gs('last_xp_hash'),
+        'last_xp_ts':        gi('last_xp_ts'),
+        'battle_stamina':    gi('battle_stamina') if '**battle_stamina**' in text else defaults['battle_stamina'],
+        'battle_stamina_ts': gi('battle_stamina_ts'),
     }
     return stats
 
@@ -485,6 +501,12 @@ def write_stats(s):
         f'**daily_quest_id**: {s.get("daily_quest_id", "")}\n'
         f'**daily_quest_done**: {b(s.get("daily_quest_done", False))}\n'
         f'**tasks_today**: {s.get("tasks_today", 0)}\n'
+        f'**daily_xp**: {s.get("daily_xp", 0)}\n'
+        f'**daily_xp_date**: {s.get("daily_xp_date", "")}\n'
+        f'**last_xp_hash**: {s.get("last_xp_hash", "")}\n'
+        f'**last_xp_ts**: {s.get("last_xp_ts", 0)}\n'
+        f'**battle_stamina**: {s.get("battle_stamina", BATTLE_STAMINA_MAX)}\n'
+        f'**battle_stamina_ts**: {s.get("battle_stamina_ts", 0)}\n'
         + ''.join(f'**item_{iid}**: {s.get(f"item_{iid}", 0)}\n' for iid in ITEM_IDS)
         + f'**egg_species**: {s.get("egg_species", "")}\n'
         + f'**egg_type**: {s.get("egg_type", "")}\n'
@@ -518,6 +540,67 @@ def update_streak(stats):
 def streak_multiplier(streak):
     """XP multiplier from consecutive-day streak. Caps at 30 days (+60%)."""
     return 1.0 + min(streak, 30) * 0.02
+
+# ── Anti-cheat helpers ────────────────────────────────────────────────────────
+
+import hashlib
+
+def _desc_hash(desc):
+    norm = re.sub(r'\s+', ' ', (desc or '').strip().lower())
+    return hashlib.sha1(norm.encode('utf-8')).hexdigest()[:12] if norm else ''
+
+def check_xp_dedup(stats, desc):
+    """True if desc is a near-duplicate of the last award within window."""
+    h = _desc_hash(desc)
+    if not h:
+        return False
+    last_h = stats.get('last_xp_hash', '')
+    last_ts = int(stats.get('last_xp_ts', 0) or 0)
+    now = int(time.time())
+    return bool(last_h) and h == last_h and (now - last_ts) < XP_DEDUP_WINDOW
+
+def apply_daily_cap(stats, add_xp):
+    """Clip add_xp to remaining daily budget. Returns (clipped, was_clipped, remaining_before)."""
+    if stats.get('daily_xp_date', '') != TODAY:
+        stats['daily_xp_date'] = TODAY
+        stats['daily_xp'] = 0
+    spent = int(stats.get('daily_xp', 0) or 0)
+    remaining = max(0, DAILY_XP_CAP - spent)
+    clipped = max(0, min(add_xp, remaining))
+    return clipped, (clipped < add_xp), remaining
+
+def regen_stamina(stats):
+    """Regenerate battle stamina based on elapsed time. Returns current value."""
+    now = int(time.time())
+    cur = int(stats.get('battle_stamina', BATTLE_STAMINA_MAX))
+    last = int(stats.get('battle_stamina_ts', 0) or 0)
+    if cur >= BATTLE_STAMINA_MAX:
+        stats['battle_stamina'] = BATTLE_STAMINA_MAX
+        stats['battle_stamina_ts'] = now
+        return BATTLE_STAMINA_MAX
+    if last == 0:
+        stats['battle_stamina_ts'] = now
+        return cur
+    gained = (now - last) // BATTLE_REGEN_SECS
+    if gained > 0:
+        cur = min(BATTLE_STAMINA_MAX, cur + gained)
+        stats['battle_stamina'] = cur
+        stats['battle_stamina_ts'] = last + gained * BATTLE_REGEN_SECS
+    return cur
+
+def stamina_eta(stats):
+    """Seconds until next stamina point regenerates."""
+    last = int(stats.get('battle_stamina_ts', 0) or 0)
+    if not last:
+        return BATTLE_REGEN_SECS
+    elapsed = int(time.time()) - last
+    return max(0, BATTLE_REGEN_SECS - (elapsed % BATTLE_REGEN_SECS))
+
+def fmt_duration(secs):
+    secs = max(0, int(secs))
+    if secs < 60: return f'{secs}s'
+    if secs < 3600: return f'{secs // 60}m {secs % 60}s'
+    return f'{secs // 3600}h {(secs % 3600) // 60}m'
 
 # ── Milestone & title logic ───────────────────────────────────────────────────
 
@@ -2976,10 +3059,25 @@ def main():
         if not active:
             print(' ❌ No active buddy. Pick one with /poke:switch.')
             sys.exit(1)
+        # Anti-cheat: battle stamina gate
+        stamina = regen_stamina(tr_stats)
+        if stamina <= 0:
+            wait = stamina_eta(tr_stats)
+            print(' 💤 Out of battle stamina. Rest and try again.')
+            print(f'    Next point regenerates in {fmt_duration(wait)} '
+                  f'(max {BATTLE_STAMINA_MAX}, +1 per {BATTLE_REGEN_SECS // 60}min).')
+            write_stats(tr_stats)
+            sys.exit(0)
+        tr_stats['battle_stamina'] = stamina - 1
+        if tr_stats.get('battle_stamina_ts', 0) == 0 or stamina == BATTLE_STAMINA_MAX:
+            tr_stats['battle_stamina_ts'] = int(time.time())
         won, xp_reward, log, badge = battle_leader(
             leader_id, active['level'], active['type'], tr_stats, held_item=get_held_item()
         )
         print('\n'.join(log))
+        print(f'    💪 Stamina: {tr_stats["battle_stamina"]}/{BATTLE_STAMINA_MAX}'
+              + (f'  (next +1 in {fmt_duration(stamina_eta(tr_stats))})'
+                 if tr_stats['battle_stamina'] < BATTLE_STAMINA_MAX else ''))
         tr_stats['total_xp_ever'] = tr_stats.get('total_xp_ever', 0) + xp_reward
         write_stats(tr_stats)
         if badge:
@@ -3284,6 +3382,7 @@ def main():
     streak_bonus = 0; streak_count = 0; streak_mult = 1.0
     inventory_msg = ''; combo = 1; combo_mult = 1.0
     quest_msg = ''; lv_reward_msg = ''; raid_msg = ''
+    cap_msg = ''
 
     # Load stats early — needed for streak and milestone tracking
     tr_stats = read_stats()
@@ -3303,6 +3402,13 @@ def main():
             base_xp = detect_xp(desc)
             log_desc = desc or 'XP awarded'
 
+        # Anti-cheat: dedup near-identical descriptions within window (manual mode only)
+        if not is_auto and check_xp_dedup(tr_stats, desc):
+            wait = XP_DEDUP_WINDOW - (int(time.time()) - int(tr_stats.get('last_xp_ts', 0) or 0))
+            print(f' ⚠️  Duplicate XP rejected — same task within {XP_DEDUP_WINDOW // 60} min.')
+            print(f'    Describe a different task or retry in {fmt_duration(wait)}.')
+            sys.exit(0)
+
         # Combo multiplier — skipped for auto (every turn shouldn't bump combo)
         if is_auto:
             combo, combo_mult = 1, 1.0
@@ -3317,6 +3423,15 @@ def main():
         lucky_mult  = 1.5 if _held_item == 'lucky_egg' else 1.0
 
         add_xp = int(base_xp * combo_mult * streak_mult * lucky_mult) + streak_bonus
+
+        # Anti-cheat: clip to daily cap, record dedup fingerprint
+        add_xp, was_capped, _ = apply_daily_cap(tr_stats, add_xp)
+        if was_capped:
+            cap_msg = f'🛑 Daily XP cap ({DAILY_XP_CAP}) reached — clipped to +{add_xp} XP. Resets 00:00.'
+        tr_stats['daily_xp'] = int(tr_stats.get('daily_xp', 0) or 0) + add_xp
+        if not is_auto:
+            tr_stats['last_xp_hash'] = _desc_hash(desc)
+            tr_stats['last_xp_ts']   = int(time.time())
 
         # Track achievement counters + daily task count (keyword-driven → auto mode skips)
         if not is_auto:
@@ -3502,6 +3617,8 @@ def main():
     ))
     if friendship_evo_msg:
         print(friendship_evo_msg)
+    if cap_msg:
+        print(f' {cap_msg}')
 
 if __name__ == '__main__':
     main()

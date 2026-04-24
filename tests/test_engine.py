@@ -2073,5 +2073,75 @@ class TestGymBattles(unittest.TestCase):
         self.assertNotIn('⭐ RECOMMENDED', brock_line)
 
 
+class TestAntiCheat(unittest.TestCase):
+    def test_desc_hash_normalizes_whitespace_and_case(self):
+        self.assertEqual(engine._desc_hash('Fix Bug'), engine._desc_hash('  fix  bug  '))
+        self.assertNotEqual(engine._desc_hash('fix bug'), engine._desc_hash('add feature'))
+
+    def test_desc_hash_empty_returns_empty(self):
+        self.assertEqual(engine._desc_hash(''), '')
+        self.assertEqual(engine._desc_hash('   '), '')
+
+    def test_dedup_blocks_same_desc_within_window(self):
+        import time as _t
+        stats = {'last_xp_hash': engine._desc_hash('fix auth bug'),
+                 'last_xp_ts': int(_t.time())}
+        self.assertTrue(engine.check_xp_dedup(stats, 'fix auth bug'))
+        self.assertFalse(engine.check_xp_dedup(stats, 'add feature'))
+
+    def test_dedup_allows_after_window(self):
+        import time as _t
+        stats = {'last_xp_hash': engine._desc_hash('fix bug'),
+                 'last_xp_ts': int(_t.time()) - engine.XP_DEDUP_WINDOW - 1}
+        self.assertFalse(engine.check_xp_dedup(stats, 'fix bug'))
+
+    def test_dedup_allows_when_no_prior_hash(self):
+        self.assertFalse(engine.check_xp_dedup({}, 'anything'))
+
+    def test_daily_cap_clips_to_remaining(self):
+        stats = {'daily_xp': engine.DAILY_XP_CAP - 50, 'daily_xp_date': engine.TODAY}
+        clipped, capped, rem = engine.apply_daily_cap(stats, 200)
+        self.assertEqual(clipped, 50)
+        self.assertTrue(capped)
+        self.assertEqual(rem, 50)
+
+    def test_daily_cap_passthrough_when_under_budget(self):
+        stats = {'daily_xp': 100, 'daily_xp_date': engine.TODAY}
+        clipped, capped, _ = engine.apply_daily_cap(stats, 50)
+        self.assertEqual(clipped, 50)
+        self.assertFalse(capped)
+
+    def test_daily_cap_resets_on_new_day(self):
+        stats = {'daily_xp': engine.DAILY_XP_CAP, 'daily_xp_date': '2020-01-01'}
+        clipped, capped, _ = engine.apply_daily_cap(stats, 100)
+        self.assertEqual(clipped, 100)
+        self.assertFalse(capped)
+        self.assertEqual(stats['daily_xp_date'], engine.TODAY)
+        self.assertEqual(stats['daily_xp'], 0)
+
+    def test_regen_stamina_recovers_points_over_time(self):
+        import time as _t
+        stats = {'battle_stamina': 0,
+                 'battle_stamina_ts': int(_t.time()) - 2 * engine.BATTLE_REGEN_SECS - 1}
+        self.assertEqual(engine.regen_stamina(stats), 2)
+
+    def test_regen_stamina_caps_at_max(self):
+        import time as _t
+        stats = {'battle_stamina': 1,
+                 'battle_stamina_ts': int(_t.time()) - 100 * engine.BATTLE_REGEN_SECS}
+        self.assertEqual(engine.regen_stamina(stats), engine.BATTLE_STAMINA_MAX)
+
+    def test_regen_stamina_no_change_within_interval(self):
+        import time as _t
+        stats = {'battle_stamina': 1, 'battle_stamina_ts': int(_t.time())}
+        self.assertEqual(engine.regen_stamina(stats), 1)
+
+    def test_fmt_duration_ranges(self):
+        self.assertEqual(engine.fmt_duration(45), '45s')
+        self.assertEqual(engine.fmt_duration(125), '2m 5s')
+        self.assertEqual(engine.fmt_duration(3725), '1h 2m')
+        self.assertEqual(engine.fmt_duration(-10), '0s')
+
+
 if __name__ == '__main__':
     unittest.main()
