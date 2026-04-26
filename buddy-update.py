@@ -1765,7 +1765,7 @@ def render_status(text):
     lv_int   = int(level) if str(level).isdigit() else 1
     at_cap   = lv_int >= LEVEL_CAP
     xp_b     = bar(xp_max_disp if at_cap else xp_disp, xp_max_disp, 24)
-    xp_label = 'MAX ✦ Exp Share active' if at_cap else f'{xp_disp} / {xp_max_disp}'
+    xp_label = 'MAX✦ Exp Share' if at_cap else f'{xp_disp} / {xp_max_disp}'
     sep  = '─' * 52
 
     streak_icon = '🔥' if streak >= 7 else '📅'
@@ -1897,7 +1897,7 @@ def render_statusline(plugin_mode=False):
     xp_max_disp = xp_max - xp_floor
     pct      = int(xp_disp * 100 / xp_max_disp) if xp_max_disp else 0
     if active['level'] >= LEVEL_CAP:
-        xp_str = f'{colored_bar(xp_max_disp, xp_max_disp, 10)} MAX ✦ Exp Share active'
+        xp_str = f'{colored_bar(xp_max_disp, xp_max_disp, 10)} MAX✦'
     else:
         xp_str = f'{colored_bar(xp_disp, xp_max_disp, 10)} {xp_disp}/{xp_max_disp}'
 
@@ -1920,11 +1920,22 @@ def render_statusline(plugin_mode=False):
     streak    = tr_stats.get('streak', 0)
     streak_tag = f'  🔥{streak}' if streak >= 3 else ''
 
+    # Combo: show when active (within window) and ≥ 2
+    combo_tag = ''
+    combo_n   = tr_stats.get('combo', 0)
+    if combo_n >= 2:
+        try:
+            last = datetime.fromisoformat(tr_stats.get('combo_ts', ''))
+            if (datetime.now() - last).total_seconds() <= COMBO_WINDOW_SECS:
+                combo_tag = f'  ⚡×{combo_n}'
+        except (ValueError, TypeError):
+            pass
+
     # Anti-cheat guards: surface stamina when drained
     stamina = regen_stamina(tr_stats)
     stamina_tag = f'  💪{stamina}/{BATTLE_STAMINA_MAX}' if stamina < BATTLE_STAMINA_MAX else ''
 
-    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{streak_tag}{stamina_tag}{persona_suffix}'
+    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{combo_tag}{streak_tag}{stamina_tag}{persona_suffix}'
 
 def _active_nature(col):
     active = next((p for p in col['pokemon'] if p['name'] == col.get('active')), None)

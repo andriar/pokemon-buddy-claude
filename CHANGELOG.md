@@ -5,6 +5,16 @@ Format: [version] — date — description
 
 ---
 
+## [2.33.1] — 2026-04-26
+
+### Added
+- **Combo tag in statusline** — shows `⚡×N` when combo ≥ 2 and within `COMBO_WINDOW_SECS`. Sits between encounter/chatter and 🔥 streak.
+
+### Changed
+- **MAX-level display compacted** — `MAX ✦ Exp Share active` → `MAX✦` in statusline, `MAX✦ Exp Share` in `/poke:status` short view. Saves visual real estate when buddy hits Lv.100.
+
+---
+
 ## [2.33.0] — 2026-04-26
 
 ### Added
