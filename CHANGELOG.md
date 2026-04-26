@@ -5,6 +5,22 @@ Format: [version] — date — description
 
 ---
 
+## [2.35.1] — 2026-04-27
+
+### Changed
+- **Anti-cheat: level-scaled daily XP cap** — cap now `max(2000, highest_level_in_collection * 100)` instead of fixed 2000. Prevents endgame trainers from grinding indefinitely against a cap calibrated for the pre-v2.32 flat XP curve.
+  - New trainers: 2000/day baseline (unchanged)
+  - Mid-game (max Lv.50): 5000/day
+  - Endgame (any Pokémon at Lv.100): 10000/day
+  - Cap anchors to **highest-level Pokémon in dex** (not active buddy) — switching buddies never reduces cap; progression unlocks are permanent.
+  - `apply_daily_cap` now accepts optional `col` arg; legacy callers get old 2000 floor.
+  - All display sites (statusline, status card, HTML card) compute dynamic cap.
+
+### Why
+The fixed 2000-cap was set in v2.30 (F17 anti-cheat) before v2.32's PoGo-style exponential XP curve. With the new curve, Lv.99→100 needs ~50k XP — under the old cap, that's 25 days of perfect grinding. Level-scaled cap restores reasonable progression at high tiers without weakening anti-abuse intent (dedup, multiplier-stack-cap, battle stamina all unchanged).
+
+---
+
 ## [2.35.0] — 2026-04-27
 
 ### Added

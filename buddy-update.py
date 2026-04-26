@@ -72,7 +72,9 @@ STREAK_BONUS_XP   = 20        # bonus XP for first award of the day
 STATS_SCHEMA_VER  = 7         # bumped: PoGo-style XP curve (v2.32)
 
 # ── Anti-cheat (F17) ─────────────────────────────────────────────────────────
-DAILY_XP_CAP       = 2000   # hard ceiling per UTC day
+DAILY_XP_CAP_FLOOR = 2000   # baseline daily cap for new trainers
+DAILY_XP_CAP_PER_LV = 100   # cap += per highest-level Pokémon in collection
+DAILY_XP_CAP       = DAILY_XP_CAP_FLOOR  # legacy export — actual cap is dynamic via daily_cap_for()
 XP_DEDUP_WINDOW    = 300    # 5 min — same desc rejected
 BATTLE_STAMINA_MAX = 3      # gym battles allowed before regen required
 BATTLE_REGEN_SECS  = 1800   # 30 min per stamina point
@@ -616,13 +618,24 @@ def check_xp_dedup(stats, desc):
     now = int(time.time())
     return bool(last_h) and h == last_h and (now - last_ts) < XP_DEDUP_WINDOW
 
-def apply_daily_cap(stats, add_xp):
+def daily_cap_for(col):
+    """Dynamic daily XP cap — anchored to highest-level Pokémon ever caught.
+    Anti-cheat scales with progression, no penalty when switching buddies.
+    Floor of 2000 keeps new trainers safe; +100 per highest level in dex.
+    """
+    if not col or not col.get('pokemon'):
+        return DAILY_XP_CAP_FLOOR
+    max_lv = max((p.get('level', 1) for p in col['pokemon']), default=1)
+    return max(DAILY_XP_CAP_FLOOR, max_lv * DAILY_XP_CAP_PER_LV)
+
+def apply_daily_cap(stats, add_xp, col=None):
     """Clip add_xp to remaining daily budget. Returns (clipped, was_clipped, remaining_before)."""
     if stats.get('daily_xp_date', '') != TODAY:
         stats['daily_xp_date'] = TODAY
         stats['daily_xp'] = 0
     spent = int(stats.get('daily_xp', 0) or 0)
-    remaining = max(0, DAILY_XP_CAP - spent)
+    cap = daily_cap_for(col) if col is not None else DAILY_XP_CAP
+    remaining = max(0, cap - spent)
     clipped = max(0, min(add_xp, remaining))
     return clipped, (clipped < add_xp), remaining
 
@@ -1719,11 +1732,12 @@ def _guards_display(stats):
     # Daily XP: reset display if date rolled
     daily_date = stats.get('daily_xp_date', '')
     daily_xp   = stats.get('daily_xp', 0) if daily_date == TODAY else 0
-    pct = int(daily_xp * 100 / DAILY_XP_CAP) if DAILY_XP_CAP else 0
+    cap = daily_cap_for(read_collection())
+    pct = int(daily_xp * 100 / cap) if cap else 0
     filled = int(10 * min(pct, 100) / 100)
     xp_bar = '█' * filled + '░' * (10 - filled)
     return (f'💪 Stamina {stamina}/{BATTLE_STAMINA_MAX}  ·  '
-            f'🎯 XP today [{xp_bar}] {daily_xp}/{DAILY_XP_CAP}')
+            f'🎯 XP today [{xp_bar}] {daily_xp}/{cap}')
 
 def _held_item_display():
     held = get_held_item()
@@ -2371,7 +2385,8 @@ def render_html_card():
     # Guards
     stamina = regen_stamina(dict(tr_stats))  # copy — don't mutate on export
     daily_xp_today = tr_stats.get('daily_xp', 0) if tr_stats.get('daily_xp_date') == TODAY else 0
-    daily_xp_pct = int(min(100, daily_xp_today * 100 / DAILY_XP_CAP)) if DAILY_XP_CAP else 0
+    daily_xp_cap   = daily_cap_for(read_collection())
+    daily_xp_pct = int(min(100, daily_xp_today * 100 / daily_xp_cap)) if daily_xp_cap else 0
 
     buddy_spr_url  = sprite_url(stage, shiny=buddy_shiny)
     buddy_img_html = (f'<img src="{buddy_spr_url}" class="buddy-sprite" alt="{_he(stage)}">'
@@ -2868,7 +2883,7 @@ def render_html_card():
         </div>
       </div>
       <div class="guard-meter">
-        <div class="guard-label">XP Today · {daily_xp_today:,} / {DAILY_XP_CAP:,}</div>
+        <div class="guard-label">XP Today · {daily_xp_today:,} / {daily_xp_cap:,}</div>
         <div class="sbar-track"><div class="sbar-fill" style="width:{daily_xp_pct}%;background:#22d3ee"></div></div>
       </div>
     </div>
@@ -4283,10 +4298,11 @@ def main():
         stack_mult = min(combo_mult * streak_mult * lucky_mult, 3.0)
         add_xp = int(base_xp * stack_mult) + streak_bonus
 
-        # Anti-cheat: clip to daily cap, record dedup fingerprint
-        add_xp, was_capped, _ = apply_daily_cap(tr_stats, add_xp)
+        # Anti-cheat: clip to daily cap (level-scaled), record dedup fingerprint
+        _cap_for_msg = daily_cap_for(col)
+        add_xp, was_capped, _ = apply_daily_cap(tr_stats, add_xp, col)
         if was_capped:
-            cap_msg = f'🛑 Daily XP cap ({DAILY_XP_CAP}) reached — clipped to +{add_xp} XP. Resets 00:00.'
+            cap_msg = f'🛑 Daily XP cap ({_cap_for_msg}) reached — clipped to +{add_xp} XP. Resets 00:00.'
         tr_stats['daily_xp'] = int(tr_stats.get('daily_xp', 0) or 0) + add_xp
         if not is_auto:
             tr_stats['last_xp_hash'] = _desc_hash(desc)
