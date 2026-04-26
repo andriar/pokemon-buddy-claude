@@ -5,6 +5,30 @@ Format: [version] — date — description
 
 ---
 
+## [2.32.0] — 2026-04-26
+
+### Changed
+- **XP curve overhaul** — Pokémon GO-style escalating bands replace old quadratic-ish curve. Endgame leveling now meaningfully steeper while early levels stay fast.
+  - Lv 1-10: +100/lv (onboarding) → cumulative 900 XP
+  - Lv 11-20: +300/lv → 3,900 XP
+  - Lv 21-35: +800/lv → 15,900 XP
+  - Lv 36-60: +2,000/lv → 65,900 XP
+  - Lv 61-85: +5,000/lv → 190,900 XP
+  - Lv 86-100: +10,000/lv → **340,900 XP** (was ~17,400)
+- **Stack multiplier cap** — `combo × streak × lucky` clipped at **3.0×**. Prevents 6×+ XP spikes that broke curve under stacked bonuses.
+
+### Migration
+- **Lazy schema v6 → v7** — first XP award after upgrade triggers level-lock migration: each Pokémon keeps its current level, XP reset to new curve floor for that level. Banner prints once, then state persists. No data loss; level numbers preserved.
+- Stats `schema_version` bumped to **7**.
+
+### Tests
+- Updated `TestXpForLevel` + `TestLevelFromXp` for new bands.
+- Added `TestXpCurveMigration` (5 cases: idempotency, buddy reset, party walk, Lv100 cap, no-op on v7).
+- Added `TestMultiplierCap`.
+- All 302 tests pass.
+
+---
+
 ## [2.31.1] — 2026-04-24
 
 ### Added

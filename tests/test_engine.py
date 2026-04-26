@@ -26,31 +26,45 @@ spec.loader.exec_module(engine)
 # ── XP math ───────────────────────────────────────────────────────────────────
 
 class TestXpForLevel(unittest.TestCase):
+    """v2.32 PoGo-style escalating bands.
+    Bands: 1-10:+100, 11-20:+300, 21-35:+800, 36-60:+2000, 61-85:+5000, 86-100:+10000."""
+
     def test_level_1_is_zero(self):
         self.assertEqual(engine.xp_for_level(1), 0)
 
     def test_level_2_is_100(self):
         self.assertEqual(engine.xp_for_level(2), 100)
 
-    def test_level_15_boundary(self):
-        # Last level in the (n-1)*100 range
-        self.assertEqual(engine.xp_for_level(15), 1400)
+    def test_band1_top_lv10(self):
+        # (10-1)*100
+        self.assertEqual(engine.xp_for_level(10), 900)
 
-    def test_level_16_starts_second_tier(self):
-        # 1400 + (16-15)*150 = 1550
-        self.assertEqual(engine.xp_for_level(16), 1550)
+    def test_band2_start_lv11(self):
+        # 900 + (11-10)*300
+        self.assertEqual(engine.xp_for_level(11), 1200)
 
-    def test_level_35_boundary(self):
-        # 1400 + (35-15)*150 = 1400 + 3000 = 4400
-        self.assertEqual(engine.xp_for_level(35), 4400)
+    def test_band2_top_lv20(self):
+        # 900 + 10*300
+        self.assertEqual(engine.xp_for_level(20), 3900)
 
-    def test_level_36_starts_third_tier(self):
-        # 4400 + (36-35)*200 = 4600
-        self.assertEqual(engine.xp_for_level(36), 4600)
+    def test_band3_top_lv35(self):
+        # 3900 + 15*800
+        self.assertEqual(engine.xp_for_level(35), 15900)
 
-    def test_level_50(self):
-        # 4400 + (50-35)*200 = 4400 + 3000 = 7400
-        self.assertEqual(engine.xp_for_level(50), 7400)
+    def test_band4_lv50(self):
+        # 15900 + 15*2000
+        self.assertEqual(engine.xp_for_level(50), 45900)
+
+    def test_band4_top_lv60(self):
+        self.assertEqual(engine.xp_for_level(60), 65900)
+
+    def test_band5_top_lv85(self):
+        # 65900 + 25*5000
+        self.assertEqual(engine.xp_for_level(85), 190900)
+
+    def test_band6_top_lv100(self):
+        # 190900 + 15*10000
+        self.assertEqual(engine.xp_for_level(100), 340900)
 
 
 class TestLevelFromXp(unittest.TestCase):
@@ -63,30 +77,94 @@ class TestLevelFromXp(unittest.TestCase):
     def test_100_xp_is_level_2(self):
         self.assertEqual(engine.level_from_xp(100), 2)
 
-    def test_boundary_lv15(self):
-        self.assertEqual(engine.level_from_xp(1400), 15)
+    def test_boundary_lv10(self):
+        self.assertEqual(engine.level_from_xp(900), 10)
 
-    def test_boundary_lv16(self):
-        self.assertEqual(engine.level_from_xp(1550), 16)
+    def test_boundary_lv11(self):
+        self.assertEqual(engine.level_from_xp(1200), 11)
 
     def test_boundary_lv35(self):
-        self.assertEqual(engine.level_from_xp(4400), 35)
+        self.assertEqual(engine.level_from_xp(15900), 35)
 
-    def test_boundary_lv36(self):
-        self.assertEqual(engine.level_from_xp(4600), 36)
+    def test_boundary_lv60(self):
+        self.assertEqual(engine.level_from_xp(65900), 60)
 
     def test_xp_floor_round_trip(self):
         """xp_for_level(n) should produce exactly level n."""
-        for lv in [1, 5, 10, 15, 16, 20, 35, 36, 50]:
+        for lv in [1, 5, 10, 11, 20, 21, 35, 36, 50, 60, 61, 85, 86, 100]:
             with self.subTest(lv=lv):
                 self.assertEqual(engine.level_from_xp(engine.xp_for_level(lv)), lv)
 
     def test_one_below_threshold_stays_lower(self):
         """One XP below a level threshold stays at the previous level."""
-        for lv in [2, 5, 16, 36]:
+        for lv in [2, 5, 11, 21, 36, 61, 86]:
             threshold = engine.xp_for_level(lv)
             with self.subTest(lv=lv):
                 self.assertEqual(engine.level_from_xp(threshold - 1), lv - 1)
+
+
+class TestXpCurveMigration(unittest.TestCase):
+    """Lazy v6→v7 curve migration (v2.32) — level-lock strategy."""
+
+    def _stats(self, ver=6):
+        return {'schema_version': ver}
+
+    def _col(self, mons):
+        return {'active': 'A', 'party': ['A'], 'pokemon': mons}
+
+    def test_no_op_if_already_v7(self):
+        s = self._stats(ver=7)
+        col = self._col([{'name': 'A', 'level': 50, 'xp': 999}])
+        new_xp, msg = engine.migrate_xp_curve(s, col, 50, 999)
+        self.assertEqual(new_xp, 999)
+        self.assertEqual(msg, '')
+        self.assertEqual(col['pokemon'][0]['xp'], 999)
+
+    def test_buddy_xp_resets_to_new_floor(self):
+        s = self._stats(ver=6)
+        col = self._col([])
+        new_xp, msg = engine.migrate_xp_curve(s, col, 50, 8000)
+        self.assertEqual(new_xp, engine.xp_for_level(50))   # 45900
+        self.assertIn('Pokémon GO', msg)
+        self.assertEqual(s['schema_version'], 7)
+
+    def test_party_xp_relevels_in_place(self):
+        s = self._stats(ver=6)
+        col = self._col([
+            {'name': 'A', 'level': 25, 'xp': 2500},
+            {'name': 'B', 'level': 5,  'xp': 400},
+        ])
+        engine.migrate_xp_curve(s, col, 25, 2500)
+        self.assertEqual(col['pokemon'][0]['xp'], engine.xp_for_level(25))  # 7900
+        self.assertEqual(col['pokemon'][1]['xp'], engine.xp_for_level(5))   # 400
+
+    def test_lv100_caps_to_CAP_XP(self):
+        s = self._stats(ver=6)
+        col = self._col([{'name': 'A', 'level': 100, 'xp': 17000}])
+        new_xp, _ = engine.migrate_xp_curve(s, col, 100, 17000)
+        self.assertEqual(new_xp, engine.CAP_XP)
+        self.assertEqual(col['pokemon'][0]['xp'], engine.CAP_XP)
+
+    def test_idempotent_after_migrate(self):
+        s = self._stats(ver=6)
+        col = self._col([{'name': 'A', 'level': 30, 'xp': 3000}])
+        engine.migrate_xp_curve(s, col, 30, 3000)
+        # second run: nothing changes
+        new_xp, msg = engine.migrate_xp_curve(s, col, 30, engine.xp_for_level(30))
+        self.assertEqual(msg, '')
+        self.assertEqual(new_xp, engine.xp_for_level(30))
+
+
+class TestMultiplierCap(unittest.TestCase):
+    """Stack cap (combo × streak × lucky ≤ 3.0) prevents XP curve from breaking."""
+
+    def test_uncapped_low_stack(self):
+        # 1.5 * 1.5 * 1.0 = 2.25 < 3.0 → unchanged
+        self.assertEqual(min(1.5 * 1.5 * 1.0, 3.0), 2.25)
+
+    def test_capped_high_stack(self):
+        # 2.0 * 2.0 * 1.5 = 6.0 → capped at 3.0
+        self.assertEqual(min(2.0 * 2.0 * 1.5, 3.0), 3.0)
 
 
 # ── XP detection ─────────────────────────────────────────────────────────────
@@ -2198,6 +2276,27 @@ class TestEliteFour(unittest.TestCase):
         self.assertTrue(champ)
         self.assertTrue(stats['beat_elite_four'])
         self.assertGreaterEqual(xp, 500)
+
+
+class TestTypePalette(unittest.TestCase):
+    def test_known_types_return_hex_pair(self):
+        hi, dk = engine._type_palette('Fire')
+        self.assertTrue(hi.startswith('#') and len(hi) == 7)
+        self.assertTrue(dk.startswith('#') and len(dk) == 7)
+
+    def test_unknown_type_falls_back_to_normal(self):
+        self.assertEqual(engine._type_palette('Cosmic'), engine._type_palette('Normal'))
+
+    def test_rarity_fx_class_applies_shiny_overlay(self):
+        out = engine._rarity_fx_class('legendary', shiny=True)
+        self.assertIn('fx-legendary', out)
+        self.assertIn('fx-shiny', out)
+
+    def test_rarity_fx_class_handles_shiny_suffix(self):
+        self.assertIn('fx-rare', engine._rarity_fx_class('rare-shiny', shiny=True))
+
+    def test_common_rarity_has_no_fx_class(self):
+        self.assertEqual(engine._rarity_fx_class('common', shiny=False), '')
 
 
 class TestGuardsDisplay(unittest.TestCase):

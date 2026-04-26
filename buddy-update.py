@@ -63,7 +63,7 @@ ARCHIVE_FILE    = Path.home() / '.claude' / 'buddy-log-archive.md'
 
 SHINY_RATE        = 1 / 200   # 0.5% base (Cascade badge raises to 1/150)
 STREAK_BONUS_XP   = 20        # bonus XP for first award of the day
-STATS_SCHEMA_VER  = 6         # bumped: anti-cheat fields
+STATS_SCHEMA_VER  = 7         # bumped: PoGo-style XP curve (v2.32)
 
 # ── Anti-cheat (F17) ─────────────────────────────────────────────────────────
 DAILY_XP_CAP       = 2000   # hard ceiling per UTC day
@@ -302,10 +302,15 @@ def detect_xp(description):
 # ── Level / XP math ───────────────────────────────────────────────────────────
 
 def xp_for_level(n):
+    # Pokémon GO-style escalating bands. Early levels stay fast (onboarding
+    # dopamine), endgame deliberately steep. Lv100 ≈ 340k XP cumulative.
     if n <= 1:  return 0
-    if n <= 15: return (n - 1) * 100
-    if n <= 35: return 1400 + (n - 15) * 150
-    return 4400 + (n - 35) * 200
+    if n <= 10: return (n - 1)  * 100
+    if n <= 20: return 900      + (n - 10) * 300
+    if n <= 35: return 3900     + (n - 20) * 800
+    if n <= 60: return 15900    + (n - 35) * 2000
+    if n <= 85: return 65900    + (n - 60) * 5000
+    return                190900 + (n - 85) * 10000
 
 def level_from_xp(xp):
     lv = 1
@@ -322,6 +327,42 @@ def clamp_to_cap(xp_raw):
     if lv >= LEVEL_CAP:
         return LEVEL_CAP, min(xp_raw, CAP_XP), max(0, xp_raw - CAP_XP)
     return lv, xp_raw, 0
+
+
+# ── XP curve migration (v2.32) ────────────────────────────────────────────────
+# Schema v6 → v7 bumped curve from quadratic-ish to PoGo-style escalating bands.
+# Old XP values mean different levels under the new curve. Strategy: level-lock —
+# preserve each Pokémon's level, reset XP to the new curve floor for that level.
+XP_CURVE_VERSION = 7
+
+def migrate_xp_curve(stats, col_dict, old_buddy_level, old_buddy_xp):
+    """Level-lock migration. Returns adjusted (old_buddy_xp, message).
+    Mutates col_dict['pokemon'] in place; caller must write_collection."""
+    if stats.get('schema_version', 0) >= XP_CURVE_VERSION:
+        return old_buddy_xp, ''
+    party_changes = 0
+    for p in col_dict.get('pokemon', []):
+        lv = max(1, min(LEVEL_CAP, p.get('level', 1)))
+        new_xp = xp_for_level(lv) if lv < LEVEL_CAP else CAP_XP
+        if p.get('xp') != new_xp:
+            p['xp'] = new_xp
+            party_changes += 1
+    new_buddy_xp = (xp_for_level(old_buddy_level)
+                    if old_buddy_level < LEVEL_CAP else CAP_XP)
+    msg = (
+        '\n┌─────────────────────────────────────────────────────────────┐\n'
+        '│ 🔔 XP curve updated (v2.32) — Pokémon GO-style escalation    │\n'
+        '├─────────────────────────────────────────────────────────────┤\n'
+        '│ Endgame leveling now meaningfully steeper. Early game        │\n'
+        '│ unchanged. Lv100 = ~340k XP (was ~17k).                      │\n'
+        '│                                                              │\n'
+        f'│ Your buddy stays at Lv {old_buddy_level:<3} — XP reset to new floor.   │\n'
+        f'│ {party_changes:<3} party/box Pokémon migrated.                          │\n'
+        '│ Stack multiplier (combo×streak×lucky) now capped at 3.0×.    │\n'
+        '└─────────────────────────────────────────────────────────────┘\n'
+    )
+    stats['schema_version'] = XP_CURVE_VERSION
+    return new_buddy_xp, msg
 
 # ── Bars ─────────────────────────────────────────────────────────────────────
 
@@ -2029,6 +2070,37 @@ def sprite_url(name, shiny=False):
         return ''
     return f'{_SPRITE_BASE}/shiny/{dex_id}.png' if shiny else f'{_SPRITE_BASE}/{dex_id}.png'
 
+# ── Type palette (canonical Pokémon type colors) ─────────────────────────────
+TYPE_COLORS = {
+    'Normal':   ('#a8a77a', '#6d6c4e'),  'Fire':     ('#ee8130', '#8b3a10'),
+    'Water':    ('#6390f0', '#23416f'),  'Electric': ('#f7d02c', '#8a7106'),
+    'Grass':    ('#7ac74c', '#2f5d1a'),  'Ice':      ('#96d9d6', '#2d6e6b'),
+    'Fighting': ('#c22e28', '#6e0f0c'),  'Poison':   ('#a33ea1', '#4e1b4d'),
+    'Ground':   ('#e2bf65', '#7a6020'),  'Flying':   ('#a98ff3', '#43308d'),
+    'Psychic':  ('#f95587', '#8d1639'),  'Bug':      ('#a6b91a', '#546009'),
+    'Rock':     ('#b6a136', '#5c5110'),  'Ghost':    ('#735797', '#2d1e48'),
+    'Dragon':   ('#6f35fc', '#2e0d8a'),  'Dark':     ('#705746', '#2f2118'),
+    'Steel':    ('#b7b7ce', '#5f5f74'),  'Fairy':    ('#d685ad', '#70253f'),
+}
+
+def _type_palette(ptype):
+    """Returns (hex_primary, hex_dark) for a given type; defaults to Normal."""
+    return TYPE_COLORS.get(ptype, TYPE_COLORS['Normal'])
+
+_RARITY_FX = {
+    # tier: (class_name, glow_color)
+    'mythical':  ('fx-mythical',  '#c084fc'),
+    'legendary': ('fx-legendary', '#ffd700'),
+    'rare':      ('fx-rare',      '#60a5fa'),
+    'uncommon':  ('fx-uncommon',  '#4ade80'),
+    'common':    ('',             ''),
+    'starter':   ('',             ''),
+}
+
+def _rarity_fx_class(rarity, shiny=False):
+    base = _RARITY_FX.get((rarity or '').replace('-shiny', ''), ('', ''))[0]
+    return f'{base} fx-shiny' if shiny else base
+
 def render_html_card():
     """Render a full-page interactive Pokemon-themed HTML trainer card."""
     text     = BUDDY_FILE.read_text(encoding='utf-8')
@@ -2113,7 +2185,49 @@ def render_html_card():
     active_quest = get_daily_quest(tr_stats)
     quest_done   = tr_stats.get('daily_quest_done', False)
 
-    buddy_spr_url  = sprite_url(stage)
+    # ── New sections (post-v2.17 features) ───────────────────────────────────
+    active_buddy = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), None)
+    buddy_type   = (active_buddy or {}).get('type') or STARTER_DATA.get(stage, {}).get('type', 'Normal')
+    buddy_rarity = (active_buddy or {}).get('rarity', '').replace('-shiny', '')
+    buddy_shiny  = bool((active_buddy or {}).get('shiny'))
+    type_hi, type_dk = _type_palette(buddy_type)
+    rarity_fx_cls = _rarity_fx_class(buddy_rarity, buddy_shiny)
+
+    held_item_key = get_held_item()
+    held_item_info = HELD_ITEMS.get(held_item_key) if held_item_key else None
+    nature_name = (active_buddy or {}).get('nature', '')
+    nature_tag = ''
+    if nature_name:
+        up, down = nature_info(nature_name)
+        nature_tag = f'{nature_name} (+{up} / -{down})' if up and down and up != down else f'{nature_name} (neutral)'
+
+    shiny_count = tr_stats.get('shiny_count', 0)
+    mega_active = held_item_key == 'mega_stone' and 'earth' in tr_stats.get('gym_badges', set())
+
+    # Gym badges (canonical 8)
+    earned_gym = tr_stats.get('gym_badges', set())
+    gym_chips_html = ''.join(
+        f'<span class="gym-chip {"gym-on" if bid in earned_gym else "gym-off"}">'
+        f'{_he(emj)} <span class="gym-name">{_he(bname)}</span></span>'
+        for bid, emj, bname, *_ in GYM_BADGE_DATA
+    )
+    gym_n_earned = sum(1 for bid, *_ in GYM_BADGE_DATA if bid in earned_gym)
+
+    # Elite Four progress
+    ef_defeated = tr_stats.get('elite_defeated', set())
+    ef_chips_html = ''.join(
+        f'<span class="ef-chip {"ef-on" if eid in ef_defeated else "ef-off"}">'
+        f'{_he(emj)} {_he(tname)}</span>'
+        for eid, tname, _, _, _, emj, _ in ELITE_FOUR
+    )
+    is_champion = tr_stats.get('beat_elite_four', False)
+
+    # Guards
+    stamina = regen_stamina(dict(tr_stats))  # copy — don't mutate on export
+    daily_xp_today = tr_stats.get('daily_xp', 0) if tr_stats.get('daily_xp_date') == TODAY else 0
+    daily_xp_pct = int(min(100, daily_xp_today * 100 / DAILY_XP_CAP)) if DAILY_XP_CAP else 0
+
+    buddy_spr_url  = sprite_url(stage, shiny=buddy_shiny)
     buddy_img_html = (f'<img src="{buddy_spr_url}" class="buddy-sprite" alt="{_he(stage)}">'
                       if buddy_spr_url else '')
 
@@ -2131,8 +2245,10 @@ def render_html_card():
             dn, de    = displayed_form(p)
             spr       = sprite_url(dn, shiny=is_shiny)
             shiny_sfx = ' ✨' if is_shiny else ''
-            icon      = (f'<img src="{spr}" class="poke-sprite" alt="{_he(dn)}">'
+            fx_cls    = _rarity_fx_class(tier, is_shiny)
+            icon_inner = (f'<img src="{spr}" class="poke-sprite" alt="{_he(dn)}">'
                          if spr else _he(de))
+            icon      = f'<span class="poke-icon-wrap {fx_cls}" style="position:relative;display:inline-block;border-radius:8px">{icon_inner}</span>'
             party_rows_html.append(
                 f'<tr class="{row_cls}">'
                 f'<td>{icon} {_he(dn)}{_he(shiny_sfx)}{_he(mark)}</td>'
@@ -2408,17 +2524,113 @@ def render_html_card():
   .footer {{ text-align: center; color: var(--muted); font-size: 11px; margin-top: 40px; letter-spacing: .5px; }}
   .footer a {{ color: var(--acc); text-decoration: none; }}
 
+  /* ── Type-themed accent (buddy) ── */
+  .type-accent {{
+    --type-hi: {type_hi};
+    --type-dk: {type_dk};
+  }}
+  .buddy-card {{
+    border-color: var(--type-dk) !important;
+    box-shadow: 0 0 32px color-mix(in srgb, var(--type-hi) 18%, transparent), inset 0 1px 0 rgba(255,255,255,.06);
+  }}
+  .buddy-sprite-bg {{
+    background: radial-gradient(circle at 50% 55%, color-mix(in srgb, var(--type-hi) 22%, transparent) 0%, transparent 68%) !important;
+  }}
+  .type-pill {{
+    display: inline-flex; align-items: center;
+    background: color-mix(in srgb, var(--type-hi) 20%, transparent);
+    border: 1px solid var(--type-hi);
+    color: var(--type-hi);
+    border-radius: 6px; padding: 2px 10px; font-size: 10px; font-weight: 700;
+    letter-spacing: .5px; text-transform: uppercase;
+  }}
+
+  /* ── Rarity special effects ── */
+  .fx-uncommon {{ box-shadow: 0 0 14px rgba(74,222,128,.35); }}
+  .fx-rare     {{ box-shadow: 0 0 18px rgba(96,165,250,.45); animation: rare-pulse 2.8s ease-in-out infinite; }}
+  .fx-legendary {{
+    box-shadow: 0 0 28px rgba(255,215,0,.55);
+    animation: legendary-shimmer 3.2s ease-in-out infinite;
+  }}
+  .fx-mythical {{
+    box-shadow: 0 0 32px rgba(192,132,252,.55);
+    animation: mythical-holo 4s linear infinite;
+    background: linear-gradient(135deg, rgba(192,132,252,.10), rgba(244,114,182,.10), rgba(99,102,241,.10)) !important;
+  }}
+  .fx-shiny::after {{
+    content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(120deg, transparent 40%, rgba(255,255,255,.25) 50%, transparent 60%);
+    animation: shiny-sweep 3s linear infinite; mix-blend-mode: overlay;
+  }}
+  @keyframes rare-pulse      {{ 0%,100% {{ box-shadow: 0 0 14px rgba(96,165,250,.35); }} 50% {{ box-shadow: 0 0 26px rgba(96,165,250,.65); }} }}
+  @keyframes legendary-shimmer {{ 0%,100% {{ filter: drop-shadow(0 0 8px rgba(255,215,0,.55)); }} 50% {{ filter: drop-shadow(0 0 18px rgba(255,215,0,.9)); }} }}
+  @keyframes mythical-holo   {{ 0% {{ filter: hue-rotate(0deg); }} 100% {{ filter: hue-rotate(360deg); }} }}
+  @keyframes shiny-sweep     {{ 0% {{ transform: translateX(-100%); }} 100% {{ transform: translateX(100%); }} }}
+
+  /* ── Gym badges canonical row ── */
+  .gym-row {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+  .gym-chip {{
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 10px; padding: 6px 12px; font-size: 11px; font-weight: 600;
+    border: 1px solid var(--bdr); transition: all .2s;
+  }}
+  .gym-on  {{ background: rgba(255,215,0,.08); border-color: rgba(255,215,0,.32); color: #fcd34d; }}
+  .gym-off {{ background: rgba(255,255,255,.02); color: var(--muted); opacity: .55; filter: grayscale(.8); }}
+  .gym-name {{ font-weight: 500; }}
+
+  /* ── Elite Four ribbon ── */
+  .ef-row {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }}
+  .ef-chip {{
+    display: inline-flex; align-items: center; gap: 4px;
+    border-radius: 8px; padding: 5px 10px; font-size: 11px;
+    border: 1px solid var(--bdr);
+  }}
+  .ef-on  {{ background: rgba(167,139,250,.15); border-color: rgba(167,139,250,.45); color: #c4b5fd; font-weight: 700; }}
+  .ef-off {{ background: rgba(255,255,255,.02); color: var(--muted); opacity: .6; }}
+  .champion-crown {{
+    display: inline-flex; align-items: center; gap: 6px;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #1f1205; border-radius: 8px; padding: 5px 12px;
+    font-weight: 800; font-size: 11px; letter-spacing: .8px;
+    box-shadow: 0 0 18px rgba(245,158,11,.45);
+  }}
+
+  /* ── Guards meters ── */
+  .guard-row {{ display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }}
+  .guard-meter {{ flex: 1; min-width: 220px; }}
+  .guard-label {{ font-size: 10px; color: var(--muted); margin-bottom: 5px; letter-spacing: 1px; text-transform: uppercase; }}
+  .stamina-dots {{ display: inline-flex; gap: 4px; }}
+  .stam-dot {{ width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--bdr); }}
+  .stam-on  {{ background: radial-gradient(circle, #4ade80 40%, #14532d); box-shadow: 0 0 8px rgba(74,222,128,.6); }}
+  .stam-off {{ background: rgba(255,255,255,.04); }}
+
+  /* ── Item + Nature chips ── */
+  .meta-pill {{
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.04); border: 1px solid var(--bdr);
+    border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 500;
+  }}
+  .meta-pill .meta-ico {{ font-size: 14px; }}
+  .mega-flag {{
+    background: linear-gradient(135deg, rgba(239,68,68,.25), rgba(167,139,250,.25));
+    border: 1px solid rgba(244,114,182,.5); color: #f472b6;
+    font-weight: 700; letter-spacing: 1px;
+  }}
+
   /* ── Motion initial states ── */
   .header, .quest-card, .grid-2 .card,
   .card.balls-card, .card.party-card, .card.badges-card,
+  .card.gym-card, .card.ef-card, .card.guards-card,
   .footer, .sbar-row, tbody tr, .badge-chip {{ opacity: 0; }}
   @media (prefers-reduced-motion: reduce) {{
     .header, .quest-card, .grid-2 .card,
     .card.balls-card, .card.party-card, .card.badges-card,
+    .card.gym-card, .card.ef-card, .card.guards-card,
     .footer, .sbar-row, tbody tr, .badge-chip {{ opacity: 1 !important; transform: none !important; }}
     .buddy-sprite {{ animation: none; }}
     .pokeball-svg {{ animation: none; }}
     .xp-fill::after {{ animation: none; }}
+    .fx-rare, .fx-legendary, .fx-mythical, .fx-shiny::after {{ animation: none; }}
   }}
 </style>
 </head>
@@ -2459,18 +2671,60 @@ def render_html_card():
 
   <!-- Top grid: Buddy + Stats -->
   <div class="grid-2">
-    <div class="card">
+    <div class="card buddy-card type-accent">
       <div class="sec-lbl">Active Buddy</div>
-      <div class="buddy-sprite-bg">{buddy_img_html}</div>
-      <div class="buddy-name">{_he(stage)}</div>
-      <div class="buddy-lv-row"><span class="lv-chip">Lv. {level}</span></div>
+      <div class="buddy-sprite-bg {rarity_fx_cls}" style="position:relative">{buddy_img_html}</div>
+      <div class="buddy-name">{'✨ ' if buddy_shiny else ''}{_he(stage)}</div>
+      <div class="buddy-lv-row" style="flex-wrap:wrap">
+        <span class="lv-chip">Lv. {level}</span>
+        <span class="type-pill">{_he(buddy_type)}</span>
+        {'<span class="meta-pill mega-flag">💫 MEGA READY</span>' if mega_active else ''}
+      </div>
       <div class="buddy-spec">{_he(specialty)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        {f'<span class="meta-pill"><span class="meta-ico">{_he(held_item_info["emoji"])}</span> {_he(held_item_info["name"])}</span>' if held_item_info else ''}
+        {f'<span class="meta-pill"><span class="meta-ico">🧬</span> {_he(nature_tag)}</span>' if nature_tag else ''}
+        {f'<span class="meta-pill"><span class="meta-ico">✨</span> {shiny_count} shiny</span>' if shiny_count > 0 else ''}
+      </div>
       <div class="xp-lbl"><span>XP Progress</span><span>{xp_disp} / {xp_max_disp}</span></div>
-      <div class="xp-track"><div class="xp-fill" data-xp="{pct}" style="width:0%"></div></div>
+      <div class="xp-track"><div class="xp-fill" data-xp="{pct}" style="width:0%;background:linear-gradient(90deg,{type_hi},{type_dk})"></div></div>
     </div>
     <div class="card">
       <div class="sec-lbl">Trainer Stats</div>
       {stats_html}
+    </div>
+  </div>
+
+  <!-- Gym Badges (canonical 8) -->
+  <div class="card gym-card" style="margin-bottom:16px">
+    <div class="sec-lbl">Gym Badges · {gym_n_earned}/8</div>
+    <div class="gym-row">{gym_chips_html}</div>
+  </div>
+
+  <!-- Elite Four progression -->
+  <div class="card ef-card" style="margin-bottom:16px">
+    <div class="sec-lbl">Elite Four{' · 🏆 CHAMPION' if is_champion else ''}</div>
+    <div class="ef-row">
+      {ef_chips_html}
+      {'<span class="champion-crown">🏆 Champion</span>' if is_champion else ''}
+    </div>
+  </div>
+
+  <!-- Guards (anti-cheat meters) -->
+  <div class="card guards-card" style="margin-bottom:16px">
+    <div class="sec-lbl">Guards</div>
+    <div class="guard-row">
+      <div class="guard-meter">
+        <div class="guard-label">Battle Stamina</div>
+        <div class="stamina-dots">
+          {''.join(f'<span class="stam-dot {"stam-on" if i < stamina else "stam-off"}"></span>' for i in range(BATTLE_STAMINA_MAX))}
+          <span style="margin-left:8px;font-size:11px;color:var(--muted)">{stamina}/{BATTLE_STAMINA_MAX}</span>
+        </div>
+      </div>
+      <div class="guard-meter">
+        <div class="guard-label">XP Today · {daily_xp_today:,} / {DAILY_XP_CAP:,}</div>
+        <div class="sbar-track"><div class="sbar-fill" style="width:{daily_xp_pct}%;background:#22d3ee"></div></div>
+      </div>
     </div>
   </div>
 
@@ -2514,7 +2768,7 @@ def render_html_card():
     animate('.sbar-row', {{ opacity: [0,1], x: [-10,0] }}, {{ easing: ease, duration:0.3, delay: stagger(0.06, {{ start:0.42 }}) }});
     const xpFill = document.querySelector('.xp-fill');
     if (xpFill) animate(xpFill, {{ width: ['0%', xpFill.dataset.xp + '%'] }}, {{ easing: spring({{ stiffness:80, damping:18 }}), duration:1.4, delay:0.55 }});
-    animate('.card.balls-card, .card.party-card, .card.badges-card', {{ opacity: [0,1], y: [16,0] }}, {{ easing: ease, duration:0.4, delay: stagger(0.1, {{ start:0.5 }}) }});
+    animate('.card.gym-card, .card.ef-card, .card.guards-card, .card.balls-card, .card.party-card, .card.badges-card', {{ opacity: [0,1], y: [16,0] }}, {{ easing: ease, duration:0.4, delay: stagger(0.08, {{ start:0.5 }}) }});
     animate('tbody tr', {{ opacity: [0,1], x: [-10,0] }}, {{ easing: ease, duration:0.3, delay: stagger(0.035, {{ start:0.65 }}) }});
     animate('.badge-chip', {{ opacity: [0,1], scale: [0.9,1] }}, {{ easing: spring({{ stiffness:300, damping:18 }}), delay: stagger(0.08, {{ start:0.85 }}) }});
     animate('.footer', {{ opacity: [0,1], y: [8,0] }}, {{ easing: ease, duration:0.4, delay:1.1 }});
@@ -2557,33 +2811,86 @@ def render_og_svg():
     total_xp  = tr_stats.get('total_xp_ever', 0)
     n_caught  = len(col['pokemon'])
     n_total   = sum(len(v) for v in POKEMON_POOL.values())
-    spr       = sprite_url(stage) or ''
+
+    active = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), None)
+    buddy_type = (active or {}).get('type') or STARTER_DATA.get(stage, {}).get('type', 'Normal')
+    is_shiny   = bool((active or {}).get('shiny'))
+    type_hi, type_dk = _type_palette(buddy_type)
+    spr       = sprite_url(stage, shiny=is_shiny) or ''
+
+    earned_gym = tr_stats.get('gym_badges', set())
+    gym_n = sum(1 for bid, *_ in GYM_BADGE_DATA if bid in earned_gym)
+    ef_n  = len(tr_stats.get('elite_defeated', set()))
+    is_champ = tr_stats.get('beat_elite_four', False)
+
+    # Gym badges row: 8 dots filled based on earned
+    gym_dots = ''
+    for i, (bid, emj, *_) in enumerate(GYM_BADGE_DATA):
+        x = 90 + i * 56
+        on = bid in earned_gym
+        fill = '#fcd34d' if on else '#2a2d40'
+        opacity = '1' if on else '0.5'
+        gym_dots += (f'<circle cx="{x}" cy="540" r="18" fill="{fill}" opacity="{opacity}" '
+                     f'stroke="#1a1a1a" stroke-width="2"/>'
+                     f'<text x="{x}" y="547" text-anchor="middle" font-size="18" opacity="{opacity}">{emj}</text>')
+
+    champ_banner = (
+        '<rect x="850" y="520" width="260" height="48" rx="10" fill="url(#champ-grad)"/>'
+        '<text x="980" y="553" text-anchor="middle" fill="#1f1205" font-family="sans-serif" font-size="22" font-weight="900" letter-spacing="2">🏆 CHAMPION</text>'
+    ) if is_champ else (
+        f'<text x="850" y="545" fill="#a78bfa" font-family="monospace" font-size="18">ELITE FOUR: {ef_n}/5</text>'
+    )
 
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0b0d1a"/>
+      <stop offset="0.5" stop-color="{type_dk}" stop-opacity="0.55"/>
       <stop offset="1" stop-color="#1a1033"/>
     </linearGradient>
+    <linearGradient id="type-glow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="{type_hi}" stop-opacity="0.0"/>
+      <stop offset="0.5" stop-color="{type_hi}" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="{type_hi}" stop-opacity="0.0"/>
+    </linearGradient>
+    <linearGradient id="champ-grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <radialGradient id="buddy-halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="{type_hi}" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="{type_hi}" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>
-  <rect x="40" y="40" width="1120" height="550" rx="24" fill="#101220" stroke="#a78bfa" stroke-width="2" opacity="0.9"/>
-  <text x="90" y="130" fill="#a78bfa" font-family="monospace" font-size="24" font-weight="700">POKÉMON TRAINER CARD</text>
+  <rect x="40" y="40" width="1120" height="550" rx="24" fill="#101220" stroke="{type_hi}" stroke-width="3" opacity="0.95"/>
+  <rect x="40" y="38" width="1120" height="4" fill="url(#type-glow)"/>
+
+  <text x="90" y="130" fill="{type_hi}" font-family="monospace" font-size="24" font-weight="700" letter-spacing="4">POKÉMON TRAINER CARD</text>
   <text x="90" y="210" fill="#dde1f5" font-family="sans-serif" font-size="72" font-weight="800">{_he(trainer)}</text>
-  <text x="90" y="260" fill="#f59e0b" font-family="sans-serif" font-size="30" font-weight="600">{_he(title)}</text>
-  <text x="90" y="300" fill="#4e5580" font-family="sans-serif" font-size="24">{_he(specialty)}</text>
-  <image href="{spr}" x="820" y="140" width="300" height="300"/>
-  <text x="820" y="470" fill="#dde1f5" font-family="sans-serif" font-size="42" font-weight="700">{_he(stage)}</text>
-  <text x="820" y="510" fill="#a78bfa" font-family="monospace" font-size="28">Lv. {level}</text>
+  <text x="90" y="260" fill="#fbbf24" font-family="sans-serif" font-size="30" font-weight="700">{_he(title)}</text>
+  <text x="90" y="300" fill="#4e5580" font-family="sans-serif" font-size="22">{_he(specialty)}</text>
+
+  <circle cx="970" cy="240" r="180" fill="url(#buddy-halo)"/>
+  <image href="{spr}" x="820" y="100" width="300" height="300"/>
+  <rect x="820" y="415" width="300" height="56" rx="12" fill="#1a1d2e" stroke="{type_hi}" stroke-width="2"/>
+  <text x="970" y="452" text-anchor="middle" fill="#fff" font-family="sans-serif" font-size="30" font-weight="700">{'✨ ' if is_shiny else ''}{_he(stage)} · Lv. {level}</text>
+  <rect x="830" y="480" width="90" height="26" rx="5" fill="{type_dk}" opacity="0.9"/>
+  <text x="875" y="498" text-anchor="middle" fill="#fff" font-family="sans-serif" font-size="14" font-weight="700" letter-spacing="1">{_he(buddy_type.upper())}</text>
+
   <g font-family="sans-serif" fill="#dde1f5">
-    <text x="90" y="440" font-size="22" fill="#4e5580">POKÉDEX</text>
-    <text x="90" y="480" font-size="40" font-weight="700">{n_caught}<tspan fill="#4e5580" font-size="24"> / {n_total}</tspan></text>
-    <text x="340" y="440" font-size="22" fill="#4e5580">STREAK</text>
-    <text x="340" y="480" font-size="40" font-weight="700" fill="#f97316">{streak}<tspan fill="#4e5580" font-size="24">d</tspan></text>
-    <text x="570" y="440" font-size="22" fill="#4e5580">TOTAL XP</text>
-    <text x="570" y="480" font-size="40" font-weight="700" fill="#a78bfa">{total_xp:,}</text>
+    <text x="90" y="400" font-size="20" fill="#4e5580" letter-spacing="2">POKÉDEX</text>
+    <text x="90" y="448" font-size="44" font-weight="800">{n_caught}<tspan fill="#4e5580" font-size="24"> / {n_total}</tspan></text>
+    <text x="290" y="400" font-size="20" fill="#4e5580" letter-spacing="2">STREAK</text>
+    <text x="290" y="448" font-size="44" font-weight="800" fill="#f97316">{streak}<tspan fill="#4e5580" font-size="24">d</tspan></text>
+    <text x="490" y="400" font-size="20" fill="#4e5580" letter-spacing="2">TOTAL XP</text>
+    <text x="490" y="448" font-size="44" font-weight="800" fill="#a78bfa">{total_xp:,}</text>
+    <text x="90" y="490" font-size="18" fill="#4e5580" letter-spacing="2">GYM BADGES {gym_n}/8</text>
   </g>
-  <text x="90" y="560" fill="#4e5580" font-family="monospace" font-size="18">/poke — a Pokémon companion for Claude Code</text>
+  {gym_dots}
+  {champ_banner}
+
+  <text x="90" y="595" fill="#4e5580" font-family="monospace" font-size="16">/poke — a Pokémon companion for Claude Code</text>
 </svg>
 '''
 
@@ -3576,7 +3883,9 @@ def main():
         streak_mult = streak_multiplier(tr_stats.get('streak', 1))
         lucky_mult  = 1.5 if _held_item == 'lucky_egg' else 1.0
 
-        add_xp = int(base_xp * combo_mult * streak_mult * lucky_mult) + streak_bonus
+        # Cap stacked multipliers to prevent 6×+ spikes that broke the old curve
+        stack_mult = min(combo_mult * streak_mult * lucky_mult, 3.0)
+        add_xp = int(base_xp * stack_mult) + streak_bonus
 
         # Anti-cheat: clip to daily cap, record dedup fingerprint
         add_xp, was_capped, _ = apply_daily_cap(tr_stats, add_xp)
@@ -3635,6 +3944,12 @@ def main():
 
     # Read collection once — reused for party split, sync, exp share, encounter
     col = read_collection()
+
+    # Lazy XP-curve migration (v2.32): level-lock buddy + party to new curve floors
+    old_xp, _migrate_msg = migrate_xp_curve(tr_stats, col, old_level, old_xp)
+    if _migrate_msg:
+        write_collection(col['active'], col['pokemon'], col.get('party'))
+        print(_migrate_msg)
 
     # Party XP split (Thunder badge): bench members get share before lead is banked.
     party_xp_log = []
