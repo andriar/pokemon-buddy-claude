@@ -917,37 +917,72 @@ class TestAttemptCatch(_TmpDir, unittest.TestCase):
 
     def test_master_ball_always_catches(self):
         stats = engine.read_stats()
-        caught, pct = engine.attempt_catch('mythical', 'master', stats)
+        caught, pct, *_ = engine.attempt_catch('mythical', 'master', stats)
         self.assertTrue(caught)
         self.assertEqual(pct, 100)
 
     def test_guaranteed_catch_when_randint_1(self):
         stats = engine.read_stats()
         with patch('random.randint', return_value=1):
-            caught, _ = engine.attempt_catch('common', 'poke', stats)
+            caught, *_ = engine.attempt_catch('common', 'poke', stats)
         self.assertTrue(caught)
 
     def test_miss_when_randint_above_threshold(self):
         stats = engine.read_stats()
         with patch('random.randint', return_value=100):
-            caught, _ = engine.attempt_catch('legendary', 'poke', stats)
+            caught, *_ = engine.attempt_catch('legendary', 'poke', stats)
         self.assertFalse(caught)
 
-    def test_golden_razz_berry_consumed_on_use(self):
+    def test_golden_burned_on_legendary(self):
+        # High-tier wild always burns golden if owned (smart pick)
         stats = engine.read_stats()
         stats['berry_golden'] = 1
-        engine.attempt_catch('rare', 'ultra', stats)
+        _, _, _, berry = engine.attempt_catch('legendary', 'ultra', stats)
+        self.assertEqual(berry, 'golden')
         self.assertEqual(stats['berry_golden'], 0)
 
-    def test_razz_berry_consumed_when_no_golden(self):
+    def test_razz_used_when_low_base_pct(self):
+        # legendary + poke ball = low base_pct → razz triggers
         stats = engine.read_stats()
         stats['berry_razz'] = 2
-        engine.attempt_catch('rare', 'ultra', stats)
+        _, _, _, berry = engine.attempt_catch('legendary', 'poke', stats)
+        self.assertEqual(berry, 'razz')
         self.assertEqual(stats['berry_razz'], 1)
+
+    def test_no_berry_when_easy_catch(self):
+        # common + ultra = high base_pct, no boost berry consumed
+        stats = engine.read_stats()
+        stats['berry_razz'] = 2
+        _, _, _, berry = engine.attempt_catch('common', 'ultra', stats)
+        # If pinap not owned, should be None; pinap fires only when pinap held
+        self.assertIsNone(berry)
+        self.assertEqual(stats['berry_razz'], 2)  # untouched
+
+    def test_pinap_thrown_when_easy_catch(self):
+        # Easy catch + has pinap → throw pinap for XP bonus
+        stats = engine.read_stats()
+        stats['berry_pinap'] = 1
+        _, _, _, berry = engine.attempt_catch('common', 'ultra', stats)
+        self.assertEqual(berry, 'pinap')
+        self.assertEqual(stats['berry_pinap'], 0)
+
+    def test_pinap_does_not_change_catch_pct(self):
+        stats = engine.read_stats()
+        stats['berry_pinap'] = 1
+        _, final_pct, base_pct, berry = engine.attempt_catch('common', 'ultra', stats)
+        self.assertEqual(berry, 'pinap')
+        self.assertEqual(final_pct, base_pct)
+
+    def test_golden_boosts_pct_above_base(self):
+        stats = engine.read_stats()
+        stats['berry_golden'] = 1
+        _, final_pct, base_pct, berry = engine.attempt_catch('legendary', 'ultra', stats)
+        self.assertEqual(berry, 'golden')
+        self.assertGreaterEqual(final_pct, base_pct)
 
     def test_catch_pct_capped_at_95(self):
         stats = engine.read_stats()
-        _, pct = engine.attempt_catch('common', 'ultra', stats)
+        _, pct, *_ = engine.attempt_catch('common', 'ultra', stats)
         self.assertLessEqual(pct, 95)
 
 

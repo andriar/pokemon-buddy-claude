@@ -5,6 +5,36 @@ Format: [version] — date — description
 
 ---
 
+## [2.33.0] — 2026-04-26
+
+### Added
+- **Smart auto-berry system** — PoGo-style decision logic for catch attempts. Replaces dumb `golden→razz` priority that always consumed berries silently.
+  - Pre-computes catch% without berry, then picks situationally:
+    - `legendary`/`mythical` wild + has 🌟 Golden → throw Golden
+    - base catch chance < 60% → throw Golden (else Razz)
+    - base catch chance 60-80% on non-common → throw Razz
+    - base catch chance ≥ 80% + has 🍍 Pinap → throw Pinap (XP reward, no boost)
+    - else → no berry (don't waste)
+- **Pinap reward** — caught Pokémon starts at +1 level when Pinap consumed (PoGo "double candy" equivalent).
+- **Berry visibility**:
+  - Encounter render shows `🍓 Razz Berry thrown!` per throw, plus `45% → 54%` boosted catch chance.
+  - Status card has new **Berries** row showing inventory.
+  - Pinap catches show `🍍 Pinap bonus — Pokémon starts at +1 level!` line.
+- `attempt_catch` now returns `(caught, final_pct, base_pct, berry_used)` for full per-throw recording.
+
+### Removed
+- **Nanab Berry** dropped from drop tables. Defined `flee_reduce: 0.5` was never wired (no flee mechanic in CLI). Existing Nanab counts in stats remain (cosmetic). Drop slots redistributed to Razz + Pinap.
+
+### Fixed
+- **Berry consumption silent** — old code consumed Razz/Golden on every catch attempt without telling the user. Now visible in encounter log.
+- **Pinap unused** — defined `xp_boost: 2.0` was dead code. Now wired as level-bump reward.
+
+### Tests
+- `TestAttemptCatch` rewritten — 9 cases covering decision tree (legendary→golden, low-pct→razz, easy→pinap, easy+no-pinap→none, golden boosts pct, pinap doesn't, master always 100%).
+- 311 tests pass.
+
+---
+
 ## [2.32.1] — 2026-04-26
 
 ### Fixed

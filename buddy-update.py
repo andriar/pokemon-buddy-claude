@@ -1208,29 +1208,64 @@ def run_battle(buddy_level, buddy_type, wild_level, wild_type, choice_band=False
     win_pct = max(5, min(95, int(base)))
     return random.randint(1, 100) <= win_pct, win_pct, effectiveness
 
-def attempt_catch(tier, ball_key, stats):
-    """Roll the catch. Returns (caught: bool, catch_pct: int). Uses best berry automatically."""
+def _compute_catch_pct(tier, ball_key, stats, with_berry=None):
+    """Compute catch% for a ball, optionally applying a berry boost.
+    Held item + friendship still apply regardless of berry."""
     if ball_key == 'master':
-        return True, 100
+        return 100
     base = BASE_CATCH_RATES.get(tier, 0.5)
     mult = POKEBALL_TYPES.get(ball_key, {}).get('multiplier', 1.0)
-    # Auto-use best available berry
-    berry_used = None
-    if stats.get('berry_golden', 0) > 0:
-        mult *= BERRY_TYPES['golden']['catch_boost']
-        stats['berry_golden'] -= 1
-        berry_used = 'golden'
-    elif stats.get('berry_razz', 0) > 0:
-        mult *= BERRY_TYPES['razz']['catch_boost']
-        stats['berry_razz'] -= 1
-        berry_used = 'razz'
+    if with_berry == 'golden':
+        mult *= BERRY_TYPES['golden'].get('catch_boost', 1.5)
+    elif with_berry == 'razz':
+        mult *= BERRY_TYPES['razz'].get('catch_boost', 1.2)
     if get_held_item() == 'amulet_coin':
         mult *= 2.0
-    # Friendship bonus: active buddy's bond adds up to +25% catch chance at max friendship
     buddy_friendship = _active_buddy_friendship()
     mult *= 1.0 + (buddy_friendship / FRIENDSHIP_MAX) * 0.25
-    catch_pct = min(95, int(base * mult * 100))
-    return random.randint(1, 100) <= catch_pct, catch_pct
+    return min(95, int(base * mult * 100))
+
+
+def _pick_berry(tier, base_pct, stats):
+    """Smart berry decision. PoGo-style — only throw when it matters.
+    Returns berry key (golden/razz/pinap) or None."""
+    has_golden = stats.get('berry_golden', 0) > 0
+    has_razz   = stats.get('berry_razz', 0) > 0
+    has_pinap  = stats.get('berry_pinap', 0) > 0
+    base_tier  = (tier or '').replace('-shiny', '')
+
+    # High-tier wild → always burn golden if available
+    if base_tier in ('legendary', 'mythical') and has_golden:
+        return 'golden'
+    # Low catch chance — boost as much as possible
+    if base_pct < 60:
+        if has_golden: return 'golden'
+        if has_razz:   return 'razz'
+    # Mid chance + non-common — razz worth it
+    if base_pct < 80 and base_tier != 'common':
+        if has_razz: return 'razz'
+    # Easy catch + has pinap → grab the bonus instead of wasting boost berry
+    if base_pct >= 80 and has_pinap:
+        return 'pinap'
+    return None
+
+
+def attempt_catch(tier, ball_key, stats):
+    """Roll the catch. Returns (caught, final_pct, base_pct, berry_used).
+    Smart berry selection — only consumes berry when it changes the outcome
+    meaningfully, or when extra reward (pinap) is wanted."""
+    if ball_key == 'master':
+        return True, 100, 100, None
+    base_pct = _compute_catch_pct(tier, ball_key, stats, with_berry=None)
+    berry    = _pick_berry(tier, base_pct, stats)
+    if berry:
+        stats[f'berry_{berry}'] = max(0, stats.get(f'berry_{berry}', 0) - 1)
+    # Pinap is a reward berry, not a boost — final % unchanged
+    if berry in ('golden', 'razz'):
+        final_pct = _compute_catch_pct(tier, ball_key, stats, with_berry=berry)
+    else:
+        final_pct = base_pct
+    return random.randint(1, 100) <= final_pct, final_pct, base_pct, berry
 
 def _active_buddy_friendship():
     try:
@@ -1416,27 +1451,36 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
         return None, info
 
     caught = False
+    pinap_used_on_catch = False
     for ball in BALL_BY_RARITY.get(tier, ['poke']):
         key       = f'balls_{ball}'
         ball_info = POKEBALL_TYPES.get(ball, {})
         while stats.get(key, 0) > 0:
             stats[key] -= 1
-            c, catch_pct = attempt_catch(tier, ball, stats)
+            c, catch_pct, base_pct, berry_used = attempt_catch(tier, ball, stats)
+            berry_info = BERRY_TYPES.get(berry_used or '', {})
             info['throws'].append({
-                'ball_key':   ball,
-                'ball_emoji': ball_info.get('emoji', '🔴'),
-                'ball_name':  ball_info.get('name', 'Ball'),
-                'catch_pct':  catch_pct,
-                'caught':     c,
-                'rem_poke':   stats.get('balls_poke', 0),
-                'rem_great':  stats.get('balls_great', 0),
-                'rem_ultra':  stats.get('balls_ultra', 0),
+                'ball_key':    ball,
+                'ball_emoji':  ball_info.get('emoji', '🔴'),
+                'ball_name':   ball_info.get('name', 'Ball'),
+                'catch_pct':   catch_pct,
+                'base_pct':    base_pct,
+                'berry_used':  berry_used,
+                'berry_emoji': berry_info.get('emoji', ''),
+                'berry_name':  berry_info.get('name', ''),
+                'caught':      c,
+                'rem_poke':    stats.get('balls_poke', 0),
+                'rem_great':   stats.get('balls_great', 0),
+                'rem_ultra':   stats.get('balls_ultra', 0),
             })
             if c:
                 caught = True
+                if berry_used == 'pinap':
+                    pinap_used_on_catch = True
                 break
         if caught:
             break
+    info['pinap_bonus'] = pinap_used_on_catch
 
     if not info['throws']:
         info['no_balls'] = True
@@ -1450,6 +1494,16 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
 
     if caught:
         add_to_collection(wild_name, wild_type, wild_emoji, tier, is_shiny, col=col)
+        # Pinap reward: bump newly added Pokémon's level by 1 (PoGo "double candy"
+        # equivalent — accelerates leveling instead of giving raw XP)
+        if pinap_used_on_catch and col is not None:
+            for p in reversed(col.get('pokemon', [])):
+                if p['name'] == wild_name:
+                    if p.get('level', 1) < LEVEL_CAP:
+                        p['level'] += 1
+                        p['xp']     = xp_for_level(p['level'])
+                    break
+            write_collection(col['active'], col['pokemon'], col.get('party'))
         stored_tier  = (tier + '-shiny') if is_shiny else tier
         catch_result = (stored_tier, wild_name, wild_type, wild_emoji, is_shiny)
         # Item drop (Rainbow badge required)
@@ -1966,6 +2020,12 @@ def render_card():
         if n: balls_parts.append(f'{emoji}×{n}')
     balls_str = '  '.join(balls_parts) if balls_parts else 'No balls'
 
+    berries_parts = []
+    for emoji, key in [('🍓','berry_razz'),('🍍','berry_pinap'),('🌟','berry_golden')]:
+        n = tr_stats.get(key, 0)
+        if n: berries_parts.append(f'{emoji}×{n}')
+    berries_str = '  '.join(berries_parts) if berries_parts else 'None'
+
     active_quest = get_daily_quest(tr_stats)
     quest_done   = tr_stats.get('daily_quest_done', False)
     quest_line   = (f'Quest: {active_quest["desc"]}  {"✓ DONE" if quest_done else "[active]"}'
@@ -1990,7 +2050,8 @@ def render_card():
         row(f'Badges: {len(badges)}   Dex: {n_caught}/{n_total} caught'),
         row(f'Streak: 🔥{streak} days  (best: {longest}){shiny_str}'),
         row(f'Rarest: {rarest_str}'),
-        row(f'Balls:  {balls_str}'),
+        row(f'Balls:   {balls_str}'),
+        row(f'Berries: {berries_str}'),
     ]
     if quest_line:
         out.append(row(f'📋 {quest_line}'))
@@ -3162,10 +3223,19 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                 lines.append(' 🎯  CATCH PHASE')
                 throws = ei.get('throws', [])
                 for i, t in enumerate(throws):
+                    pct_str = f'{t["catch_pct"]}%'
+                    if t.get('berry_used') in ('golden', 'razz'):
+                        # Boost berries change the %
+                        pct_str = f'{t.get("base_pct", t["catch_pct"])}% → {t["catch_pct"]}%'
                     lines.append(
                         f'     #{i+1} {t["ball_emoji"]} {t["ball_name"]:<10} '
-                        f'[{stat_bar(t["catch_pct"], 16)}] {t["catch_pct"]}%'
+                        f'[{stat_bar(t["catch_pct"], 16)}] {pct_str}'
                     )
+                    if t.get('berry_used'):
+                        bnote = (' (XP bonus)' if t['berry_used'] == 'pinap' else '')
+                        lines.append(
+                            f'        {t["berry_emoji"]} {t["berry_name"]} thrown!{bnote}'
+                        )
                     if t['caught']:
                         if is_shiny:
                             w = max(len(wname) + 28, 50)
@@ -3176,6 +3246,8 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                             ]
                         else:
                             lines.append(f'     ★  GOTCHA!  {wname} caught!')
+                        if ei.get('pinap_bonus'):
+                            lines.append(f'     🍍  Pinap bonus — {wname} starts at +1 level!')
                         break
                     else:
                         lines.append(
