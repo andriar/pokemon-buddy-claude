@@ -155,6 +155,32 @@ class TestXpCurveMigration(unittest.TestCase):
         self.assertEqual(new_xp, engine.xp_for_level(30))
 
 
+class TestPokedexCount(unittest.TestCase):
+    """Pokédex unique-species count — dupes don't inflate dex."""
+
+    def test_empty(self):
+        self.assertEqual(engine.pokedex_count({'pokemon': []}), 0)
+
+    def test_no_dupes(self):
+        col = {'pokemon': [{'name': 'Pikachu'}, {'name': 'Bulbasaur'}, {'name': 'Charmander'}]}
+        self.assertEqual(engine.pokedex_count(col), 3)
+
+    def test_dupes_collapse(self):
+        col = {'pokemon': [
+            {'name': 'Pidgey'}, {'name': 'Pidgey'}, {'name': 'Pidgey'},
+            {'name': 'Rattata'},
+        ]}
+        self.assertEqual(engine.pokedex_count(col), 2)
+
+    def test_regional_variants_count_separately(self):
+        # Distinct names — Alolan Vulpix is its own dex slot
+        col = {'pokemon': [{'name': 'Vulpix'}, {'name': 'Alolan Vulpix'}]}
+        self.assertEqual(engine.pokedex_count(col), 2)
+
+    def test_missing_pokemon_key(self):
+        self.assertEqual(engine.pokedex_count({}), 0)
+
+
 class TestMultiplierCap(unittest.TestCase):
     """Stack cap (combo × streak × lucky ≤ 3.0) prevents XP curve from breaking."""
 
@@ -286,7 +312,7 @@ class TestGetTrainerTitle(unittest.TestCase):
         }
 
     def _col(self, n=0):
-        return {'pokemon': [{}] * n}
+        return {'pokemon': [{'name': f'Mon{i}'} for i in range(n)]}
 
     def test_rookie_with_no_achievements(self):
         self.assertEqual(engine.get_trainer_title(self._empty_stats(), self._col(0)), 'Rookie Trainer')
@@ -488,7 +514,8 @@ class TestCheckMilestones(unittest.TestCase):
         }
 
     def _col(self, n=0):
-        return {'pokemon': [{'rarity': 'common'}] * n}
+        # Distinct names so pokedex_count() reflects n
+        return {'pokemon': [{'name': f'Mon{i}', 'rarity': 'common'} for i in range(n)]}
 
     def test_first_catch_milestone(self):
         col = self._col(1)

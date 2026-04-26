@@ -655,8 +655,16 @@ def fmt_duration(secs):
 
 # ── Milestone & title logic ───────────────────────────────────────────────────
 
+def pokedex_count(col):
+    """Unique species count for Pokédex completion. Duplicates of the same name
+    (e.g. catching multiple Pidgey) register only once. Regional variants are
+    stored under distinct names (e.g. 'Vulpix' vs 'Alolan Vulpix') so they
+    naturally count as separate dex entries."""
+    return len({p['name'] for p in col.get('pokemon', [])})
+
+
 def get_trainer_title(stats, col):
-    n = len(col['pokemon'])
+    n = pokedex_count(col)
     checks = {
         'beat_elite_four':  stats.get('beat_elite_four'),
         'caught_mythical':  stats.get('caught_mythical'),
@@ -687,7 +695,7 @@ def check_milestones(stats, col, old_level, new_level, catch_result, evolved):
             return [MILESTONES[key]]
         return []
 
-    n_caught = len(col['pokemon'])
+    n_caught = pokedex_count(col)
 
     # Dex milestones
     if n_caught >= 1:  new_ms += maybe('first_catch')
@@ -1695,7 +1703,7 @@ def render_status(text):
     trainer_stats = read_stats()
     col   = read_collection()
     title = get_trainer_title(trainer_stats, col)
-    n_dex = len(col['pokemon'])
+    n_dex = pokedex_count(col)
     n_total = sum(len(v) for v in POKEMON_POOL.values())
     streak  = trainer_stats.get('streak', 0)
     longest = trainer_stats.get('longest_streak', 0)
@@ -1922,7 +1930,7 @@ def render_card():
     badges = [b for b in badges_raw if 'No badges yet' not in b]
     badge_names = [re.search(r'\*\*(.+?)\*\*', b).group(1) for b in badges if re.search(r'\*\*(.+?)\*\*', b)]
 
-    n_caught = len(col['pokemon'])
+    n_caught = pokedex_count(col)
     n_total  = sum(len(v) for v in POKEMON_POOL.values())
     streak   = tr_stats.get('streak', 0)
     longest  = tr_stats.get('longest_streak', 0)
@@ -2144,7 +2152,7 @@ def render_html_card():
     grouped = _group_by_tier(col['pokemon'])
     rarest  = next((grouped[t][0] for t in RARITY_TIER_ORDER if grouped.get(t)), None)
 
-    n_caught   = len(col['pokemon'])
+    n_caught   = pokedex_count(col)
     n_total    = sum(len(v) for v in POKEMON_POOL.values())
     streak     = tr_stats.get('streak', 0)
     longest    = tr_stats.get('longest_streak', 0)
@@ -2809,7 +2817,7 @@ def render_og_svg():
     title     = get_trainer_title(tr_stats, col)
     streak    = tr_stats.get('streak', 0)
     total_xp  = tr_stats.get('total_xp_ever', 0)
-    n_caught  = len(col['pokemon'])
+    n_caught  = pokedex_count(col)
     n_total   = sum(len(v) for v in POKEMON_POOL.values())
 
     active = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), None)
@@ -2931,7 +2939,7 @@ def render_dex(filter_arg=None):
         return ' No Pokémon caught yet. Earn XP to encounter wild Pokémon!'
 
     n_total  = sum(len(v) for v in POKEMON_POOL.values())
-    n_caught = len(col['pokemon'])
+    n_caught = pokedex_count(col)
 
     filter_mode = None  # 'tier' | 'type' | 'shiny' | None
     filter_key  = None
@@ -3243,7 +3251,7 @@ def _render_journey(export_html=False, verbose=False):
 
     total_xp   = stats.get('total_xp_ever', 0)
     streak     = stats.get('streak', 0)
-    n_caught   = len(col['pokemon'])
+    n_caught   = pokedex_count(col)
 
     lines = [
         f'🗺️  {trainer} — Pokémon Journey\n',

@@ -5,6 +5,19 @@ Format: [version] — date — description
 
 ---
 
+## [2.32.1] — 2026-04-26
+
+### Fixed
+- **Pokédex dupe-counting bug** — catching the same species multiple times inflated dex stats. `len(col['pokemon'])` was used as Pokédex count at 8 sites (trainer title, milestones, status card, dex view, history, party, etc.) — but it counted instances, not unique species.
+- New helper `pokedex_count(col)` returns unique species count via name-set dedup. Regional variants (Alolan Vulpix vs Vulpix) are stored under distinct names so they correctly count as separate dex entries.
+- Affected stats now correct:
+  - Trainer title (`dex_10`, `dex_30` thresholds)
+  - Milestones (`first_catch`, `dex_10`, `dex_20`, `dex_30`)
+  - Status card / history / party / dex view "caught" counts
+- Added `TestPokedexCount` (5 cases).
+
+---
+
 ## [2.32.0] — 2026-04-26
 
 ### Changed
