@@ -59,6 +59,9 @@ RAID_FILE       = Path.home() / '.claude' / 'buddy-raid.json'
 UPDATE_CACHE    = Path.home() / '.claude' / 'buddy-update-status.json'
 UPDATE_CHECK_TTL = 86400      # 24h between GitHub release polls
 UPDATE_REPO      = 'andriar/pokemon-buddy-claude'
+AUTH_FILE       = Path.home() / '.claude' / 'buddy-auth.json'
+HUB_API_BASE    = os.environ.get('POKE_HUB_API', 'http://localhost:8000')
+HUB_WEB_BASE    = os.environ.get('POKE_HUB_WEB', 'http://localhost:3000')
 TODAY           = date.today().strftime('%Y-%m-%d')
 LOG_CAP         = 15
 LEVEL_CAP       = 100         # max Pokémon level; XP past cap → Exp Share
@@ -3571,6 +3574,134 @@ def do_switch(target_name):
     print(f' 🔄 Switched buddy: {cur_name} → {disp_emj} {disp_name}')
     print(f'    {disp_name} is now your active buddy! (Lv.{level}, {xp} XP)')
 
+# ── Hub publish (pokemon-buddy-hub) ──────────────────────────────────────────
+
+def _hub_request(method, path, *, token=None, payload=None, timeout=15):
+    import urllib.request, urllib.error
+    url = f'{HUB_API_BASE}{path}'
+    data = None
+    headers = {'Accept': 'application/json'}
+    if payload is not None:
+        data = json.dumps(payload, default=lambda o: list(o) if isinstance(o, (set, frozenset)) else str(o)).encode()
+        headers['Content-Type'] = 'application/json'
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode() or '{}'
+            return resp.status, json.loads(body) if body.strip().startswith(('{', '[')) else {}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors='replace')
+        return e.code, {'error': body}
+    except urllib.error.URLError as e:
+        return 0, {'error': str(e.reason)}
+
+def _read_auth():
+    if not AUTH_FILE.exists():
+        return None
+    try:
+        return json.loads(AUTH_FILE.read_text())
+    except Exception:
+        return None
+
+def _write_auth(data):
+    AUTH_FILE.write_text(json.dumps(data, indent=2))
+    try:
+        AUTH_FILE.chmod(0o600)
+    except Exception:
+        pass
+
+def _build_publish_payload():
+    col   = read_collection()
+    stats = read_stats()
+    _, _, level, xp, stage, name = read_buddy()
+    active = next((p for p in col['pokemon'] if p.get('name') == col.get('active')), {}) or {}
+    party_names = col.get('party') or []
+    party = [p for n in party_names for p in col['pokemon'] if p.get('name') == n][:3]
+    badges = []
+    raw_badges = stats.get('gym_badges_earned') or stats.get('badges') or ''
+    if isinstance(raw_badges, str):
+        badges = [b.strip() for b in raw_badges.split(',') if b.strip()]
+    elif isinstance(raw_badges, list):
+        badges = list(raw_badges)
+    buddy = {
+        'name':       active.get('name', name),
+        'level':      active.get('level', level),
+        'xp':         active.get('xp', xp),
+        'type':       active.get('type'),
+        'emoji':      active.get('emoji'),
+        'rarity':     active.get('rarity', 'common').replace('-shiny', ''),
+        'shiny':      bool(active.get('shiny')),
+        'nature':     active.get('nature'),
+        'stage':      stage,
+        'friendship': active.get('friendship'),
+    }
+    return {
+        'buddy':      buddy,
+        'party':      party,
+        'collection': col['pokemon'],
+        'stats':      {k: v for k, v in stats.items() if not k.startswith('_')},
+        'badges':     badges,
+    }
+
+def cmd_auth():
+    code, body = _hub_request('POST', '/auth/cli/start')
+    if code != 200:
+        print(f' ❌ Hub unreachable ({HUB_API_BASE}): {body.get("error", code)}')
+        sys.exit(1)
+    device_code = body['device_code']
+    verify_url  = body['verification_url']
+    print(' 🔐 Pokemon Buddy Hub — device login')
+    print(f'    Open: {verify_url}')
+    print('    Sign in with GitHub. Waiting…')
+    import time
+    deadline = time.time() + body.get('expires_in', 600)
+    while time.time() < deadline:
+        time.sleep(3)
+        c, b = _hub_request('GET', f'/auth/cli/poll?code={device_code}')
+        if c != 200:
+            print(f' ❌ Poll failed: {b.get("error", c)}')
+            sys.exit(1)
+        if b.get('status') == 'ok':
+            _write_auth({'token': b['token'], 'username': b['username'], 'api': HUB_API_BASE})
+            print(f' ✅ Linked as @{b["username"]} — token saved to {AUTH_FILE}')
+            return
+    print(' ⏰ Login timed out. Try again.')
+    sys.exit(1)
+
+def cmd_publish():
+    auth = _read_auth()
+    if not auth:
+        print(' 🔐 Not signed in. Run /poke:auth first.')
+        sys.exit(1)
+    payload = _build_publish_payload()
+    code, body = _hub_request('POST', '/sync', token=auth['token'], payload=payload)
+    if code != 200:
+        print(f' ❌ Publish failed ({code}): {body.get("error", "")}')
+        sys.exit(1)
+    print(f' 📡 Published as @{auth["username"]}')
+    print(f'    Profile: {body.get("profile_url", HUB_WEB_BASE + "/t/" + auth["username"])}')
+    print(f'    Note: profile is PUBLIC. Run /poke:unpublish to remove.')
+
+def cmd_unpublish():
+    auth = _read_auth()
+    if not auth:
+        print(' 🔐 Not signed in.')
+        sys.exit(1)
+    code, body = _hub_request('DELETE', '/sync', token=auth['token'])
+    if code not in (200, 204):
+        print(f' ❌ Unpublish failed ({code}): {body.get("error", "")}')
+        sys.exit(1)
+    print(' 🗑️  Profile removed from hub.')
+
+def cmd_profile_url():
+    auth = _read_auth()
+    if not auth:
+        print(' 🔐 Not signed in. Run /poke:auth first.')
+        sys.exit(1)
+    print(f'{HUB_WEB_BASE}/t/{auth["username"]}')
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -3606,6 +3737,15 @@ def main():
         if '--verbose' in args:
             print(json.dumps(result, indent=2))
         sys.exit(0)
+
+    if mode == 'auth':
+        cmd_auth(); sys.exit(0)
+    if mode == 'publish':
+        cmd_publish(); sys.exit(0)
+    if mode == 'unpublish':
+        cmd_unpublish(); sys.exit(0)
+    if mode == 'profile-url':
+        cmd_profile_url(); sys.exit(0)
 
     if mode == 'card':
         print(render_card())

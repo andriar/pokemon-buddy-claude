@@ -5,6 +5,19 @@ Format: [version] — date — description
 
 ---
 
+## [2.35.0] — 2026-04-27
+
+### Added
+- **Pokemon Buddy Hub integration** — publish your trainer profile to a public web showcase.
+  - `/poke:auth` — one-time GitHub device-code login (token saved to `~/.claude/buddy-auth.json`, chmod 600).
+  - `/poke:publish` — POST current buddy + party + Pokédex + stats + badges to hub `/sync` endpoint.
+  - `/poke:unpublish` — remove published snapshot from hub.
+  - `/poke:profile-url` — print public profile URL.
+  - Hub URLs configurable via `POKE_HUB_API` / `POKE_HUB_WEB` env vars (default localhost:8000 / localhost:3000).
+  - Companion repo: `pokemon-buddy-hub` (FastAPI + Next.js 15 + R3F 2.5D buddy showcase + leaderboard).
+
+---
+
 ## [2.34.0] — 2026-04-26
 
 ### Added
