@@ -3668,6 +3668,13 @@ def _build_publish_payload():
         'features':         int(stats.get('features', 0) or 0),
         'ships':            int(stats.get('ships', 0) or 0),
     }
+    journal = []
+    if BUDDY_FILE.exists():
+        for line in BUDDY_FILE.read_text(encoding='utf-8').splitlines():
+            m = re.match(r'\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*([^|]+?)\s*\|\s*([+\-]?\d+)?\s*(?:XP)?\s*\|', line)
+            if m:
+                journal.append({'date': m.group(1), 'event': m.group(2).strip(), 'xp': int(m.group(3)) if m.group(3) else 0})
+    journal = journal[-15:]
     return {
         'buddy':       {**buddy, 'moves': buddy_moves},
         'party':       party,
@@ -3676,7 +3683,55 @@ def _build_publish_payload():
         'badges':      badges,
         'raid':        raid,
         'extras':      extras,
+        'journal':     journal,
     }
+
+def cmd_bio(args):
+    """Usage: /poke:bio set <text> | title <text> | clear"""
+    auth = _read_auth()
+    if not auth:
+        print(' 🔐 Not signed in. Run /poke:auth first.')
+        sys.exit(1)
+    if not args:
+        print(' Usage: /poke:bio set <text>  |  title <text>  |  clear')
+        sys.exit(1)
+    sub = args[0].lower()
+    payload = {}
+    rest = ' '.join(args[1:]).strip()
+    if sub == 'set':
+        payload['bio'] = rest
+    elif sub == 'title':
+        payload['title'] = rest
+    elif sub == 'clear':
+        payload = {'bio': '', 'title': ''}
+    else:
+        print(' ❌ Unknown sub-command. Use: set | title | clear')
+        sys.exit(1)
+    code, body = _hub_request('PATCH', '/me', token=auth['token'], payload=payload)
+    if code != 200:
+        print(f' ❌ Failed ({code}): {body.get("error", "")}')
+        sys.exit(1)
+    if 'bio' in payload:
+        print(f' ✏️  Bio updated: {payload["bio"] or "(cleared)"}')
+    if 'title' in payload:
+        print(f' 🏷️  Title updated: {payload["title"] or "(cleared)"}')
+
+def cmd_follow(args, action='follow'):
+    auth = _read_auth()
+    if not auth:
+        print(' 🔐 Not signed in. Run /poke:auth first.')
+        sys.exit(1)
+    if not args:
+        print(f' Usage: /poke:{action} <username>')
+        sys.exit(1)
+    target = args[0].lstrip('@').strip()
+    method = 'POST' if action == 'follow' else 'DELETE'
+    code, body = _hub_request(method, f'/follow/{target}', token=auth['token'])
+    if code not in (200, 204):
+        print(f' ❌ {action.title()} failed ({code}): {body.get("error", "")}')
+        sys.exit(1)
+    icon = '🤝' if action == 'follow' else '👋'
+    print(f' {icon} {action.title()}ed @{target}')
 
 def cmd_auth():
     code, body = _hub_request('POST', '/auth/cli/start')
@@ -3779,6 +3834,12 @@ def main():
         cmd_unpublish(); sys.exit(0)
     if mode == 'profile-url':
         cmd_profile_url(); sys.exit(0)
+    if mode == 'bio':
+        cmd_bio(args[1:]); sys.exit(0)
+    if mode == 'follow':
+        cmd_follow(args[1:], 'follow'); sys.exit(0)
+    if mode == 'unfollow':
+        cmd_follow(args[1:], 'unfollow'); sys.exit(0)
 
     if mode == 'card':
         print(render_card())
