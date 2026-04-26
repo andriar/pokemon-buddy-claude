@@ -1871,7 +1871,7 @@ def is_persona_on():
 
 def render_statusline(plugin_mode=False):
     col = read_collection()
-    prefix = f'⚡v{get_plugin_version()}  ' if plugin_mode else ''
+    prefix = ''  # version removed v2.33.2 — use /poke:status or trainer card
     persona_suffix = '  🎭' if is_persona_on() else ''
     if not col['pokemon']:
         return f'{prefix}🎮 No buddy yet{persona_suffix}'

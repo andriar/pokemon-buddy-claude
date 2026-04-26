@@ -5,6 +5,13 @@ Format: [version] — date — description
 
 ---
 
+## [2.33.2] — 2026-04-26
+
+### Removed
+- **Version prefix from statusline** — `⚡v2.33.x  ` always-on tag dropped. Took space every refresh with no actionable signal (no update check). Version still visible in `/poke:status` card. Future: gate display behind a real "outdated" check.
+
+---
+
 ## [2.33.1] — 2026-04-26
 
 ### Added
