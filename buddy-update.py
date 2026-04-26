@@ -3637,12 +3637,45 @@ def _build_publish_payload():
         'stage':      stage,
         'friendship': active.get('friendship'),
     }
+    moves = MOVE_UNLOCKS.get(buddy['name'], {})
+    buddy_moves = [
+        {'level': lv, 'name': mv[0], 'type': mv[1], 'desc': mv[2], 'unlocked': buddy['level'] >= lv}
+        for lv, mv in sorted(moves.items())
+    ]
+    raid = None
+    if RAID_FILE.exists():
+        try:
+            raid = json.loads(RAID_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            raid = None
+    extras = {
+        'leaders_defeated': stats.get('leaders_defeated', ''),
+        'elite_defeated':   stats.get('elite_defeated', ''),
+        'champion':         bool(stats.get('champion')),
+        'caught_legendary': bool(stats.get('caught_legendary')),
+        'caught_mythical':  bool(stats.get('caught_mythical')),
+        'caught_shiny':     bool(stats.get('caught_shiny')),
+        'shiny_count':      int(stats.get('shiny_count', 0) or 0),
+        'milestones':       stats.get('milestones', ''),
+        'daily_quest': {
+            'date': stats.get('daily_quest_date'),
+            'id':   stats.get('daily_quest_id'),
+            'done': bool(stats.get('daily_quest_done')),
+        },
+        'combo':            int(stats.get('combo', 0) or 0),
+        'longest_streak':   int(stats.get('longest_streak', 0) or 0),
+        'bug_fixes':        int(stats.get('bug_fixes', 0) or 0),
+        'features':         int(stats.get('features', 0) or 0),
+        'ships':            int(stats.get('ships', 0) or 0),
+    }
     return {
-        'buddy':      buddy,
-        'party':      party,
-        'collection': col['pokemon'],
-        'stats':      {k: v for k, v in stats.items() if not k.startswith('_')},
-        'badges':     badges,
+        'buddy':       {**buddy, 'moves': buddy_moves},
+        'party':       party,
+        'collection':  col['pokemon'],
+        'stats':       {k: v for k, v in stats.items() if not k.startswith('_')},
+        'badges':      badges,
+        'raid':        raid,
+        'extras':      extras,
     }
 
 def cmd_auth():
