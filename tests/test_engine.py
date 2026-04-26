@@ -155,6 +155,34 @@ class TestXpCurveMigration(unittest.TestCase):
         self.assertEqual(new_xp, engine.xp_for_level(30))
 
 
+class TestUpdateCheck(unittest.TestCase):
+    """GitHub release poll + outdated detection."""
+
+    def test_semver_tuple_basic(self):
+        self.assertEqual(engine._semver_tuple('2.33.2'), (2, 33, 2))
+
+    def test_semver_tuple_strips_v(self):
+        self.assertEqual(engine._semver_tuple('v2.33.2'), (2, 33, 2))
+
+    def test_semver_tuple_short(self):
+        self.assertEqual(engine._semver_tuple('2.33'), (2, 33, 0))
+
+    def test_semver_tuple_invalid_part_zeroed(self):
+        self.assertEqual(engine._semver_tuple('2.33.foo'), (2, 33, 0))
+
+    def test_is_outdated_true(self):
+        self.assertTrue(engine.is_outdated('2.33.1', '2.33.2'))
+        self.assertTrue(engine.is_outdated('2.33.2', '2.34.0'))
+        self.assertTrue(engine.is_outdated('1.0.0', '2.0.0'))
+
+    def test_is_outdated_false_when_equal(self):
+        self.assertFalse(engine.is_outdated('2.33.2', '2.33.2'))
+
+    def test_is_outdated_false_when_local_ahead(self):
+        # Local dev build ahead of latest release — don't show update tag
+        self.assertFalse(engine.is_outdated('2.34.0', '2.33.2'))
+
+
 class TestPokedexCount(unittest.TestCase):
     """Pokédex unique-species count — dupes don't inflate dex."""
 

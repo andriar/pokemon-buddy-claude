@@ -56,6 +56,9 @@ STATS_FILE      = Path.home() / '.claude' / 'buddy-stats.md'
 STATE_FILE      = Path.home() / '.claude' / 'buddy-state.txt'
 ENCOUNTER_FILE  = Path.home() / '.claude' / 'buddy-encounter.json'
 RAID_FILE       = Path.home() / '.claude' / 'buddy-raid.json'
+UPDATE_CACHE    = Path.home() / '.claude' / 'buddy-update-status.json'
+UPDATE_CHECK_TTL = 86400      # 24h between GitHub release polls
+UPDATE_REPO      = 'andriar/pokemon-buddy-claude'
 TODAY           = date.today().strftime('%Y-%m-%d')
 LOG_CAP         = 15
 LEVEL_CAP       = 100         # max Pokémon level; XP past cap → Exp Share
@@ -1826,6 +1829,60 @@ def get_plugin_version():
     except Exception:
         return '2.x'
 
+
+# ── Update check ──────────────────────────────────────────────────────────────
+
+def _semver_tuple(v):
+    """'2.33.2' or 'v2.33.2' → (2, 33, 2). Non-numeric parts coerce to 0."""
+    parts = (v or '').lstrip('v').split('.')
+    return tuple(int(p) if p.isdigit() else 0 for p in (parts + ['0', '0', '0'])[:3])
+
+
+def is_outdated(current, latest):
+    return _semver_tuple(latest) > _semver_tuple(current)
+
+
+def read_update_cache():
+    """Returns dict with current/latest/outdated/checked_ts, or {} if missing."""
+    if not UPDATE_CACHE.exists():
+        return {}
+    try:
+        return json.loads(UPDATE_CACHE.read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+
+
+def run_update_check(force=False):
+    """Poll GitHub releases, write cache. Skips if cache fresh (within TTL).
+    Network call is best-effort — silent on failure."""
+    cached = read_update_cache()
+    now    = int(time.time())
+    if not force and (now - int(cached.get('checked_ts', 0))) < UPDATE_CHECK_TTL:
+        return cached
+    try:
+        import urllib.request
+        url = f'https://api.github.com/repos/{UPDATE_REPO}/releases/latest'
+        req = urllib.request.Request(url, headers={'User-Agent': 'pokemon-buddy-claude'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+        latest  = (data.get('tag_name') or '').lstrip('v')
+        current = get_plugin_version()
+        result  = {
+            'current':    current,
+            'latest':     latest,
+            'outdated':   is_outdated(current, latest),
+            'checked_ts': now,
+        }
+        UPDATE_CACHE.write_text(json.dumps(result), encoding='utf-8')
+        return result
+    except Exception:
+        # Stamp the timestamp anyway so we don't retry every session
+        if cached:
+            cached['checked_ts'] = now
+            try: UPDATE_CACHE.write_text(json.dumps(cached), encoding='utf-8')
+            except Exception: pass
+        return cached
+
 def render_encounter_state(enc):
     """Timestamp-driven throw wobble. Frame = f(elapsed since base_ts)."""
     wname  = enc["wild_name"]
@@ -1935,7 +1992,13 @@ def render_statusline(plugin_mode=False):
     stamina = regen_stamina(tr_stats)
     stamina_tag = f'  💪{stamina}/{BATTLE_STAMINA_MAX}' if stamina < BATTLE_STAMINA_MAX else ''
 
-    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{combo_tag}{streak_tag}{stamina_tag}{persona_suffix}'
+    # Update available — read cache only, never blocks statusline render
+    update_tag = ''
+    upd = read_update_cache()
+    if upd.get('outdated'):
+        update_tag = f'  🔔v{upd.get("latest", "")}'
+
+    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{combo_tag}{streak_tag}{stamina_tag}{update_tag}{persona_suffix}'
 
 def _active_nature(col):
     active = next((p for p in col['pokemon'] if p['name'] == col.get('active')), None)
@@ -3534,6 +3597,14 @@ def main():
     if mode == 'statusline':
         plugin_mode = '--plugin' in args
         print(render_statusline(plugin_mode=plugin_mode))
+        sys.exit(0)
+
+    if mode == 'update-check':
+        # Background mode — silent unless --verbose, never blocks
+        force  = '--force' in args
+        result = run_update_check(force=force)
+        if '--verbose' in args:
+            print(json.dumps(result, indent=2))
         sys.exit(0)
 
     if mode == 'card':

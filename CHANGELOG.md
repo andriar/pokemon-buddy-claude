@@ -5,6 +5,24 @@ Format: [version] — date — description
 
 ---
 
+## [2.34.0] — 2026-04-26
+
+### Added
+- **Update-available detector** — statusline shows `🔔v2.X.Y` tag when a newer release is on GitHub.
+  - SessionStart hook fires a background `python3 buddy-update.py update-check` (subprocess, fully detached, never blocks session).
+  - `update-check` polls `api.github.com/repos/andriar/pokemon-buddy-claude/releases/latest` and compares against local `plugin.json` version.
+  - Result cached at `~/.claude/buddy-update-status.json` with **24h TTL** — no spam.
+  - Statusline reads cache only (zero-network on render). If cache missing/empty, no tag shown.
+  - Network failures stamp `checked_ts` anyway → won't retry every session.
+- New helpers: `_semver_tuple`, `is_outdated`, `read_update_cache`, `run_update_check`.
+- New mode `update-check` (with `--force` to bypass TTL, `--verbose` to print result).
+
+### Tests
+- `TestUpdateCheck` — 7 cases covering semver tuple parsing, version-strip, short versions, invalid parts, outdated detection (true/false/equal/dev-ahead).
+- 318 tests pass.
+
+---
+
 ## [2.33.2] — 2026-04-26
 
 ### Removed

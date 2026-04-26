@@ -64,9 +64,28 @@ def has_buddy():
     return BUDDY_FILE.exists()
 
 
+def fire_update_check():
+    """Background fire-and-forget GitHub release poll. Never blocks session."""
+    try:
+        import subprocess
+        engine = PLUGIN_ROOT / 'buddy-update.py'
+        if not engine.exists():
+            return
+        subprocess.Popen(
+            ['python3', str(engine), 'update-check'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception:
+        pass
+
+
 def main():
     state = load_plugin_state()
     first_run = not state.get('welcomed')
+    fire_update_check()
     statusline_new = ensure_statusline()
     legacy = detect_legacy()
 
