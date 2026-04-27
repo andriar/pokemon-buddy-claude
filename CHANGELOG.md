@@ -5,6 +5,13 @@ Format: [version] — date — description
 
 ---
 
+## [2.35.2] — 2026-04-27
+
+### Fixed
+- **XP awards crashed silently after v2.35.1 cap-scaling refactor.** `xp` / `xp-auto` handler referenced `col` before defining it, raising `UnboundLocalError` on every invocation. All XP gains showed `+0 XP` in journey log; `daily_xp` froze wherever it was at upgrade time. Now calls `read_collection()` before passing `col` to `daily_cap_for()` / `apply_daily_cap()`.
+
+---
+
 ## [2.35.1] — 2026-04-27
 
 ### Changed

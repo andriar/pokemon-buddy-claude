@@ -4299,6 +4299,7 @@ def main():
         add_xp = int(base_xp * stack_mult) + streak_bonus
 
         # Anti-cheat: clip to daily cap (level-scaled), record dedup fingerprint
+        col = read_collection()
         _cap_for_msg = daily_cap_for(col)
         add_xp, was_capped, _ = apply_daily_cap(tr_stats, add_xp, col)
         if was_capped:
