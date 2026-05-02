@@ -5,6 +5,21 @@ Format: [version] — date — description
 
 ---
 
+## [2.35.3] — 2026-05-02
+
+### Added
+- **`/poke:doctor` slash command.** Diagnoses collection drift: stuck wild evolutions, friendship-evolution candidates (ready / pending), trade-evolution targets, XP/level mismatches, and active/party orphans. `--fix` flag bumps friendship of pending evolutions to threshold (still respects day/night gate).
+
+### Fixed
+- **Friendship stuck for Exp Share / Party XP recipients.** `distribute_overflow_xp` and `distribute_party_xp` only awarded XP — never `friendship`. Bond-evolution Pokémon (Riolu, Eevee→Espeon/Umbreon) on the party bench leveled up via Exp Share but their friendship stayed at the default 70 forever, so Lucario/Espeon/Umbreon evolutions never triggered. Both distributors now award `+1 friendship per share + 3 per level-up` and re-run `apply_friendship_evolutions(col)` after distribution.
+- **Party slot stale after friendship evolution.** `apply_friendship_evolutions` rewrote `col['active']` when the active buddy evolved, but never updated `col['party']`. After Riolu→Lucario the bench list still pointed at "Riolu", which the new doctor flags as `Active/party drift`. Party list now rewritten in lockstep.
+- **Hub client identifies itself.** `_hub_request` now sends `User-Agent: pokemon-buddy-cli/2.35.3 (...)`. The default Python-urllib UA was being banned by Cloudflare Bot Fight Mode on self-hosted hubs; legitimate publishes failed with HTTP 403 "Error 1010".
+
+### Changed
+- **Default hub URLs point at production.** `HUB_API_BASE` / `HUB_WEB_BASE` now default to `https://pokehub-api.andriar.com` / `https://pokehub.andriar.com` instead of `localhost:8000` / `localhost:3000`. Override with `POKE_HUB_API` / `POKE_HUB_WEB` env vars for local dev.
+
+---
+
 ## [2.35.2] — 2026-04-27
 
 ### Fixed

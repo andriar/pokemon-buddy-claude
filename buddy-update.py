@@ -60,8 +60,8 @@ UPDATE_CACHE    = Path.home() / '.claude' / 'buddy-update-status.json'
 UPDATE_CHECK_TTL = 86400      # 24h between GitHub release polls
 UPDATE_REPO      = 'andriar/pokemon-buddy-claude'
 AUTH_FILE       = Path.home() / '.claude' / 'buddy-auth.json'
-HUB_API_BASE    = os.environ.get('POKE_HUB_API', 'http://localhost:8000')
-HUB_WEB_BASE    = os.environ.get('POKE_HUB_WEB', 'http://localhost:3000')
+HUB_API_BASE    = os.environ.get('POKE_HUB_API', 'https://pokehub-api.andriar.com')
+HUB_WEB_BASE    = os.environ.get('POKE_HUB_WEB', 'https://pokehub.andriar.com')
 TODAY           = date.today().strftime('%Y-%m-%d')
 LOG_CAP         = 15
 LEVEL_CAP       = 100         # max Pokémon level; XP past cap → Exp Share
@@ -1056,6 +1056,9 @@ def apply_friendship_evolutions(col=None, hour=None):
             evolved.append(f'{src} → {tgt_name}')
             if col.get('active') == src:
                 col['active'] = tgt_name
+            party = col.get('party')
+            if party:
+                col['party'] = [tgt_name if n == src else n for n in party]
             break
     if evolved and own_col:
         write_collection(col['active'], col['pokemon'], col.get('party'))
@@ -1093,6 +1096,11 @@ def sync_active_to_collection(name, level, xp, col=None):
     })
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
+def _bump_friendship_inline(p, amount):
+    """Mutate p['friendship'] by amount, clamped [0, FRIENDSHIP_MAX]."""
+    cur = p.get('friendship', 70)
+    p['friendship'] = max(0, min(FRIENDSHIP_MAX, cur + amount))
+
 def distribute_overflow_xp(overflow, active_name, stats=None, col=None):
     """Exp Share: split overflow XP evenly across non-active party members
     under level 100. Returns list of (name, gained, old_lv, new_lv) for
@@ -1118,8 +1126,10 @@ def distribute_overflow_xp(overflow, active_name, stats=None, col=None):
         new_lv, new_xp, _ = clamp_to_cap(raw_xp)
         p['level'] = new_lv
         p['xp']    = new_xp
+        _bump_friendship_inline(p, 1 + 3 * max(0, new_lv - old_lv))
         try_wild_evolve(p)
         results.append((p['name'], share, old_lv, new_lv))
+    apply_friendship_evolutions(col)
     write_collection(col['active'], col['pokemon'], col.get('party'))
     return results
 
@@ -1145,9 +1155,11 @@ def distribute_party_xp(full_xp, active_name, col):
         new_lv, new_xp, _ = clamp_to_cap(p.get('xp', xp_for_level(old_lv)) + bench_xp)
         p['level'] = new_lv
         p['xp']    = new_xp
+        _bump_friendship_inline(p, 1 + 3 * max(0, new_lv - old_lv))
         try_wild_evolve(p)
         results.append((p['name'], bench_xp, old_lv, new_lv))
     if results:
+        apply_friendship_evolutions(col)
         write_collection(col['active'], col['pokemon'], col.get('party'))
     return lead_xp, results
 
@@ -3591,11 +3603,13 @@ def do_switch(target_name):
 
 # ── Hub publish (pokemon-buddy-hub) ──────────────────────────────────────────
 
+HUB_USER_AGENT = 'pokemon-buddy-cli/2.35.3 (+https://github.com/andriar/pokemon-buddy-claude)'
+
 def _hub_request(method, path, *, token=None, payload=None, timeout=15):
     import urllib.request, urllib.error
     url = f'{HUB_API_BASE}{path}'
     data = None
-    headers = {'Accept': 'application/json'}
+    headers = {'Accept': 'application/json', 'User-Agent': HUB_USER_AGENT}
     if payload is not None:
         data = json.dumps(payload, default=lambda o: list(o) if isinstance(o, (set, frozenset)) else str(o)).encode()
         headers['Content-Type'] = 'application/json'
@@ -3805,6 +3819,132 @@ def cmd_profile_url():
         sys.exit(1)
     print(f'{HUB_WEB_BASE}/t/{auth["username"]}')
 
+def cmd_doctor(args):
+    """Diagnose collection drift: stuck evolutions, friendship gaps, XP/level mismatch.
+
+    --fix: also bump friendship of stuck evolution candidates to the threshold.
+    """
+    fix = '--fix' in args
+    col = read_collection()
+    fixed_any = False
+
+    # Build evolved-name set so we can ignore final-stage entries listed as base
+    final_stage_names = set()
+    for chain in WILD_EVOLUTIONS.values():
+        for _, evo_name, *_ in chain:
+            final_stage_names.add(evo_name)
+
+    wild_stuck = []
+    friendship_ready = []
+    friendship_close = []
+    trade_pending = []
+    xp_drift = []
+    name_set = {p['name'] for p in col['pokemon']}
+
+    for p in col['pokemon']:
+        nm = p.get('name')
+        lv = int(p.get('level', 1))
+        xp = int(p.get('xp', 0))
+        fr = int(p.get('friendship', 70))
+
+        # Wild level evolutions
+        chain = WILD_EVOLUTIONS.get(nm)
+        if chain:
+            best = None
+            for min_lv, evo_name, *_ in chain:
+                if lv >= min_lv:
+                    best = (min_lv, evo_name)
+            if best:
+                wild_stuck.append((nm, lv, best[1], best[0]))
+
+        # Trade evolutions (export/backup-gated)
+        te = TRADE_EVOLUTIONS.get(nm)
+        if te:
+            trade_pending.append((nm, te[0], te[2]))
+
+        # Friendship evolutions
+        for src, tgt_name, _t, _e, min_f, (when, _hours) in FRIENDSHIP_EVOLUTIONS:
+            if nm != src:
+                continue
+            if fr >= min_f:
+                friendship_ready.append((nm, tgt_name, fr, min_f, when))
+                if fix:
+                    fixed_any = True
+            else:
+                friendship_close.append((nm, tgt_name, fr, min_f, when))
+                if fix:
+                    p['friendship'] = min_f
+                    fixed_any = True
+
+        # XP / level integrity
+        try:
+            expected_lv, _expected_xp, _ = clamp_to_cap(xp)
+            if abs(expected_lv - lv) >= 2:
+                xp_drift.append((nm, lv, expected_lv, xp))
+        except Exception:
+            pass
+
+    active = col.get('active')
+    party  = [n for n in col.get('party', []) if n]
+    missing_active = active and active not in name_set
+    missing_party  = [n for n in party if n not in name_set]
+
+    # ── Render report
+    print(' 🩺 Pokemon Buddy Doctor')
+    print(f'    Collection: {len(col["pokemon"])} entries · active: {active} · party: {", ".join(party) or "—"}')
+    print()
+
+    if wild_stuck:
+        print(f' 🟥 Wild evolution stuck ({len(wild_stuck)}):')
+        for nm, lv, evo, min_lv in wild_stuck:
+            print(f'    {nm} Lv.{lv} → should be {evo} (min Lv.{min_lv}) — try /poke:xp to trigger evolution check')
+        print()
+
+    if friendship_ready:
+        print(f' 💖 Friendship evolution READY ({len(friendship_ready)}):')
+        for nm, tgt, fr, mf, when in friendship_ready:
+            print(f'    {nm} (friendship {fr}/{mf}) → {tgt} during {when} — next /poke:xp at correct hour evolves')
+        print()
+
+    if friendship_close:
+        print(f' 💛 Friendship evolution PENDING ({len(friendship_close)}):')
+        for nm, tgt, fr, mf, when in friendship_close:
+            gap = mf - fr
+            print(f'    {nm} (friendship {fr}/{mf}, need +{gap}) → {tgt} during {when}')
+        print()
+
+    if trade_pending:
+        print(f' 📦 Trade evolution candidates ({len(trade_pending)}):')
+        for nm, tgt, method in trade_pending:
+            print(f'    {nm} → {tgt} via /poke:{method}')
+        print()
+
+    if xp_drift:
+        print(f' ⚠️  XP/level drift ({len(xp_drift)}):')
+        for nm, lv, expected_lv, xp in xp_drift:
+            print(f'    {nm}: stored Lv.{lv}, XP {xp} → expected Lv.{expected_lv}')
+        print()
+
+    if missing_active or missing_party:
+        print(' ⚠️  Active/party drift:')
+        if missing_active:
+            print(f'    active "{active}" not in collection')
+        for n in missing_party:
+            print(f'    party slot "{n}" not in collection')
+        print()
+
+    if fix and fixed_any:
+        write_collection(col['active'], col['pokemon'], col.get('party'))
+        evos = apply_friendship_evolutions(col)
+        if evos:
+            write_collection(col['active'], col['pokemon'], col.get('party'))
+            print(f' 💖 Triggered evolutions: {", ".join(evos)}')
+        print(' ✅ --fix applied: friendship bumped to threshold; re-run /poke:doctor to verify')
+    elif not (wild_stuck or friendship_ready or friendship_close or trade_pending or xp_drift or missing_active or missing_party):
+        print(' ✅ All clear — no drift detected')
+    elif not fix and (friendship_close or friendship_ready):
+        print(' 💡 Run with --fix to bump friendship to threshold (does NOT skip daytime/nighttime gate)')
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
@@ -3849,6 +3989,8 @@ def main():
         cmd_unpublish(); sys.exit(0)
     if mode == 'profile-url':
         cmd_profile_url(); sys.exit(0)
+    if mode == 'doctor':
+        cmd_doctor(args[1:]); sys.exit(0)
     if mode == 'bio':
         cmd_bio(args[1:]); sys.exit(0)
     if mode == 'follow':
