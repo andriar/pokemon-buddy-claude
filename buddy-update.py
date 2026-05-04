@@ -3633,10 +3633,11 @@ def do_shiny_rare():
         print(f' ✨ {p["emoji"]} {p["name"]:<20} Lv.{p["level"]:<3} {rarity_badge}')
         print(f'    💬 /poke:switch {p["name"]}')
 
-def do_switch(target_name):
+def do_switch(target_name, index=None):
     col = read_collection()
-    match = next((p for p in col['pokemon'] if p['name'].lower() == target_name.lower()), None)
-    if not match:
+    matches = [p for p in col['pokemon'] if p['name'].lower() == target_name.lower()]
+
+    if not matches:
         print(f"❌ {target_name} not found in your collection.")
         # Show shiny mythical/legendary first, then rest
         shiny_rare = []
@@ -3660,6 +3661,31 @@ def do_switch(target_name):
             print(f"     ... and {len(all_sorted) - 20} more")
         sys.exit(1)
 
+    # Multiple matches: show menu + ask for clarification
+    if len(matches) > 1:
+        if index is None:
+            print(f' 🔀 Found {len(matches)} {target_name}. Pick one:')
+            for i, p in enumerate(matches, 1):
+                rarity = p.get('rarity', '').replace('-shiny', '')
+                is_shiny = p.get('shiny') or '-shiny' in p.get('rarity', '')
+                shiny_tag = ' ✨ SHINY' if is_shiny else ''
+                print(f'    {i}. {p["emoji"]} Lv.{p["level"]:<3} ({rarity}){shiny_tag}')
+            print(f'\n    Run: /poke:switch {target_name} <number>')
+            print(f'    Example: /poke:switch {target_name} 2')
+            sys.exit(0)
+        else:
+            try:
+                idx = int(index) - 1  # convert to 0-based
+                if 0 <= idx < len(matches):
+                    match = matches[idx]
+                else:
+                    print(f'❌ Invalid choice. Must be 1-{len(matches)}.')
+                    sys.exit(1)
+            except (ValueError, IndexError):
+                print(f'❌ Invalid choice: {index}')
+                sys.exit(1)
+    else:
+        match = matches[0]
     lines, _, cur_level, cur_xp, _, cur_name = read_buddy()
     sync_active_to_collection(cur_name, cur_level, cur_xp)
 
@@ -4333,7 +4359,9 @@ def main():
         sys.exit(0)
 
     if mode == 'switch':
-        do_switch(args[1] if len(args) > 1 else '')
+        name = args[1] if len(args) > 1 else ''
+        idx = args[2] if len(args) > 2 else None
+        do_switch(name, idx)
         sys.exit(0)
 
     if mode == 'shiny-rare':
