@@ -831,49 +831,76 @@ def read_collection():
     if party_m:
         party = [n.strip() for n in party_m.group(1).split(',') if n.strip()]
     else:
-        party = [active] if active else []
+        # Extract name from active (format: name or name:id)
+        active_name = active.split(':')[0] if active and ':' in active else active
+        party = [active_name] if active_name else []
     pokemon = []
     for line in text.splitlines():
         if not line.startswith('|'): continue
         cols = [c.strip() for c in line.split('|')]
         cols = [c for c in cols if c]
-        if len(cols) < 6 or cols[0] == 'Name': continue
+        if len(cols) < 6: continue
+
+        # Check if first column is an 8-char ID
+        has_id = cols[0] and len(cols[0]) == 8 and all(c in '0123456789abcdef-' for c in cols[0])
+        if has_id:
+            pokemon_id = cols[0]
+            name_idx = 1
+        else:
+            pokemon_id = None
+            name_idx = 0
+
+        if cols[name_idx] == 'Name': continue  # Skip header
+
         try:
-            rarity     = cols[6] if len(cols) > 6 else 'caught'
-            form       = cols[7] if len(cols) > 7 and cols[7] != '-' else ''
-            nature     = cols[8] if len(cols) > 8 and cols[8] != '-' else ''
-            friendship = int(cols[9]) if len(cols) > 9 and cols[9].isdigit() else 70
-            pokemon.append({
-                'name':       cols[0],
-                'type':       cols[1],
-                'emoji':      cols[2],
-                'level':      int(cols[3]),
-                'xp':         int(cols[4]),
-                'caught':     cols[5],
+            name       = cols[name_idx]
+            ptype      = cols[name_idx + 1] if len(cols) > name_idx + 1 else ''
+            emoji      = cols[name_idx + 2] if len(cols) > name_idx + 2 else ''
+            level      = int(cols[name_idx + 3]) if len(cols) > name_idx + 3 else 1
+            xp         = int(cols[name_idx + 4]) if len(cols) > name_idx + 4 else 0
+            caught     = cols[name_idx + 5] if len(cols) > name_idx + 5 else ''
+            rarity     = cols[name_idx + 6] if len(cols) > name_idx + 6 else 'common'
+            form       = cols[name_idx + 7] if len(cols) > name_idx + 7 and cols[name_idx + 7] != '-' else ''
+            nature     = cols[name_idx + 8] if len(cols) > name_idx + 8 and cols[name_idx + 8] != '-' else ''
+            friendship = int(cols[name_idx + 9]) if len(cols) > name_idx + 9 and cols[name_idx + 9].isdigit() else 70
+
+            entry = {
+                'name':       name,
+                'type':       ptype,
+                'emoji':      emoji,
+                'level':      level,
+                'xp':         xp,
+                'caught':     caught,
                 'rarity':     rarity,
                 'shiny':      rarity.endswith('-shiny'),
                 'form':       form,
                 'nature':     nature,
                 'friendship': friendship,
-            })
+            }
+            if pokemon_id:
+                entry['id'] = pokemon_id
+            pokemon.append(entry)
         except (ValueError, IndexError):
             continue
     return {'active': active, 'party': party, 'pokemon': pokemon}
 
 def write_collection(active, pokemon_list, party=None):
     if party is None:
-        party = [active] if active else []
+        # Extract name from active (format: name or name:id)
+        active_name = active.split(':')[0] if active and ':' in active else active
+        party = [active_name] if active_name else []
     party_str = ','.join(party[:3])
     lines = [
         '# Pokemon Collection\n\n',
         f'**Active**: {active}\n',
         f'**ActiveParty**: {party_str}\n\n',
-        '| Name | Type | Emoji | Level | XP | Caught | Rarity | Form | Nature | Friendship |\n',
-        '|---|---|---|---|---|---|---|---|---|---|\n',
+        '| ID | Name | Type | Emoji | Level | XP | Caught | Rarity | Form | Nature | Friendship |\n',
+        '|---|---|---|---|---|---|---|---|---|---|---|\n',
     ]
     for p in pokemon_list:
+        pokemon_id = p.get('id', '')
         lines.append(
-            f"| {p['name']} | {p['type']} | {p['emoji']} | "
+            f"| {pokemon_id} | {p['name']} | {p['type']} | {p['emoji']} | "
             f"{p['level']} | {p['xp']} | {p['caught']} | {p['rarity']} | {p.get('form', '') or '-'} | "
             f"{p.get('nature', '') or '-'} | {p.get('friendship', 70)} |\n"
         )
@@ -1994,7 +2021,20 @@ def render_statusline(plugin_mode=False, mode='normal'):
         return f'{prefix}🎮 No buddy yet{persona_suffix}'
 
     # ── Section 1: Active buddy ──────────────────────────────────────────────
-    active     = next((p for p in col['pokemon'] if p['name'] == col['active']), col['pokemon'][0])
+    # Parse active (format: name or name:id)
+    active_str = col['active'] or ''
+    if ':' in active_str:
+        active_name, active_id = active_str.split(':', 1)
+        active = next((p for p in col['pokemon'] if p.get('id') == active_id), None)
+        if not active:
+            active = next((p for p in col['pokemon'] if p['name'] == active_name), col['pokemon'][0] if col['pokemon'] else None)
+    else:
+        active_name = active_str
+        active = next((p for p in col['pokemon'] if p['name'] == active_name), col['pokemon'][0] if col['pokemon'] else None)
+
+    if not active:
+        return f'{prefix}🎮 No buddy yet{persona_suffix}'
+
     rarity     = active.get('rarity', '').replace('-shiny', '')
     is_shiny   = active.get('shiny') or '-shiny' in active.get('rarity', '')
     shiny_mark = '✨' if is_shiny else ''
@@ -3703,7 +3743,12 @@ def do_switch(target_name, index=None):
     content = _build_buddy_content(name, ptype, emoji, trainer, level, xp)
     BUDDY_FILE.write_text(content, encoding='utf-8')
 
-    col['active'] = name
+    # Store active as name:id to handle duplicates (fallback to name only if no ID)
+    active_id = match.get('id', '')
+    if active_id:
+        col['active'] = f"{name}:{active_id}"
+    else:
+        col['active'] = name
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
     disp_name, disp_emj = displayed_form(match)
