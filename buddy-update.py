@@ -3289,24 +3289,23 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
             lines.append(f' {aura_msgs.get(wtier, "")}')
 
         shiny_tag = '  ✨ SHINY' if is_shiny else ''
-        lines.append(f' {_TIER_BADGE.get(wtier, wtier.upper())}{shiny_tag}')
-        if wtier in ('rare', 'legendary', 'mythical'):
-            lines.append(f' {_TIER_FLAVOR.get(wtier, "")}')
+        tier_line = f' {_TIER_BADGE.get(wtier, wtier.upper())}{shiny_tag}'
+        if wtier in ('legendary', 'mythical'):
+            tier_line += f'  {_TIER_FLAVOR.get(wtier, "")}'
         lines += [
+            tier_line,
             f'   {wemoji}  {wname}  ·  Lv.{wlv}',
             _ENC_DIV2,
         ]
 
         win_pct       = ei["win_pct"]
         eff           = ei.get("effectiveness", 1.0)
-        eff_str       = (' ⚔️  super effective!' if eff >= 2.0
-                         else ' ⚠️  not very effective...' if eff == 0.5
-                         else ' ✗  no effect!' if eff == 0.0
+        eff_str       = (' super effective!' if eff >= 2.0
+                         else ' not very effective' if eff == 0.5
+                         else ' no effect' if eff == 0.0
                          else '')
         lines += [
-            ' ⚔️   BATTLE',
-            f'     {buddy_name} Lv.{new_level}  vs  {wname} Lv.{wlv}',
-            f'     [{stat_bar(win_pct, 20)}]  {win_pct}% win chance{eff_str}',
+            f' ⚔️   {buddy_name} Lv.{new_level} vs {wname} Lv.{wlv}  [{stat_bar(win_pct, 16)}] {win_pct}%{eff_str}',
         ]
 
         if not ei['battle_won']:
@@ -3329,34 +3328,21 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                 for i, t in enumerate(throws):
                     pct_str = f'{t["catch_pct"]}%'
                     if t.get('berry_used') in ('golden', 'razz'):
-                        # Boost berries change the %
                         pct_str = f'{t.get("base_pct", t["catch_pct"])}% → {t["catch_pct"]}%'
+                    berry_str = f' {t["berry_emoji"]} {t["berry_name"]}' if t.get('berry_used') else ''
+                    pinap_note = ' +1 Lv' if t['berry_used'] == 'pinap' else ''
                     lines.append(
-                        f'     #{i+1} {t["ball_emoji"]} {t["ball_name"]:<10} '
-                        f'[{stat_bar(t["catch_pct"], 16)}] {pct_str}'
+                        f'     #{i+1} {t["ball_emoji"]} [{stat_bar(t["catch_pct"], 14)}] {pct_str}{berry_str}{pinap_note}'
                     )
-                    if t.get('berry_used'):
-                        bnote = (' (XP bonus)' if t['berry_used'] == 'pinap' else '')
-                        lines.append(
-                            f'        {t["berry_emoji"]} {t["berry_name"]} thrown!{bnote}'
-                        )
                     if t['caught']:
                         if is_shiny:
-                            w = max(len(wname) + 28, 50)
-                            lines += [
-                                f' ╔{"═" * w}╗',
-                                f' ║   ✨✨✨  SHINY {wemoji} {wname.upper()} CAUGHT!  ✨✨✨{" " * max(0, w - len(wname) - 27)}║',
-                                f' ╚{"═" * w}╝',
-                            ]
+                            lines.append(f'     ✨✨✨ SHINY {wemoji} {wname.upper()} CAUGHT! ✨✨✨')
                         else:
-                            lines.append(f'     ★  GOTCHA!  {wname} caught!')
-                        if ei.get('pinap_bonus'):
-                            lines.append(f'     🍍  Pinap bonus — {wname} starts at +1 level!')
+                            lines.append(f'     ★ GOTCHA! {wname} caught!')
                         break
                     else:
                         lines.append(
-                            f'        💨 broke free '
-                            f'(🔴×{t["rem_poke"]} 🔵×{t["rem_great"]} 🟡×{t["rem_ultra"]})'
+                            f'     💨 broke free (🔴×{t["rem_poke"]} 🔵×{t["rem_great"]} 🟡×{t["rem_ultra"]})'
                         )
 
                 if not ei['caught']:
