@@ -392,6 +392,37 @@ def colored_bar(cur, max_val, width=10):
     blocks = color + '█' * filled + reset + '░' * (width - filled)
     return f'[{blocks}]'
 
+def tier_color(tier):
+    """ANSI color code for rarity tier."""
+    colors = {
+        'common':    '\033[37m',      # white
+        'uncommon':  '\033[36m',      # cyan
+        'rare':      '\033[35m',      # magenta
+        'legendary': '\033[33m',      # yellow
+        'mythical':  '\033[95m',      # bright magenta
+    }
+    return colors.get(tier, '\033[37m')
+
+def colored_tier_badge(tier):
+    """Tier badge with color."""
+    color = tier_color(tier)
+    reset = '\033[0m'
+    badge = _TIER_BADGE.get(tier, tier.upper())
+    return f'{color}{badge}{reset}'
+
+def effectiveness_color(eff):
+    """ANSI color for battle effectiveness."""
+    if eff >= 2.0:    return '\033[32m'    # green — super effective
+    elif eff == 0.5:  return '\033[33m'    # yellow — not very effective
+    elif eff == 0.0:  return '\033[31m'    # red — no effect
+    else:             return '\033[37m'    # white — neutral
+
+def catch_pct_color(pct):
+    """Color bar for catch percentage (red low → green high)."""
+    if pct >= 80:     return '\033[32m'    # green
+    elif pct >= 60:   return '\033[33m'    # yellow
+    else:             return '\033[31m'    # red
+
 def get_chatter(xp_pct=0):
     """Return buddy chatter for statusline. Reads STATE_FILE if fresh (< 5 min)."""
     now = datetime.now().timestamp()
@@ -3300,10 +3331,12 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
             }
             lines.append(f' {aura_msgs.get(wtier, "")}')
 
-        shiny_tag = '  ✨ SHINY' if is_shiny else ''
-        tier_line = f' {_TIER_BADGE.get(wtier, wtier.upper())}{shiny_tag}'
+        shiny_tag = f'  {"✨ SHINY ✨" if is_shiny else ""}' if is_shiny else ''
+        tier_badge = colored_tier_badge(wtier)
+        tier_line = f' {tier_badge}{shiny_tag}'
         if wtier in ('legendary', 'mythical'):
-            tier_line += f'  {_TIER_FLAVOR.get(wtier, "")}'
+            flavor = _TIER_FLAVOR.get(wtier, '')
+            tier_line += f'  {flavor}'
         lines += [
             tier_line,
             f'   {wemoji}  {wname}  ·  Lv.{wlv}',
@@ -3312,12 +3345,14 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
 
         win_pct       = ei["win_pct"]
         eff           = ei.get("effectiveness", 1.0)
-        eff_str       = (' super effective!' if eff >= 2.0
-                         else ' not very effective' if eff == 0.5
-                         else ' no effect' if eff == 0.0
+        eff_color = effectiveness_color(eff)
+        reset = '\033[0m'
+        eff_str       = (f'{eff_color}⚔️  super effective!{reset}' if eff >= 2.0
+                         else f'{eff_color}⚠️  not very effective{reset}' if eff == 0.5
+                         else f'{eff_color}✗  no effect{reset}' if eff == 0.0
                          else '')
         lines += [
-            f' ⚔️   {buddy_name} Lv.{new_level} vs {wname} Lv.{wlv}  [{stat_bar(win_pct, 16)}] {win_pct}%{eff_str}',
+            f' ⚔️   {buddy_name} Lv.{new_level} vs {wname} Lv.{wlv}  [{stat_bar(win_pct, 16)}] {win_pct}%  {eff_str}',
         ]
 
         if not ei['battle_won']:
@@ -3337,10 +3372,15 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
             else:
                 lines.append(' 🎯  CATCH PHASE')
                 throws = ei.get('throws', [])
+                reset = '\033[0m'
                 for i, t in enumerate(throws):
                     pct_str = f'{t["catch_pct"]}%'
+                    pct_color = catch_pct_color(t["catch_pct"])
                     if t.get('berry_used') in ('golden', 'razz'):
-                        pct_str = f'{t.get("base_pct", t["catch_pct"])}% → {t["catch_pct"]}%'
+                        base = t.get("base_pct", t["catch_pct"])
+                        pct_str = f'{base}% → {pct_color}{t["catch_pct"]}%{reset}'
+                    else:
+                        pct_str = f'{pct_color}{pct_str}{reset}'
                     berry_str = f' {t["berry_emoji"]} {t["berry_name"]}' if t.get('berry_used') else ''
                     pinap_note = ' +1 Lv' if t['berry_used'] == 'pinap' else ''
                     lines.append(
@@ -3348,7 +3388,9 @@ def render_announcement(mode, add_xp, old_level, new_level, new_xp, new_max,
                     )
                     if t['caught']:
                         if is_shiny:
-                            lines.append(f'     ✨✨✨ SHINY {wemoji} {wname.upper()} CAUGHT! ✨✨✨')
+                            shiny_color = '\033[95m'  # bright magenta
+                            reset = '\033[0m'
+                            lines.append(f'     {shiny_color}✨✨✨ SHINY {wemoji} {wname.upper()} CAUGHT! ✨✨✨{reset}')
                         else:
                             lines.append(f'     ★ GOTCHA! {wname} caught!')
                         break
