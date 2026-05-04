@@ -1995,9 +1995,14 @@ def render_statusline(plugin_mode=False, mode='normal'):
 
     # ── Section 1: Active buddy ──────────────────────────────────────────────
     active     = next((p for p in col['pokemon'] if p['name'] == col['active']), col['pokemon'][0])
-    shiny_mark = '✨' if active.get('shiny') else ''
+    rarity     = active.get('rarity', '').replace('-shiny', '')
+    is_shiny   = active.get('shiny') or '-shiny' in active.get('rarity', '')
+    shiny_mark = '✨' if is_shiny else ''
+    shiny_legendary = ''
+    if is_shiny and rarity in ('legendary', 'mythical'):
+        shiny_legendary = f' 🌟{rarity.upper()}'
     disp_name, disp_emj = displayed_form(active)
-    buddy_str  = f"{shiny_mark}{disp_emj} {disp_name} Lv.{active['level']}"
+    buddy_str  = f"{shiny_mark}{disp_emj} {disp_name} Lv.{active['level']}{shiny_legendary}"
 
     if mode == 'compact':
         return f'{prefix}{buddy_str}{persona_suffix}'
@@ -3609,12 +3614,50 @@ def do_choose(target_name, trainer=None):
     print(f'    {emoji} {name} is now your active buddy (Lv.{level}, {xp} XP).')
     print(f'    Earn XP with /poke:xp <task> — your journey begins now!')
 
+def do_shiny_rare():
+    """List shiny mythical & legendary Pokémon."""
+    col = read_collection()
+    shiny_rares = [p for p in col['pokemon']
+                   if (p.get('shiny') or '-shiny' in p.get('rarity', ''))
+                   and p.get('rarity', '').replace('-shiny', '') in ('legendary', 'mythical')]
+    if not shiny_rares:
+        print('No shiny mythical or legendary Pokémon yet.')
+        print('Keep grinding encounters — they\'re extremely rare!')
+        return
+
+    print(f' 🌟 SHINY MYTHICAL & LEGENDARY ({len(shiny_rares)})')
+    print(' ─────────────────────────────────────────────')
+    for p in shiny_rares:
+        rarity = p.get('rarity', '').replace('-shiny', '')
+        rarity_badge = tier_color(rarity) + f'{rarity.upper()}' + '\033[0m'
+        print(f' ✨ {p["emoji"]} {p["name"]:<20} Lv.{p["level"]:<3} {rarity_badge}')
+        print(f'    💬 /poke:switch {p["name"]}')
+
 def do_switch(target_name):
     col = read_collection()
     match = next((p for p in col['pokemon'] if p['name'].lower() == target_name.lower()), None)
     if not match:
-        print(f"❌ {target_name} not found in your party.")
-        print(f"   Party: {', '.join(p['name'] for p in col['pokemon'])}")
+        print(f"❌ {target_name} not found in your collection.")
+        # Show shiny mythical/legendary first, then rest
+        shiny_rare = []
+        others = []
+        for p in col['pokemon']:
+            rarity = p.get('rarity', '').replace('-shiny', '')
+            is_shiny = p.get('shiny') or '-shiny' in p.get('rarity', '')
+            if is_shiny and rarity in ('legendary', 'mythical'):
+                shiny_rare.append(p)
+            else:
+                others.append(p)
+
+        all_sorted = shiny_rare + others
+        print(f"\n   Available Pokémon ({len(all_sorted)} total):")
+        for p in all_sorted[:20]:  # show first 20
+            rarity = p.get('rarity', '').replace('-shiny', '')
+            is_shiny = p.get('shiny') or '-shiny' in p.get('rarity', '')
+            mark = '🌟' if is_shiny and rarity in ('legendary', 'mythical') else '✨' if is_shiny else ' '
+            print(f"     {mark} {p['emoji']} {p['name']:<15} Lv.{p['level']:<3} ({rarity})")
+        if len(all_sorted) > 20:
+            print(f"     ... and {len(all_sorted) - 20} more")
         sys.exit(1)
 
     lines, _, cur_level, cur_xp, _, cur_name = read_buddy()
@@ -3625,6 +3668,8 @@ def do_switch(target_name):
 
     name, ptype, emoji = match['name'], match['type'], match['emoji']
     level, xp = match['level'], match['xp']
+    rarity = match.get('rarity', '').replace('-shiny', '')
+    is_shiny = match.get('shiny') or '-shiny' in match.get('rarity', '')
     # Heal legacy collection rows where xp was stored as 0 for high-level catches
     # (caused negative XP bar like -2900/150 on switch).
     xp = max(xp, xp_for_level(level))
@@ -3636,10 +3681,12 @@ def do_switch(target_name):
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
     disp_name, disp_emj = displayed_form(match)
+    shiny_mark = '✨ SHINY ' if is_shiny else ''
+    legendary_mark = f'🌟 {rarity.upper()}' if rarity in ('legendary', 'mythical') else ''
     STATE_FILE.write_text(f'Switched to {disp_name}! 🔄\n', encoding='utf-8')
 
     print(f' 🔄 Switched buddy: {cur_name} → {disp_emj} {disp_name}')
-    print(f'    {disp_name} is now your active buddy! (Lv.{level}, {xp} XP)')
+    print(f'    {shiny_mark}{disp_name} is now your active buddy! (Lv.{level}, {xp} XP) {legendary_mark}')
 
 # ── Hub publish (pokemon-buddy-hub) ──────────────────────────────────────────
 
@@ -4287,6 +4334,10 @@ def main():
 
     if mode == 'switch':
         do_switch(args[1] if len(args) > 1 else '')
+        sys.exit(0)
+
+    if mode == 'shiny-rare':
+        do_shiny_rare()
         sys.exit(0)
 
     if mode == 'raid':
