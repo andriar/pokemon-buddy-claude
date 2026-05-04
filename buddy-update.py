@@ -1955,7 +1955,7 @@ def is_persona_on():
     except Exception:
         return False
 
-def render_statusline(plugin_mode=False):
+def render_statusline(plugin_mode=False, mode='normal'):
     col = read_collection()
     prefix = ''  # version removed v2.33.2 — use /poke:status or trainer card
     persona_suffix = '  🎭' if is_persona_on() else ''
@@ -1967,6 +1967,9 @@ def render_statusline(plugin_mode=False):
     shiny_mark = '✨' if active.get('shiny') else ''
     disp_name, disp_emj = displayed_form(active)
     buddy_str  = f"{shiny_mark}{disp_emj} {disp_name} Lv.{active['level']}"
+
+    if mode == 'compact':
+        return f'{prefix}{buddy_str}{persona_suffix}'
 
     sep = '  ┃  ' if plugin_mode else '  │  '
 
@@ -2002,6 +2005,10 @@ def render_statusline(plugin_mode=False):
     else:
         state_str = f'💭 {get_chatter(pct)}'
 
+    if mode == 'normal':
+        return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{persona_suffix}'
+
+    # ── Section 4: Tags (combo, streak, stamina, update) — full mode only ────
     tr_stats  = read_stats()
     streak    = tr_stats.get('streak', 0)
     streak_tag = f'  🔥{streak}' if streak >= 3 else ''
@@ -2027,7 +2034,12 @@ def render_statusline(plugin_mode=False):
     if upd.get('outdated'):
         update_tag = f'  🔔v{upd.get("latest", "")}'
 
-    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{combo_tag}{streak_tag}{stamina_tag}{update_tag}{persona_suffix}'
+    badge_count = len(tr_stats.get('badges', []))
+    badges_tag = f'  🏅×{badge_count}' if badge_count > 0 else ''
+    party_count = len(col.get('party', []))
+    party_tag = f'  👥{party_count}' if party_count > 0 else ''
+
+    return f'{prefix}{buddy_str}{sep}{xp_str}{sep}{state_str}{combo_tag}{streak_tag}{stamina_tag}{badges_tag}{party_tag}{update_tag}{persona_suffix}'
 
 def _active_nature(col):
     active = next((p for p in col['pokemon'] if p['name'] == col.get('active')), None)
@@ -3956,7 +3968,8 @@ def main():
 
     if mode == 'statusline':
         plugin_mode = '--plugin' in args
-        print(render_statusline(plugin_mode=plugin_mode))
+        mode_pref = os.environ.get('POKE_STATUSLINE_MODE', 'normal')
+        print(render_statusline(plugin_mode=plugin_mode, mode=mode_pref))
         sys.exit(0)
 
     if mode == 'update-check':
