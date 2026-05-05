@@ -372,6 +372,82 @@ def migrate_xp_curve(stats, col_dict, old_buddy_level, old_buddy_xp):
     stats['schema_version'] = XP_CURVE_VERSION
     return new_buddy_xp, msg
 
+# ── UUID migration (duplicate tracking) ───────────────────────────────────────
+UUID_MIGRATION_VERSION = 1
+
+def migrate_collection_to_uuid(stats, col_dict):
+    """UUID + level recalibration migration. Detects old format and upgrades.
+    Returns (migrated_active, migration_message).
+    Mutates col_dict['active'], col_dict['party'], col_dict['pokemon'] in place."""
+    if stats.get('uuid_migration_version', 0) >= UUID_MIGRATION_VERSION:
+        return col_dict.get('active'), ''
+
+    needs_uuid_migration = any(not p.get('id') for p in col_dict.get('pokemon', []))
+    if not needs_uuid_migration:
+        stats['uuid_migration_version'] = UUID_MIGRATION_VERSION
+        return col_dict.get('active'), ''
+
+    # 1. Assign UUIDs to Pokemon without them
+    for p in col_dict.get('pokemon', []):
+        if not p.get('id'):
+            p['id'] = _generate_pokemon_id()
+
+    # 2. Set base_name and pokedex_id on all Pokemon
+    for p in col_dict.get('pokemon', []):
+        if not p.get('base_name'):
+            p['base_name'] = p['name']
+        if not p.get('pokedex_id'):
+            p['pokedex_id'] = _get_pokedex_id(p['base_name'])
+
+    # 3. Validate and fix levels (downgrade if XP < level floor)
+    level_downgrades = 0
+    for p in col_dict.get('pokemon', []):
+        lv = p.get('level', 1)
+        xp = p.get('xp', 0)
+        floor_xp = xp_for_level(lv)
+        if xp < floor_xp:
+            # Downgrade level to match XP
+            new_lv = level_from_xp(xp)
+            if new_lv != lv:
+                p['level'] = new_lv
+                level_downgrades += 1
+
+    # 4. Update active format (name:id if not already)
+    active = col_dict.get('active')
+    if active and ':' not in active:
+        pmatch = next((p for p in col_dict.get('pokemon', []) if p['name'] == active), None)
+        if pmatch and pmatch.get('id'):
+            active = f"{active}:{pmatch['id']}"
+            col_dict['active'] = active
+
+    # 5. Convert party to name:id format
+    party_raw = col_dict.get('party', [])
+    party_new = []
+    for pentry in party_raw:
+        pname = pentry.split(':')[0] if ':' in pentry else pentry
+        pmatch = next((p for p in col_dict.get('pokemon', []) if p['name'] == pname), None)
+        if pmatch and pmatch.get('id'):
+            party_new.append(f"{pname}:{pmatch['id']}")
+        else:
+            party_new.append(pentry)
+    col_dict['party'] = party_new
+
+    msg = (
+        '\n┌─────────────────────────────────────────────────────────────┐\n'
+        '│ 🆔 UUID Migration — Duplicate Pokémon tracking enabled       │\n'
+        '├─────────────────────────────────────────────────────────────┤\n'
+        '│ Each Pokémon now has a unique ID. Duplicates (e.g. 6 Pidgey)│\n'
+        '│ are tracked separately. Your collection upgraded to new      │\n'
+        '│ format: Active/Party members now show as "Name:ID".          │\n'
+        '│                                                              │\n'
+        f'│ {len([p for p in col_dict.get("pokemon", []) if p.get("id")])} Pokémon assigned UUIDs.               │\n'
+        f'│ {level_downgrades} Pokémon level-adjusted for XP validity.         │\n'
+        '│ No data lost — evolution/friendship/items preserved.        │\n'
+        '└─────────────────────────────────────────────────────────────┘\n'
+    )
+    stats['uuid_migration_version'] = UUID_MIGRATION_VERSION
+    return active, msg
+
 # ── Bars ─────────────────────────────────────────────────────────────────────
 
 def bar(cur, max_val, width):
@@ -448,6 +524,7 @@ def get_chatter(xp_pct=0):
 def read_stats():
     defaults = {
         'schema_version': STATS_SCHEMA_VER,
+        'uuid_migration_version': 0,
         'streak': 0, 'last_xp_date': '', 'longest_streak': 0,
         'total_xp_ever': 0, 'bug_fixes': 0, 'features': 0, 'ships': 0,
         'caught_legendary': False, 'caught_mythical': False, 'caught_shiny': False,
@@ -507,6 +584,7 @@ def read_stats():
         if gi('ships')    >= 3: gym_badges.add('volcano')
     stats = {
         'schema_version':    gi('schema_version') or STATS_SCHEMA_VER,
+        'uuid_migration_version': gi('uuid_migration_version'),
         'streak':            gi('streak'),
         'last_xp_date':      gs('last_xp_date'),
         'longest_streak':    gi('longest_streak'),
@@ -562,6 +640,7 @@ def write_stats(s):
     STATS_FILE.write_text(
         f'# Trainer Stats\n\n'
         f'**schema_version**: {STATS_SCHEMA_VER}\n'
+        f'**uuid_migration_version**: {s.get("uuid_migration_version", UUID_MIGRATION_VERSION)}\n'
         f'**streak**: {s["streak"]}\n'
         f'**last_xp_date**: {s["last_xp_date"]}\n'
         f'**longest_streak**: {s["longest_streak"]}\n'
@@ -903,7 +982,24 @@ def read_collection():
             # Pokemon not found, keep original name
             party.append(pname)
 
-    return {'active': active, 'party': party, 'pokemon': pokemon}
+    col_dict = {'active': active, 'party': party, 'pokemon': pokemon}
+
+    # Apply UUID migration if needed
+    try:
+        stats = read_stats()
+        needs_migration = stats.get('uuid_migration_version', 0) < UUID_MIGRATION_VERSION
+        if needs_migration:
+            migrated_active, migration_msg = migrate_collection_to_uuid(stats, col_dict)
+            write_stats(stats)  # Always write to persist version flag
+            if migration_msg:
+                write_collection(col_dict['active'], col_dict['pokemon'], col_dict['party'])
+                # Print migration message (visible in status/xp output)
+                print(migration_msg, file=sys.stderr)
+    except Exception as e:
+        # Silently skip migration on error; user data integrity is paramount
+        pass
+
+    return col_dict
 
 def write_collection(active, pokemon_list, party=None):
     if party is None:
