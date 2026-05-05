@@ -828,12 +828,15 @@ def read_collection():
     active_m = re.search(r'\*\*Active\*\*:\s*(\S+)', text)
     active = active_m.group(1).strip() if active_m else None
     party_m = re.search(r'\*\*ActiveParty\*\*:\s*(.+)', text)
+    party_raw = []
     if party_m:
-        party = [n.strip() for n in party_m.group(1).split(',') if n.strip()]
+        party_raw = [n.strip() for n in party_m.group(1).split(',') if n.strip()]
     else:
         # Extract name from active (format: name or name:id)
         active_name = active.split(':')[0] if active and ':' in active else active
-        party = [active_name] if active_name else []
+        party_raw = [active_name] if active_name else []
+
+    # Will convert party_raw to party (name:id format) after reading Pokemon list
     pokemon = []
     for line in text.splitlines():
         if not line.startswith('|'): continue
@@ -882,6 +885,24 @@ def read_collection():
             pokemon.append(entry)
         except (ValueError, IndexError):
             continue
+
+    # Convert party_raw (names only) to party (name:id format) using Pokemon UUIDs
+    party = []
+    for pname in party_raw:
+        # Extract name if it's already in "name:id" format
+        base_name = pname.split(':')[0] if ':' in pname else pname
+        # Find the Pokemon in the list to get its UUID
+        pmatch = next((p for p in pokemon if p['name'] == base_name), None)
+        if pmatch:
+            pokemon_id = pmatch.get('id', '')
+            if pokemon_id:
+                party.append(f"{base_name}:{pokemon_id}")
+            else:
+                party.append(base_name)
+        else:
+            # Pokemon not found, keep original name
+            party.append(pname)
+
     return {'active': active, 'party': party, 'pokemon': pokemon}
 
 def write_collection(active, pokemon_list, party=None):
@@ -1116,7 +1137,17 @@ def apply_friendship_evolutions(col=None, hour=None):
                 col['active'] = tgt_name
             party = col.get('party')
             if party:
-                col['party'] = [tgt_name if n == src else n for n in party]
+                # Update party entries if their base name matches src (handle "name:id" format)
+                new_party = []
+                for pentry in party:
+                    pname = _get_active_name(pentry) or pentry
+                    if pname == src:
+                        # Keep the ID if it exists, replace name
+                        pid = pentry.split(':')[1] if ':' in str(pentry) else ''
+                        new_party.append(f"{tgt_name}:{pid}" if pid else tgt_name)
+                    else:
+                        new_party.append(pentry)
+                col['party'] = new_party
             break
     if evolved and own_col:
         write_collection(col['active'], col['pokemon'], col.get('party'))
@@ -1227,11 +1258,15 @@ def distribute_party_xp(full_xp, active_name, col):
         return full_xp, []
     results = []
     lead_xp = int(full_xp * _PARTY_SPLITS[0])
-    for i, name in enumerate(party[1:], 1):
+    for i, party_entry in enumerate(party[1:], 1):
         bench_xp = int(full_xp * _PARTY_SPLITS[i])
         if bench_xp <= 0:
             continue
-        p = next((x for x in col['pokemon'] if x['name'] == name), None)
+        # Extract name and ID from party_entry (format: 'name' or 'name:id')
+        pname = _get_active_name(party_entry) or party_entry
+        pid = party_entry.split(':')[1] if ':' in str(party_entry) else None
+        # Match by name; if ID present, also match by ID
+        p = next((x for x in col['pokemon'] if x['name'] == pname and (not pid or x.get('id') == pid)), None)
         if not p or p.get('level', 1) >= LEVEL_CAP:
             continue
         old_lv = p['level']
@@ -4481,26 +4516,34 @@ def main():
             match = next((p for p in col['pokemon'] if p['name'].lower() == name.lower()), None)
             if not match:
                 print(f' ❌ {name} not in collection.')
-            elif match['name'] in party:
-                print(f' ❌ {match["name"]} already in party.')
-            elif len(party) >= 3:
-                print(f' ❌ Party full (3/3). Remove one first.')
             else:
-                party.append(match['name'])
-                write_collection(col['active'], col['pokemon'], party)
-                print(f' ✅ {match["name"]} added to party (slot {len(party)}).')
+                # Check if already in party (extract name from "name:id" format)
+                in_party = any(_get_active_name(p) == match['name'] for p in party)
+                if in_party:
+                    print(f' ❌ {match["name"]} already in party.')
+                elif len(party) >= 3:
+                    print(f' ❌ Party full (3/3). Remove one first.')
+                else:
+                    # Append as "name:id" format if Pokemon has ID
+                    party_entry = f"{match['name']}:{match['id']}" if match.get('id') else match['name']
+                    party.append(party_entry)
+                    write_collection(col['active'], col['pokemon'], party)
+                    print(f' ✅ {match["name"]} added to party (slot {len(party)}).')
         elif sub == 'remove':
             name = args[2] if len(args) > 2 else ''
             if name.lower() == col['active'].lower():
                 print(f' ❌ Cannot remove lead buddy. Use /poke:switch first.')
             else:
-                match = next((n for n in party if n.lower() == name.lower()), None)
+                # Match party entry by name (extract from "name:id" format)
+                match = next((n for n in party if _get_active_name(n).lower() == name.lower()), None)
                 if not match:
                     print(f' ❌ {name} not in party.')
                 else:
                     party.remove(match)
                     write_collection(col['active'], col['pokemon'], party)
-                    print(f' ✅ {match} removed from party.')
+                    # Display name only in output
+                    disp_name = _get_active_name(match) or match
+                    print(f' ✅ {disp_name} removed from party.')
         elif sub == 'suggest':
             # Recommend a type-diverse trio from collection, highest levels first
             sorted_pool = sorted(col['pokemon'], key=lambda p: p.get('level', 1), reverse=True)
