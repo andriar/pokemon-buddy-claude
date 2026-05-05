@@ -1164,6 +1164,19 @@ def sync_active_to_collection(name, level, xp, col=None, pokemon_id=None):
     col['pokemon'].append(entry)
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
+def _get_active_name(active):
+    """Extract name from active field (format: 'name' or 'name:id'). Returns just the name."""
+    if not active:
+        return None
+    return active.split(':')[0] if ':' in str(active) else active
+
+def _generate_pokemon_id():
+    """Generate an 8-character ID for duplicate Pokemon tracking."""
+    import hashlib
+    import time
+    seed = f"{time.time()}{random.random()}".encode()
+    return hashlib.md5(seed).hexdigest()[:8]
+
 def _bump_friendship_inline(p, amount):
     """Mutate p['friendship'] by amount, clamped [0, FRIENDSHIP_MAX]."""
     cur = p.get('friendship', 70)
@@ -1180,8 +1193,10 @@ def distribute_overflow_xp(overflow, active_name, stats=None, col=None):
         return []
     if col is None:
         col = read_collection()
+    # Extract name from active_name (format: 'name' or 'name:id')
+    active_base_name = _get_active_name(active_name)
     eligible = [p for p in col['pokemon']
-                if p['name'] != active_name and p.get('level', 1) < LEVEL_CAP]
+                if p['name'] != active_base_name and p.get('level', 1) < LEVEL_CAP]
     if not eligible:
         return []
     share = overflow // len(eligible)
@@ -1596,12 +1611,11 @@ def run_encounter(base_xp, owned_names, role_type, buddy_rarity,
         # Pinap reward: bump newly added Pokémon's level by 1 (PoGo "double candy"
         # equivalent — accelerates leveling instead of giving raw XP)
         if pinap_used_on_catch and col is not None:
-            for p in reversed(col.get('pokemon', [])):
-                if p['name'] == wild_name:
-                    if p.get('level', 1) < LEVEL_CAP:
-                        p['level'] += 1
-                        p['xp']     = xp_for_level(p['level'])
-                    break
+            # Apply to the last (most recently added) matching Pokemon
+            newly_added = next((p for p in reversed(col.get('pokemon', [])) if p['name'] == wild_name), None)
+            if newly_added and newly_added.get('level', 1) < LEVEL_CAP:
+                newly_added['level'] += 1
+                newly_added['xp'] = xp_for_level(newly_added['level'])
             write_collection(col['active'], col['pokemon'], col.get('party'))
         stored_tier  = (tier + '-shiny') if is_shiny else tier
         catch_result = (stored_tier, wild_name, wild_type, wild_emoji, is_shiny)
@@ -1641,6 +1655,7 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False, col=None):
         'level': start_level, 'xp': xp_for_level(start_level), 'caught': TODAY,
         'rarity': stored_rarity, 'shiny': is_shiny, 'form': form,
         'nature': pick_nature(), 'friendship': 70,
+        'id': _generate_pokemon_id(),  # UUID for duplicate tracking
     })
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
@@ -1911,7 +1926,8 @@ def render_status(text):
     if col['pokemon']:
         def _party_entry(p):
             dn, de = displayed_form(p)
-            mark = '*' if p['name'] == col['active'] else ''
+            active_name = _get_active_name(col['active'])
+            mark = '*' if p['name'] == active_name else ''
             shiny = '✨' if p.get('shiny') else ''
             return f"{shiny}{de}{dn}{mark} Lv.{p['level']}"
         party_str = '  '.join(_party_entry(p) for p in col['pokemon'])
@@ -2509,7 +2525,8 @@ def render_html_card():
             continue
         label, color, bg = rarity_labels_html.get(tier, ('?', '#fff', '#222'))
         for p in members:
-            is_active = p['name'] == col['active']
+            active_name = _get_active_name(col['active'])
+            is_active = p['name'] == active_name
             is_shiny  = bool(p.get('shiny'))
             mark      = ' ★' if is_active else ''
             row_cls   = 'active-row' if is_active else ''
