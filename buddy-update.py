@@ -1192,6 +1192,9 @@ def sync_active_to_collection(name, level, xp, col=None, pokemon_id=None):
     }
     if pokemon_id:
         entry['id'] = pokemon_id
+    else:
+        # Generate UUID if not provided (new starter being added)
+        entry['id'] = _generate_pokemon_id()
     col['pokemon'].append(entry)
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
@@ -3708,6 +3711,7 @@ def do_choose(target_name, trainer=None):
         'name': name, 'type': ptype, 'emoji': emoji,
         'level': level, 'xp': xp, 'caught': TODAY, 'rarity': 'starter', 'form': '',
         'nature': pick_nature(), 'friendship': 70,
+        'id': _generate_pokemon_id(),  # UUID for duplicate tracking
     }], party=[name])
 
     STATE_FILE.write_text(f'Starter chosen: {name}! 🎉\n', encoding='utf-8')
