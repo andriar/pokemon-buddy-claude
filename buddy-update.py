@@ -217,6 +217,89 @@ def apply_raid_damage(xp_gained):
     write_raid(raid)
     return raid, damage, ko
 
+# ── Pokedex completion tracker ────────────────────────────────────────────────
+def pokedex_completion(pokemon):
+    """Return {total_caught, total_species, completion_percent}."""
+    caught_species = set()
+    for p in pokemon:
+        base = p.get('base_name', p.get('name', ''))
+        if base:
+            caught_species.add(base)
+    total_species = len(caught_species)
+    total_caught = len(pokemon)
+    completion_pct = int((total_species / 151) * 100) if total_species > 0 else 0
+    return {'total_caught': total_caught, 'unique_species': total_species, 'completion_pct': completion_pct}
+
+# ── Type matchup analysis ──────────────────────────────────────────────────────
+def party_type_weaknesses(party_pokemon):
+    """Return {strength_type: count} showing party's offensive type coverage."""
+    offensive_types = {}
+    for p in party_pokemon:
+        ptype = p.get('type', 'Normal')
+        offensive_types[ptype] = offensive_types.get(ptype, 0) + 1
+    return offensive_types
+
+def analyze_raid_advantage(party_pokemon, raid_boss_type):
+    """Compare party types vs raid boss. Return (advantage_count, disadvantage_count, suggested_order)."""
+    if not raid_boss_type or not party_pokemon:
+        return 0, 0, []
+    advantage = 0
+    disadvantage = 0
+    scored = []
+    for p in party_pokemon:
+        ptype = p.get('type', 'Normal')
+        damage_dealt = TYPE_CHART.get(ptype, {}).get(raid_boss_type, 1.0)
+        damage_taken = TYPE_CHART.get(raid_boss_type, {}).get(ptype, 1.0)
+        if damage_dealt > 1.0:
+            advantage += 1
+        elif damage_dealt < 1.0:
+            disadvantage += 1
+        score = (damage_dealt, -damage_taken, p.get('level', 1))
+        scored.append((p, score))
+    scored.sort(key=lambda x: x[1], reverse=True)
+    suggested = [p for p, _ in scored]
+    return advantage, disadvantage, suggested
+
+# ── Move learning timeline ─────────────────────────────────────────────────────
+def moves_for_pokemon(name, current_level=1):
+    """Return list of {level, name, type, desc} for Pokemon, filtered to learned moves."""
+    base_moves = MOVE_UNLOCKS.get(name, {})
+    learned = []
+    for lv in sorted(base_moves.keys()):
+        if lv <= current_level:
+            mv = base_moves[lv]
+            learned.append({'level': lv, 'name': mv[0], 'type': mv[1], 'desc': mv[2]})
+    return learned
+
+# ── Shiny hunting stats ────────────────────────────────────────────────────────
+def shiny_hunting_summary(pokemon, stats):
+    """Return {shiny_count, shiny_pct, recent_shinies, hunt_streak}."""
+    shinies = [p for p in pokemon if p.get('shiny')]
+    shiny_count = len(shinies)
+    total = len(pokemon)
+    shiny_pct = int((shiny_count / total) * 100) if total > 0 else 0
+    recent_shinies = [p['name'] for p in shinies[-5:]]
+    hunt_streak = stats.get('shiny_streak', 0)
+    return {'shiny_count': shiny_count, 'shiny_pct': shiny_pct, 'recent_shinies': recent_shinies, 'hunt_streak': hunt_streak}
+
+# ── Smart raid party adjustment ────────────────────────────────────────────────
+def suggest_raid_party(collection_pokemon, raid_boss_name, raid_boss_type, current_party_names):
+    """Suggest party reorder for raid. Return {current, suggested, reason}."""
+    current_party = [p for n in current_party_names for p in collection_pokemon if p.get('name') == n][:3]
+    if not raid_boss_type:
+        return None
+    adv, disadv, reordered = analyze_raid_advantage(current_party, raid_boss_type)
+    if not reordered or reordered == current_party:
+        return None
+    reason = f'{adv} advantage vs {raid_boss_name} ({raid_boss_type})'
+    return {
+        'current_order': [p['name'] for p in current_party],
+        'suggested_order': [p['name'] for p in reordered],
+        'advantage_count': adv,
+        'disadvantage_count': disadv,
+        'reason': reason,
+    }
+
 # ── Gym badge registry ────────────────────────────────────────────────────────
 # Each badge: (id, emoji, name, unlock_feature, hint)
 GYM_BADGE_DATA = [
@@ -4015,6 +4098,20 @@ def _build_publish_payload():
             raid = json.loads(RAID_FILE.read_text(encoding='utf-8'))
         except Exception:
             raid = None
+    # Calculate new features
+    pokedex = pokedex_completion(col['pokemon'])
+    party_offensive = party_type_weaknesses(party)
+    shiny_hunt = shiny_hunting_summary(col['pokemon'], stats)
+    raid_suggestion = suggest_raid_party(col['pokemon'], raid['boss_name'] if raid else '', raid['boss_type'] if raid else '', party_names) if raid else None
+
+    # Build collection moves map (moves available for each Pokemon)
+    collection_moves = {}
+    for p in col['pokemon']:
+        pname = p.get('name', '')
+        plvl = p.get('level', 1)
+        if pname:
+            collection_moves[pname] = moves_for_pokemon(pname, plvl)
+
     extras = {
         'leaders_defeated': stats.get('leaders_defeated', ''),
         'elite_defeated':   stats.get('elite_defeated', ''),
@@ -4034,6 +4131,11 @@ def _build_publish_payload():
         'bug_fixes':        int(stats.get('bug_fixes', 0) or 0),
         'features':         int(stats.get('features', 0) or 0),
         'ships':            int(stats.get('ships', 0) or 0),
+        # New features
+        'pokedex':          pokedex,
+        'party_offensive':  party_offensive,
+        'shiny_hunt':       shiny_hunt,
+        'raid_suggestion':  raid_suggestion,
     }
     journal = []
     if BUDDY_FILE.exists():
@@ -4046,6 +4148,7 @@ def _build_publish_payload():
         'buddy':       {**buddy, 'moves': buddy_moves},
         'party':       party,
         'collection':  col['pokemon'],
+        'collection_moves': collection_moves,
         'stats':       {k: v for k, v in stats.items() if not k.startswith('_')},
         'badges':      badges,
         'raid':        raid,
