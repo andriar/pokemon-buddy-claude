@@ -1189,6 +1189,8 @@ def sync_active_to_collection(name, level, xp, col=None, pokemon_id=None):
         'name': name, 'type': starter.get('type', '?'),
         'emoji': starter.get('emoji', '?'), 'level': level,
         'xp': xp, 'caught': TODAY, 'rarity': 'starter', 'form': '',
+        'base_name': name,  # Original species (never changes)
+        'pokedex_id': _get_pokedex_id(name),  # Current species ID (updates on evolution)
     }
     if pokemon_id:
         entry['id'] = pokemon_id
@@ -1210,6 +1212,11 @@ def _generate_pokemon_id():
     import time
     seed = f"{time.time()}{random.random()}".encode()
     return hashlib.md5(seed).hexdigest()[:8]
+
+def _get_pokedex_id(name):
+    """Get Pokedex ID for a Pokemon name. Returns ID or None."""
+    from lib.data import POKEDEX_IDS
+    return POKEDEX_IDS.get(name)
 
 def _bump_friendship_inline(p, amount):
     """Mutate p['friendship'] by amount, clamped [0, FRIENDSHIP_MAX]."""
@@ -1694,6 +1701,8 @@ def add_to_collection(name, ptype, emoji, rarity, is_shiny=False, col=None):
         'rarity': stored_rarity, 'shiny': is_shiny, 'form': form,
         'nature': pick_nature(), 'friendship': 70,
         'id': _generate_pokemon_id(),  # UUID for duplicate tracking
+        'base_name': name,  # Original species (never changes)
+        'pokedex_id': _get_pokedex_id(name),  # Current species ID (updates on evolution)
     })
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
@@ -1712,6 +1721,7 @@ def try_wild_evolve(p):
             p['name']  = evo_name
             p['emoji'] = evo_emoji
             p['type']  = evo_type
+            p['pokedex_id'] = _get_pokedex_id(evo_name)  # Update species ID on evolution
             return f'{old_name} → {evo_name}'
     return ''
 
@@ -1723,10 +1733,12 @@ def apply_trade_evolutions(trigger_event):
     for p in col['pokemon']:
         te = TRADE_EVOLUTIONS.get(p['name'])
         if te and te[2] == trigger_event:
+            old_name = p['name']
             evo_name, evo_emoji, _ = te
             p['name']  = evo_name
             p['emoji'] = evo_emoji
-            evolved.append(f'{p["name"]} → {evo_name}')  # note: already mutated
+            p['pokedex_id'] = _get_pokedex_id(evo_name)  # Update species ID on evolution
+            evolved.append(f'{old_name} → {evo_name}')
             changed = True
     if changed:
         write_collection(col['active'], col['pokemon'], col.get('party'))
@@ -3712,6 +3724,8 @@ def do_choose(target_name, trainer=None):
         'level': level, 'xp': xp, 'caught': TODAY, 'rarity': 'starter', 'form': '',
         'nature': pick_nature(), 'friendship': 70,
         'id': _generate_pokemon_id(),  # UUID for duplicate tracking
+        'base_name': name,  # Original species (never changes)
+        'pokedex_id': _get_pokedex_id(name),  # Current species ID (updates on evolution)
     }], party=[name])
 
     STATE_FILE.write_text(f'Starter chosen: {name}! 🎉\n', encoding='utf-8')
