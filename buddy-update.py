@@ -1137,21 +1137,31 @@ def boost_friendship(name, amount, col=None):
             return new
     return None
 
-def sync_active_to_collection(name, level, xp, col=None):
+def sync_active_to_collection(name, level, xp, col=None, pokemon_id=None):
     if col is None:
         col = read_collection()
+    # Extract ID from "name:id" format if not explicitly provided
+    if pokemon_id is None and ':' in str(name):
+        name, pokemon_id = name.split(':', 1)
     for p in col['pokemon']:
+        # Match by name; if pokemon_id provided, also match by ID
         if p['name'] == name:
+            if pokemon_id and p.get('id') != pokemon_id:
+                continue  # Skip if ID doesn't match
             p['level'] = level
             p['xp']    = xp
+            # Preserve rarity/shiny from collection (don't overwrite)
             write_collection(col['active'], col['pokemon'], col.get('party'))
             return
     starter = STARTER_DATA.get(name, {})
-    col['pokemon'].append({
+    entry = {
         'name': name, 'type': starter.get('type', '?'),
         'emoji': starter.get('emoji', '?'), 'level': level,
         'xp': xp, 'caught': TODAY, 'rarity': 'starter', 'form': '',
-    })
+    }
+    if pokemon_id:
+        entry['id'] = pokemon_id
+    col['pokemon'].append(entry)
     write_collection(col['active'], col['pokemon'], col.get('party'))
 
 def _bump_friendship_inline(p, amount):
@@ -3727,7 +3737,11 @@ def do_switch(target_name, index=None):
     else:
         match = matches[0]
     lines, _, cur_level, cur_xp, _, cur_name = read_buddy()
-    sync_active_to_collection(cur_name, cur_level, cur_xp)
+    # Extract current buddy's ID from active field (format: name:id or just name)
+    cur_id = None
+    if ':' in col['active']:
+        _, cur_id = col['active'].split(':', 1)
+    sync_active_to_collection(cur_name, cur_level, cur_xp, pokemon_id=cur_id)
 
     trainer = re.search(r'\*\*Trainer\*\*:\s*(.+)', BUDDY_FILE.read_text(encoding='utf-8'))
     trainer = trainer.group(1).strip() if trainer else 'Trainer'
